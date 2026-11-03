@@ -1,4 +1,4 @@
-// CATio - Frameless launcher
+// CATio - Frameless launcher with custom icons
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -6,6 +6,7 @@
 #include <commctrl.h>
 #include <winhttp.h>
 #include <dwmapi.h>
+#include <wincodec.h>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -24,6 +25,8 @@
 #pragma comment(lib, "version.lib")
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "windowscodecs.lib")
+#pragma comment(lib, "msimg32.lib")
 
 const wchar_t* APP_TITLE = L"CATio";
 const char* STORE_URL     = "http://localhost/itch-steam-like/?client=1";
@@ -39,20 +42,24 @@ code{background:#221f1a;padding:2px 6px;border-radius:4px;color:#ef5b2c}</style>
 <p>Проверь Apache в XAMPP и папку<br><code>C:\xampp\htdocs\itch-steam-like\</code></p>
 </div></body></html>)";
 
-const int TOP_HEIGHT = 84;
+const int TOP_HEIGHT = 118;
+const int ICON_SIZE_WIN = 16;   // иконки окна (рядом с авой)
+const int ICON_SIZE_ARROW = 22; // стрелки назад/вперёд
+const int ICON_SIZE_REFRESH = 14; // кнопка обновить
 
 const COLORREF COL_BG       = RGB(18, 17, 14);
 const COLORREF COL_ACCENT   = RGB(239, 91, 44);
-const COLORREF COL_TEXT     = RGB(180, 170, 160);
+const COLORREF COL_TEXT     = RGB(160, 150, 140);
 const COLORREF COL_TEXT_BRT = RGB(255, 255, 255);
 const COLORREF COL_URL      = RGB(120, 110, 100);
+const COLORREF COL_DISABLED = RGB(80, 75, 70);
 
 HWND g_hWnd = nullptr;
 HICON g_hLogo = nullptr;
 webview::webview* g_webview = nullptr;
 std::string g_currentUrl = STORE_URL;
 std::string g_balance = "7 501 ₽";
-std::string g_username = "admin"; // original case for right side
+std::string g_username = "admin";
 
 enum class Section { Store, Library, Community, Profile };
 Section g_currentSection = Section::Store;
@@ -66,11 +73,220 @@ struct Btn { RECT rc; int id; };
 std::vector<Btn> g_buttons;
 
 enum {
-    ID_BACK=1, ID_FORWARD, ID_REFRESH,
+    ID_BACK = 1, ID_FORWARD, ID_REFRESH,
     ID_STORE, ID_LIBRARY, ID_COMMUNITY, ID_PROFILE,
     ID_URL, ID_MIN, ID_MAX, ID_CLOSE
 };
 
+// ========== Icon system ==========
+struct IconSet {
+    HBITMAP normal = nullptr;
+    HBITMAP hover  = nullptr;
+    HBITMAP disabled = nullptr;
+};
+
+IconSet g_icoBack, g_icoForward, g_icoRefresh;
+IconSet g_icoMinimiz, g_icoMaximize, g_icoRestore, g_icoClose;
+
+HBITMAP CreateTintedBitmap(HBITMAP src, COLORREF color) {
+    if (!src) return nullptr;
+
+    BITMAP bm;
+    GetObject(src, sizeof(bm), &bm);
+    if (bm.bmBitsPixel != 32) return nullptr;
+
+    int w = bm.bmWidth;
+    int h = bm.bmHeight;
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HDC hdc = GetDC(nullptr);
+    HBITMAP dst = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, hdc);
+    if (!dst || !bits) return nullptr;
+
+    HDC hdcSrc = CreateCompatibleDC(nullptr);
+    HDC hdcDst = CreateCompatibleDC(nullptr);
+    HGDIOBJ oldSrc = SelectObject(hdcSrc, src);
+    HGDIOBJ oldDst = SelectObject(hdcDst, dst);
+    BitBlt(hdcDst, 0, 0, w, h, hdcSrc, 0, 0, SRCCOPY);
+    SelectObject(hdcSrc, oldSrc);
+    SelectObject(hdcDst, oldDst);
+    DeleteDC(hdcSrc);
+    DeleteDC(hdcDst);
+
+    BYTE* p = (BYTE*)bits;
+    BYTE r = GetRValue(color);
+    BYTE g = GetGValue(color);
+    BYTE b = GetBValue(color);
+
+    for (int i = 0; i < w * h; i++) {
+        BYTE a = p[3];
+        if (a > 0) {
+            p[0] = b;
+            p[1] = g;
+            p[2] = r;
+        }
+        p += 4;
+    }
+    return dst;
+}
+
+HBITMAP LoadPngAsBitmap(const wchar_t* path) {
+    IWICImagingFactory* factory = nullptr;
+    IWICBitmapDecoder* decoder = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICFormatConverter* converter = nullptr;
+    HBITMAP hbm = nullptr;
+    HDC hdc = nullptr;
+    void* bits = nullptr;
+    UINT w = 0, h = 0;
+    BITMAPINFO bmi = {};
+
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&factory)))) return nullptr;
+
+    if (FAILED(factory->CreateDecoderFromFilename(path, nullptr, GENERIC_READ,
+        WICDecodeMetadataCacheOnLoad, &decoder))) {
+        factory->Release();
+        return nullptr;
+    }
+
+    if (FAILED(decoder->GetFrame(0, &frame))) goto cleanup;
+    if (FAILED(factory->CreateFormatConverter(&converter))) goto cleanup;
+
+    if (FAILED(converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA,
+        WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom))) goto cleanup;
+
+    converter->GetSize(&w, &h);
+
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = (LONG)w;
+    bmi.bmiHeader.biHeight = -(LONG)h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    hdc = GetDC(nullptr);
+    hbm = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, hdc);
+    hdc = nullptr;
+
+    if (hbm && bits) {
+        converter->CopyPixels(nullptr, w * 4, w * h * 4, (BYTE*)bits);
+    }
+
+cleanup:
+    if (converter) converter->Release();
+    if (frame) frame->Release();
+    if (decoder) decoder->Release();
+    if (factory) factory->Release();
+    return hbm;
+}
+
+void LoadIconSet(IconSet& set, const wchar_t* filename, int size) {
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    wchar_t* slash = wcsrchr(path, L'\\');
+    if (slash) *(slash + 1) = 0;
+    wcscat_s(path, L"icons\\");
+    wcscat_s(path, filename);
+
+    HBITMAP src = LoadPngAsBitmap(path);
+    if (!src) {
+        GetModuleFileNameW(nullptr, path, MAX_PATH);
+        slash = wcsrchr(path, L'\\');
+        if (slash) *(slash + 1) = 0;
+        wcscat_s(path, filename);
+        src = LoadPngAsBitmap(path);
+    }
+
+    if (!src) return;
+
+    BITMAP bm;
+    GetObject(src, sizeof(bm), &bm);
+    if (bm.bmWidth != size || bm.bmHeight != size) {
+        HDC hdc = GetDC(nullptr);
+        HBITMAP resized = CreateCompatibleBitmap(hdc, size, size);
+        HDC hdcSrc = CreateCompatibleDC(hdc);
+        HDC hdcDst = CreateCompatibleDC(hdc);
+        SelectObject(hdcSrc, src);
+        SelectObject(hdcDst, resized);
+        SetStretchBltMode(hdcDst, HALFTONE);
+        StretchBlt(hdcDst, 0, 0, size, size, hdcSrc, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
+        DeleteDC(hdcSrc);
+        DeleteDC(hdcDst);
+        ReleaseDC(nullptr, hdc);
+        DeleteObject(src);
+        src = resized;
+    }
+
+    // Gray normal, white hover, darker disabled
+    set.normal   = CreateTintedBitmap(src, COL_TEXT);
+    set.hover    = CreateTintedBitmap(src, COL_TEXT_BRT);
+    set.disabled = CreateTintedBitmap(src, COL_DISABLED);
+    DeleteObject(src);
+}
+
+void LoadAllIcons() {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // Навигация — меньше
+    LoadIconSet(g_icoBack,     L"back.png",     ICON_SIZE_ARROW);
+    LoadIconSet(g_icoForward,  L"forward.png",  ICON_SIZE_ARROW);
+    LoadIconSet(g_icoRefresh,  L"refresh.png",  ICON_SIZE_REFRESH);
+    // Окно — чуть крупнее
+    LoadIconSet(g_icoMinimiz,  L"minimiz.png",  ICON_SIZE_WIN);
+    LoadIconSet(g_icoMaximize, L"maximize.png", ICON_SIZE_WIN);
+    LoadIconSet(g_icoRestore,  L"minimize.png", ICON_SIZE_WIN);
+    LoadIconSet(g_icoClose,    L"close.png",    ICON_SIZE_WIN);
+}
+
+void FreeIconSet(IconSet& set) {
+    if (set.normal)   DeleteObject(set.normal);
+    if (set.hover)    DeleteObject(set.hover);
+    if (set.disabled) DeleteObject(set.disabled);
+    set = {};
+}
+
+void FreeAllIcons() {
+    FreeIconSet(g_icoBack);
+    FreeIconSet(g_icoForward);
+    FreeIconSet(g_icoRefresh);
+    FreeIconSet(g_icoMinimiz);
+    FreeIconSet(g_icoMaximize);
+    FreeIconSet(g_icoRestore);
+    FreeIconSet(g_icoClose);
+}
+
+void DrawIconCentered(HDC hdc, const IconSet& set, RECT rc, int size, bool hovered, bool enabled = true) {
+    HBITMAP bmp = nullptr;
+    if (!enabled) bmp = set.disabled ? set.disabled : set.normal;
+    else if (hovered) bmp = set.hover ? set.hover : set.normal;
+    else bmp = set.normal;
+
+    if (!bmp) return;
+
+    int x = rc.left + (rc.right - rc.left - size) / 2;
+    int y = rc.top  + (rc.bottom - rc.top - size) / 2;
+
+    HDC hdcMem = CreateCompatibleDC(hdc);
+    HGDIOBJ old = SelectObject(hdcMem, bmp);
+
+    BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    AlphaBlend(hdc, x, y, size, size, hdcMem, 0, 0, size, size, bf);
+
+    SelectObject(hdcMem, old);
+    DeleteDC(hdcMem);
+}
+
+// ========== Helpers ==========
 std::wstring toWide(const std::string& s) {
     if (s.empty()) return L"";
     int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
@@ -222,21 +438,19 @@ void drawText(HDC hdc, RECT rc, const wchar_t* text, COLORREF color, int size, b
     DeleteObject(f);
 }
 
-// Load logo.ico next to exe
 void loadLogo() {
     wchar_t path[MAX_PATH];
     GetModuleFileNameW(nullptr, path, MAX_PATH);
-    // strip exe name
     wchar_t* slash = wcsrchr(path, L'\\');
     if (slash) *(slash + 1) = 0;
-    wcscat(path, L"logo.ico");
-    g_hLogo = (HICON)LoadImageW(nullptr, path, IMAGE_ICON, 28, 28, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    wcscat_s(path, L"logo.ico");
+    g_hLogo = (HICON)LoadImageW(nullptr, path, IMAGE_ICON, 40, 40, LR_LOADFROMFILE | LR_DEFAULTSIZE);
     if (!g_hLogo) {
-        // try client folder relative
-        g_hLogo = (HICON)LoadImageW(nullptr, L"logo.ico", IMAGE_ICON, 28, 28, LR_LOADFROMFILE);
+        g_hLogo = (HICON)LoadImageW(nullptr, L"logo.ico", IMAGE_ICON, 40, 40, LR_LOADFROMFILE);
     }
 }
 
+// ========== Window Proc ==========
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static int hoverId = 0;
 
@@ -269,82 +483,81 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         g_buttons.clear();
 
         // ===== ROW 1 =====
-        int y1 = 6, h1 = 34, x = 12;
+        int y1 = 18;
+        int h1 = 48;
 
-        // Logo + CATio
+        // Logo + CATio (отдельно, можно двигать)
+        int logoX = 52;
         if (g_hLogo) {
-            DrawIconEx(hdc, x, y1 + 3, g_hLogo, 28, 28, 0, nullptr, DI_NORMAL);
-            x += 34;
+            DrawIconEx(hdc, logoX, y1 + 4, g_hLogo, 40, 40, 0, nullptr, DI_NORMAL);
+            logoX += 52;
         } else {
-            // fallback orange square with C
             HBRUSH br = CreateSolidBrush(COL_ACCENT);
-            RECT box = { x, y1 + 3, x + 28, y1 + 31 };
+            RECT box = { logoX, y1 + 4, logoX + 40, y1 + 44 };
             FillRect(hdc, &box, br);
             DeleteObject(br);
-            drawText(hdc, box, L"C", COL_BG, 14, true, DT_CENTER);
-            x += 34;
+            drawText(hdc, box, L"C", COL_BG, 20, true, DT_CENTER);
+            logoX += 52;
         }
         {
-            RECT r = { x, y1, x + 70, y1 + h1 };
-            drawText(hdc, r, L"CATio", COL_ACCENT, 20, true, DT_LEFT);
-            x += 80;
+            RECT r = { logoX, y1, logoX + 120, y1 + h1 };
+            drawText(hdc, r, L"CATio", COL_ACCENT, 30, true, DT_LEFT);
         }
-        x += 10;
 
+        // Tabs — фиксированная позиция, не зависят от лого
+        int x = 206;
         auto addTab = [&](const wchar_t* label, int id, bool active, int w) {
             RECT r = { x, y1, x + w, y1 + h1 };
             g_buttons.push_back({ r, id });
             COLORREF col = active ? COL_ACCENT : (hoverId == id ? COL_TEXT_BRT : COL_TEXT);
-            drawText(hdc, r, label, col, 16, true, DT_CENTER);
+            drawText(hdc, r, label, col, 20, true, DT_CENTER);
             if (active) {
                 HPEN p2 = CreatePen(PS_SOLID, 3, COL_ACCENT);
                 HPEN o2 = (HPEN)SelectObject(hdc, p2);
-                MoveToEx(hdc, r.left + 6, r.bottom - 1, nullptr);
-                LineTo(hdc, r.right - 6, r.bottom - 1);
+                MoveToEx(hdc, r.left + 6, r.bottom - 2, nullptr);
+                LineTo(hdc, r.right - 6, r.bottom - 2);
                 SelectObject(hdc, o2);
                 DeleteObject(p2);
             }
-            x += w + 6;
+            x += w + 2;
         };
-        addTab(L"МАГАЗИН",    ID_STORE,     g_currentSection == Section::Store,     110);
-        addTab(L"БИБЛИОТЕКА", ID_LIBRARY,   g_currentSection == Section::Library,   125);
-        addTab(L"СООБЩЕСТВО", ID_COMMUNITY, g_currentSection == Section::Community, 125);
+        addTab(L"КАТАЛОГ",    ID_STORE,     g_currentSection == Section::Store,     120);
+        addTab(L"БИБЛИОТЕКА", ID_LIBRARY,   g_currentSection == Section::Library,   135);
+        addTab(L"МАСТЕРСКАЯ", ID_COMMUNITY, g_currentSection == Section::Community, 135);
 
-        // nickname tab ALWAYS UPPERCASE
         {
             std::wstring nickUp = toUpperW(g_username);
-            int w = 90;
+            int w = 100;
             RECT r = { x, y1, x + w, y1 + h1 };
             g_buttons.push_back({ r, ID_PROFILE });
             bool active = g_currentSection == Section::Profile;
             COLORREF col = active ? COL_ACCENT : (hoverId == ID_PROFILE ? COL_TEXT_BRT : COL_TEXT);
-            drawText(hdc, r, nickUp.c_str(), col, 16, true, DT_CENTER);
+            drawText(hdc, r, nickUp.c_str(), col, 20, true, DT_CENTER);
             if (active) {
                 HPEN p2 = CreatePen(PS_SOLID, 3, COL_ACCENT);
                 HPEN o2 = (HPEN)SelectObject(hdc, p2);
-                MoveToEx(hdc, r.left + 6, r.bottom - 1, nullptr);
-                LineTo(hdc, r.right - 6, r.bottom - 1);
+                MoveToEx(hdc, r.left + 6, r.bottom - 2, nullptr);
+                LineTo(hdc, r.right - 6, r.bottom - 2);
                 SelectObject(hdc, o2);
                 DeleteObject(p2);
             }
         }
 
-        // right: balance, nick (original case), avatar, window btns
-        int rx = rc.right - 8;
-        auto addWinBtn = [&](const wchar_t* t, int id) {
-            RECT r = { rx - 34, y1, rx, y1 + h1 };
+        // Right side: window buttons (меньше)
+        int rx = rc.right - 12;
+        auto addWinBtn = [&](const IconSet& ico, int id) {
+            RECT r = { rx - 36, y1, rx, y1 + h1 };
             g_buttons.push_back({ r, id });
-            COLORREF col = COL_TEXT;
-            if (hoverId == id) col = (id == ID_CLOSE) ? RGB(255, 80, 80) : COL_ACCENT;
-            drawText(hdc, r, t, col, 15, true, DT_CENTER);
-            rx -= 38;
+            DrawIconCentered(hdc, ico, r, ICON_SIZE_WIN, hoverId == id);
+            rx -= 40;
         };
-        addWinBtn(L"✕", ID_CLOSE);
-        addWinBtn(g_maximized ? L"❐" : L"□", ID_MAX);
-        addWinBtn(L"—", ID_MIN);
+        addWinBtn(g_icoClose, ID_CLOSE);
+        addWinBtn(g_maximized ? g_icoRestore : g_icoMaximize, ID_MAX);
+        addWinBtn(g_icoMinimiz, ID_MIN);
 
-        int av = 26;
-        int avX = rx - av - 4;
+        // Avatar
+        int av = 32;
+        int avX = rx - av - 6;
         int avY = y1 + (h1 - av) / 2;
         HBRUSH abr = CreateSolidBrush(COL_ACCENT);
         HPEN apn = CreatePen(PS_SOLID, 1, COL_ACCENT);
@@ -356,47 +569,75 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         DeleteObject(abr);
         DeleteObject(apn);
         RECT rAv = { avX, avY, avX + av, avY + av };
-        // first letter of username upper for avatar
         std::wstring avLetter = toUpperW(g_username.substr(0, 1));
-        drawText(hdc, rAv, avLetter.c_str(), COL_BG, 12, true, DT_CENTER);
-        rx = avX - 8;
+        drawText(hdc, rAv, avLetter.c_str(), COL_BG, 14, true, DT_CENTER);
+        rx = avX - 10;
 
-        // nick original case
+        // Username
         {
             std::wstring nick = toWide(g_username);
-            RECT r = { rx - 64, y1, rx, y1 + h1 };
-            drawText(hdc, r, nick.c_str(), COL_TEXT_BRT, 13, false, DT_RIGHT);
-            rx -= 70;
+            RECT r = { rx - 80, y1, rx, y1 + h1 };
+            drawText(hdc, r, nick.c_str(), COL_TEXT_BRT, 16, false, DT_RIGHT);
+            rx -= 90;
         }
+        // Balance
         {
             std::wstring bal = toWide(g_balance);
-            RECT r = { rx - 80, y1, rx, y1 + h1 };
-            drawText(hdc, r, bal.c_str(), COL_ACCENT, 13, true, DT_RIGHT);
+            RECT r = { rx - 100, y1, rx, y1 + h1 };
+            drawText(hdc, r, bal.c_str(), COL_ACCENT, 16, true, DT_RIGHT);
         }
 
-        // ===== ROW 2: arrows + refresh + url =====
-        int y2 = 46, h2 = 28;
-        x = 10;
+        // ===== ROW 2: arrows under logo + refresh + url =====
+        int y2 = 78;
+        int h2 = 28;
 
-        auto addSmall = [&](const wchar_t* t, int id, int w) {
-            RECT r = { x, y2, x + w, y2 + h2 };
-            g_buttons.push_back({ r, id });
-            COLORREF col = (hoverId == id) ? COL_ACCENT : COL_TEXT;
-            drawText(hdc, r, t, col, 16, true, DT_CENTER);
-            x += w + 4;
-        };
-        addSmall(L"←", ID_BACK, 32);
-        addSmall(L"→", ID_FORWARD, 32);
-        addSmall(L"↻", ID_REFRESH, 32);
-        x += 10;
+        // стрелки под лого
+        int ax = 52;
+        bool canBack    = g_historyIndex > 0;
+        bool canForward = g_historyIndex + 1 < (int)g_history.size();
 
+        // Back
+        {
+            RECT r = { ax, y2, ax + 26, y2 + h2 };
+            g_buttons.push_back({ r, ID_BACK });
+            DrawIconCentered(hdc, g_icoBack, r, ICON_SIZE_ARROW, hoverId == ID_BACK && canBack, canBack);
+            ax += 26;
+        }
+        // Forward
+        {
+            RECT r = { ax, y2, ax + 26, y2 + h2 };
+            g_buttons.push_back({ r, ID_FORWARD });
+            DrawIconCentered(hdc, g_icoForward, r, ICON_SIZE_ARROW, hoverId == ID_FORWARD && canForward, canForward);
+            ax += 30;
+        }
+        // Refresh (меньше)
+        {
+            RECT r = { ax, y2, ax + 24, y2 + h2 };
+            g_buttons.push_back({ r, ID_REFRESH });
+            DrawIconCentered(hdc, g_icoRefresh, r, ICON_SIZE_REFRESH, hoverId == ID_REFRESH, true);
+            ax += 28;
+        }
+
+        x = ax + 8;
+
+        // clean URL for display (без client=1)
         std::wstring urlW = toWide(g_currentUrl);
         size_t p = urlW.find(L"?client=1");
         if (p != std::wstring::npos) urlW = urlW.substr(0, p);
         p = urlW.find(L"&client=1");
         if (p != std::wstring::npos) urlW = urlW.substr(0, p);
+        // также убираем ?view=... если хотим совсем чистый, но оставляем view
+        // меряем реальную ширину текста
+        HFONT fUrl = CreateFontW(13, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
+            DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+        HFONT oldF = (HFONT)SelectObject(hdc, fUrl);
+        SIZE sz = {};
+        GetTextExtentPoint32W(hdc, urlW.c_str(), (int)urlW.size(), &sz);
+        SelectObject(hdc, oldF);
+        DeleteObject(fUrl);
 
-        RECT rUrl = { x, y2, rc.right - 16, y2 + h2 };
+        int urlWpx = sz.cx + 4;
+        RECT rUrl = { x, y2, x + urlWpx, y2 + h2 };
         g_buttons.push_back({ rUrl, ID_URL });
         drawText(hdc, rUrl, urlW.c_str(), hoverId == ID_URL ? COL_ACCENT : COL_URL, 13, false, DT_LEFT);
 
@@ -410,17 +651,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         for (const auto& b : g_buttons) {
             if (mx >= b.rc.left && mx <= b.rc.right && my >= b.rc.top && my <= b.rc.bottom) {
                 switch (b.id) {
-                    case ID_BACK: goBack(); break;
-                    case ID_FORWARD: goForward(); break;
+                    case ID_BACK:    if (g_historyIndex > 0) goBack(); break;
+                    case ID_FORWARD: if (g_historyIndex + 1 < (int)g_history.size()) goForward(); break;
                     case ID_REFRESH: doRefresh(); break;
-                    case ID_STORE: switchSection(Section::Store); break;
-                    case ID_LIBRARY: switchSection(Section::Library); break;
+                    case ID_STORE:     switchSection(Section::Store); break;
+                    case ID_LIBRARY:   switchSection(Section::Library); break;
                     case ID_COMMUNITY: switchSection(Section::Community); break;
-                    case ID_PROFILE: switchSection(Section::Profile); break;
-                    case ID_URL:
-                        copyToClipboard(g_currentUrl);
+                    case ID_PROFILE:   switchSection(Section::Profile); break;
+                    case ID_URL: {
+                        // копируем чистый URL без client=1
+                        std::string clean = g_currentUrl;
+                        size_t pos = clean.find("?client=1");
+                        if (pos != std::string::npos) clean = clean.substr(0, pos);
+                        pos = clean.find("&client=1");
+                        if (pos != std::string::npos) clean = clean.substr(0, pos);
+                        // если остался только ?view=... — ок, браузерная версия с табами
+                        copyToClipboard(clean);
                         MessageBoxW(hWnd, L"Ссылка скопирована", L"CATio", MB_OK | MB_ICONINFORMATION);
                         break;
+                    }
                     case ID_MIN: ShowWindow(hWnd, SW_MINIMIZE); break;
                     case ID_MAX: toggleMaximize(); break;
                     case ID_CLOSE: PostMessageW(hWnd, WM_CLOSE, 0, 0); break;
@@ -458,10 +707,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_ERASEBKGND: return 1;
+
     case WM_DESTROY:
         if (g_hLogo) { DestroyIcon(g_hLogo); g_hLogo = nullptr; }
+        FreeAllIcons();
         PostQuitMessage(0);
         break;
+
     default:
         return DefWindowProcW(hWnd, msg, wParam, lParam);
     }
@@ -471,7 +723,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
     INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES };
     InitCommonControlsEx(&icc);
+
     loadLogo();
+    LoadAllIcons();
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
