@@ -487,7 +487,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int h1 = 48;
 
         // Logo + CATio (отдельно, можно двигать)
-        int logoX = 52;
+        int logoX = 62;
         if (g_hLogo) {
             DrawIconEx(hdc, logoX, y1 + 4, g_hLogo, 40, 40, 0, nullptr, DI_NORMAL);
             logoX += 52;
@@ -505,7 +505,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
 
         // Tabs — фиксированная позиция, не зависят от лого
-        int x = 206;
+        int x = 192;
         auto addTab = [&](const wchar_t* label, int id, bool active, int w) {
             RECT r = { x, y1, x + w, y1 + h1 };
             g_buttons.push_back({ r, id });
@@ -592,7 +592,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int h2 = 28;
 
         // стрелки под лого
-        int ax = 52;
+        int ax = 57;
         bool canBack    = g_historyIndex > 0;
         bool canForward = g_historyIndex + 1 < (int)g_history.size();
 
