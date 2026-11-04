@@ -710,9 +710,15 @@ html, body {
 /* ===== СТРАНИЦА АВТОРИЗАЦИИ ===== */
 .auth-page {
   max-width: 420px;
-  margin: 60px auto;
-  padding: 0 20px;
+  margin: 20px auto 40px;
+  padding: 0 20px 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
+
+.auth-page::-webkit-scrollbar { width: 6px; }
+.auth-page::-webkit-scrollbar-thumb { background: #3d3830; border-radius: 3px; }
 
 .auth-logo {
   display: block;

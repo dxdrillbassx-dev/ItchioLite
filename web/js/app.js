@@ -352,6 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initModal();
   initWebNav();
   initAvatarMenu();
-  const view = getViewFromUrl();
+  // Неавторизованным всегда показываем auth, даже если в URL другой view
+  const view = (window.FORCE_AUTH_VIEW && $('#view-auth')) ? 'auth' : getViewFromUrl();
   showView(view);
 });

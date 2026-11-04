@@ -10,8 +10,8 @@ $isAuthorized = $auth['authorized'];
 $user = $auth['user'];
 $csrfToken = $auth['csrf_token'];
 
-// Если не авторизован и пытается попасть в профиль — редирект на auth
-if (!$isAuthorized && $currentView === 'profile') {
+// Неавторизованным показываем только авторизацию — без мигания основного интерфейса
+if (!$isAuthorized && $currentView !== 'auth') {
     $currentView = 'auth';
 }
 ?>
@@ -210,7 +210,6 @@ if (!$isAuthorized && $currentView === 'profile') {
             <!-- Соцсети -->
             <div class="auth-social">
               <button type="button" class="auth-social-btn" onclick="socialAuth('google')">Войти через Google</button>
-              <button type="button" class="auth-social-btn" onclick="socialAuth('x')">Войти через X</button>
             </div>
           </div>
         </div>
@@ -231,6 +230,7 @@ if (!$isAuthorized && $currentView === 'profile') {
     window.IS_CLIENT = <?= $isClient ? 'true' : 'false' ?>;
     window.CSRF_TOKEN = '<?php echo $csrfToken; ?>';
     window.AUTH_STATE = <?php echo json_encode($auth); ?>;
+    window.FORCE_AUTH_VIEW = <?= $isAuthorized ? 'false' : 'true' ?>;
   </script>
   <script>
 // горизонтальный скролл чипов колесиком при наведении
