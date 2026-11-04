@@ -10,6 +10,7 @@
 #include <dwmapi.h>
 #include <wincodec.h>
 #include <shlobj.h>
+#include <shellapi.h>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -85,6 +86,15 @@ const COLORREF COL_URL      = RGB(120, 110, 100);
 const COLORREF COL_DISABLED = RGB(80, 75, 70);
 
 #define WM_CATIO_CHECK_DONE (WM_APP + 1)
+
+// Трей (как в Стиме): крестик/минус прячут окно, иконка живёт в трее
+#define WM_TRAYICON  (WM_APP + 10)
+#define ID_TRAY_OPEN  3001
+#define ID_TRAY_EXIT  3002
+
+NOTIFYICONDATAW g_nid = {};
+bool g_inTray = false;
+bool g_reallyQuit = false; // выход только через меню трея «Выйти»
 
 // Таймеры: тихий автоповтор проверки сервера и показ всплывашки авторизации
 #define IDT_RETRY 1001
@@ -591,6 +601,49 @@ void loadLogo() {
     }
 }
 
+// ========== Трей (как в Стиме) ==========
+void trayAdd() {
+    g_nid.cbSize = sizeof(g_nid);
+    g_nid.hWnd = g_hWnd;
+    g_nid.uID = 1;
+    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    g_nid.uCallbackMessage = WM_TRAYICON;
+    g_nid.hIcon = g_hLogo ? g_hLogo : LoadIcon(nullptr, IDI_APPLICATION);
+    wcscpy_s(g_nid.szTip, L"CATio");
+    Shell_NotifyIconW(NIM_ADD, &g_nid);
+}
+
+void trayRemove() {
+    Shell_NotifyIconW(NIM_DELETE, &g_nid);
+    g_nid = {};
+}
+
+void minimizeToTray() {
+    ShowWindow(g_hWnd, SW_HIDE);
+    g_inTray = true;
+}
+
+void restoreFromTray() {
+    g_inTray = false;
+    ShowWindow(g_hWnd, SW_SHOW);
+    SetForegroundWindow(g_hWnd);
+    layoutWebview();
+    InvalidateRect(g_hWnd, nullptr, TRUE);
+}
+
+void showTrayMenu() {
+    POINT pt;
+    GetCursorPos(&pt);
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_STRING, ID_TRAY_OPEN, L"Открыть CATio");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_TRAY_EXIT, L"Выйти");
+    SetMenuDefaultItem(menu, ID_TRAY_OPEN, FALSE);
+    SetForegroundWindow(g_hWnd); // чтобы меню закрылось при клике мимо
+    TrackPopupMenu(menu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_hWnd, nullptr);
+    DestroyMenu(menu);
+}
+
 // ========== Всплывашка «Успешная авторизация» ==========
 // Layered-окно: рисуем битмап в памяти (иконка + текст) и показываем через
 // UpdateLayeredWindow. Держится ~1.8 сек, потом WM_TIMER пускает в интерфейс.
@@ -701,6 +754,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_toast) { DestroyWindow(g_toast); g_toast = nullptr; }
             g_authMode = false;
             navigateTo(STORE_URL); // всплывашка отработала — пускаем к интерфейсу
+        }
+        break;
+
+    case WM_TRAYICON:
+        // ЛКМ/двойной клик — открыть окно, ПКМ — меню
+        if (lParam == WM_LBUTTONUP || lParam == WM_LBUTTONDBLCLK) {
+            restoreFromTray();
+        } else if (lParam == WM_RBUTTONUP) {
+            showTrayMenu();
+        }
+        break;
+
+    case WM_COMMAND:
+        if (LOWORD(wParam) == ID_TRAY_OPEN) {
+            restoreFromTray();
+        } else if (LOWORD(wParam) == ID_TRAY_EXIT) {
+            g_reallyQuit = true;
+            DestroyWindow(hWnd); // настоящий выход из приложения
+        }
+        break;
+
+    case WM_CLOSE:
+        // Крестик не закрывает приложение, а прячет в трей — как в Стиме.
+        // Настоящий выход только через меню трея -> «Выйти».
+        if (!g_reallyQuit) {
+            minimizeToTray();
+            return 0;
         }
         break;
 
@@ -1019,7 +1099,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         MessageBoxW(hWnd, L"Ссылка скопирована", L"CATio", MB_OK | MB_ICONINFORMATION);
                         break;
                     }
-                    case ID_MIN: ShowWindow(hWnd, SW_MINIMIZE); break;
+                    case ID_MIN: minimizeToTray(); break;
                     case ID_MAX: toggleMaximize(); break;
                     case ID_CLOSE: PostMessageW(hWnd, WM_CLOSE, 0, 0); break;
                 }
@@ -1068,6 +1148,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_ERASEBKGND: return 1;
 
     case WM_DESTROY:
+        trayRemove(); // иначе в трее останется «мёртвая» иконка
         KillTimer(hWnd, IDT_RETRY);
         KillTimer(hWnd, IDT_TOAST);
         if (g_toast) { DestroyWindow(g_toast); g_toast = nullptr; }
@@ -1125,6 +1206,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
 
     ShowWindow(g_hWnd, nShow);
     UpdateWindow(g_hWnd);
+    trayAdd(); // иконка в трее с самого запуска, как у Стима
 
     try {
         g_webview = new webview::webview(true, g_hWnd);

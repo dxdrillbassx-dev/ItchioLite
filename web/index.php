@@ -164,52 +164,55 @@ if (!$isAuthorized && $currentView !== 'auth') {
       <?php if (!$isAuthorized): ?>
       <section id="view-auth" class="view <?php echo $currentView === 'auth' ? 'active' : ''; ?>">
         <div class="auth-page">
-          <a class="auth-logo" href="?view=store">CATio</a>
-          <p class="auth-sub">Вход на полку. Первый аккаунт становится администратором и разработчиком.</p>
+          <div class="auth-box">
+            <a class="auth-logo" href="?view=store<?php echo $isClient ? '&amp;client=1' : ''; ?>"><span class="logo-icon">C</span>CATio</a>
+            <p class="auth-sub">Вход на полку. Первый аккаунт становится администратором и разработчиком.</p>
 
-          <div class="auth-form-wrap">
-            <!-- Переключатель Вход/Регистрация -->
-            <div class="auth-tabs">
-              <button type="button" class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Вход</button>
-              <button type="button" class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Регистрация</button>
+            <div class="auth-card">
+              <!-- Переключатель Вход/Регистрация -->
+              <div class="auth-tabs">
+                <button type="button" class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Вход</button>
+                <button type="button" class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Регистрация</button>
+              </div>
+
+              <!-- Ошибки -->
+              <p id="auth-error" class="auth-error hidden"></p>
+
+              <!-- ФОРМА ВХОДА -->
+              <form id="form-login" class="auth-form" onsubmit="doLogin(event); return false;">
+                <label class="auth-label">
+                  <span>Почта</span>
+                  <input type="email" name="email" required autocomplete="email" class="auth-input" placeholder="you@example.com" />
+                </label>
+                <label class="auth-label">
+                  <span>Пароль</span>
+                  <input type="password" name="password" required minlength="8" autocomplete="current-password" class="auth-input" placeholder="••••••••" />
+                </label>
+                <button type="submit" class="auth-submit">Войти</button>
+              </form>
+
+              <!-- ФОРМА РЕГИСТРАЦИИ -->
+              <form id="form-register" class="auth-form hidden" onsubmit="doRegister(event); return false;">
+                <label class="auth-label">
+                  <span>Имя</span>
+                  <input type="text" name="username" required minlength="2" maxlength="32" class="auth-input" placeholder="Ваше имя" />
+                </label>
+                <label class="auth-label">
+                  <span>Почта</span>
+                  <input type="email" name="email" required autocomplete="email" class="auth-input" placeholder="you@example.com" />
+                </label>
+                <label class="auth-label">
+                  <span>Пароль</span>
+                  <input type="password" name="password" required minlength="8" autocomplete="new-password" class="auth-input" placeholder="Минимум 8 символов" />
+                </label>
+                <button type="submit" class="auth-submit">Создать аккаунт</button>
+              </form>
             </div>
-
-            <!-- Ошибки -->
-            <div id="auth-error" class="auth-error hidden"></div>
-
-            <!-- ФОРМА ВХОДА -->
-            <form id="form-login" class="auth-form" onsubmit="return doLogin(event)">
-              <label class="auth-label">
-                <span>Почта</span>
-                <input type="email" name="email" required autocomplete="email" class="auth-input" placeholder="you@example.com" />
-              </label>
-              <label class="auth-label">
-                <span>Пароль</span>
-                <input type="password" name="password" required minlength="8" autocomplete="current-password" class="auth-input" placeholder="••••••••" />
-              </label>
-              <button type="submit" class="auth-submit">Войти</button>
-            </form>
-
-            <!-- ФОРМА РЕГИСТРАЦИИ -->
-            <form id="form-register" class="auth-form hidden" onsubmit="return doRegister(event)">
-              <label class="auth-label">
-                <span>Имя</span>
-                <input type="text" name="username" required minlength="2" maxlength="32" class="auth-input" placeholder="Ваше имя" />
-              </label>
-              <label class="auth-label">
-                <span>Почта</span>
-                <input type="email" name="email" required autocomplete="email" class="auth-input" placeholder="you@example.com" />
-              </label>
-              <label class="auth-label">
-                <span>Пароль</span>
-                <input type="password" name="password" required minlength="8" autocomplete="new-password" class="auth-input" placeholder="Минимум 8 символов" />
-              </label>
-              <button type="submit" class="auth-submit">Создать аккаунт</button>
-            </form>
 
             <!-- Соцсети -->
             <div class="auth-social">
               <button type="button" class="auth-social-btn" onclick="socialAuth('google')">Войти через Google</button>
+              <button type="button" class="auth-social-btn" onclick="socialAuth('x')">Войти через X</button>
             </div>
           </div>
         </div>
@@ -264,6 +267,17 @@ function hideAuthError() {
   document.getElementById('auth-error').classList.add('hidden');
 }
 
+// Читаем ответ API: даже если сервер вернул не JSON (500, fatal error),
+// показываем понятную ошибку, а не молчим
+async function readApiJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error('Сервер вернул ошибку (HTTP ' + res.status + '). Проверь, что Apache и MySQL запущены.');
+  }
+}
+
 async function doLogin(e) {
   e.preventDefault();
   hideAuthError();
@@ -283,17 +297,18 @@ async function doLogin(e) {
         csrf_token: window.CSRF_TOKEN,
       }),
     });
-    const data = await res.json();
+    const data = await readApiJson(res);
 
     if (data.success) {
-      window.location.href = '?view=store';
+      // В клиенте сохраняем client=1 — иначе сломается синхронизация с C++
+      window.location.href = window.IS_CLIENT ? '?view=store&client=1' : '?view=store';
     } else {
-      showAuthError(data.error || 'Ошибка входа');
+      showAuthError(data.error || Object.values(data.errors || {})[0] || 'Ошибка входа');
       btn.disabled = false;
       btn.textContent = 'Войти';
     }
   } catch (err) {
-    showAuthError('Ошибка сети');
+    showAuthError(err.message || 'Ошибка сети');
     btn.disabled = false;
     btn.textContent = 'Войти';
   }
@@ -320,10 +335,10 @@ async function doRegister(e) {
         csrf_token: window.CSRF_TOKEN,
       }),
     });
-    const data = await res.json();
+    const data = await readApiJson(res);
 
     if (data.success) {
-      window.location.href = '?view=store';
+      window.location.href = window.IS_CLIENT ? '?view=store&client=1' : '?view=store';
     } else {
       const errs = data.errors || {};
       showAuthError(data.error || Object.values(errs)[0] || 'Ошибка регистрации');
@@ -331,7 +346,7 @@ async function doRegister(e) {
       btn.textContent = 'Создать аккаунт';
     }
   } catch (err) {
-    showAuthError('Ошибка сети');
+    showAuthError(err.message || 'Ошибка сети');
     btn.disabled = false;
     btn.textContent = 'Создать аккаунт';
   }
@@ -346,7 +361,7 @@ async function logout() {
       body: JSON.stringify({ csrf_token: window.CSRF_TOKEN }),
     });
   } catch (e) {}
-  window.location.href = '?view=store';
+  window.location.href = window.IS_CLIENT ? '?view=store&client=1' : '?view=store';
 }
 
 function socialAuth(provider) {
@@ -355,12 +370,15 @@ function socialAuth(provider) {
 </script>
   <script>
 // Синхронизация авторизации с нативным клиентом (имя, баланс, гость/не гость)
+// Библиотека webview создаёт биндинги как window.<имя> — НЕ через hostObjects.
+// Передаём объект напрямую (не JSON.stringify): иначе в C++ кавычки приходят
+// экранированными и проверка req.find() не срабатывает.
 (function () {
   if (!window.IS_CLIENT) return;
   function push() {
     try {
-      if (window.chrome && window.chrome.webview && window.chrome.webview.hostObjects && window.chrome.webview.hostObjects.catioSync) {
-        window.chrome.webview.hostObjects.catioSync(JSON.stringify(window.AUTH_STATE));
+      if (typeof window.catioSync === 'function') {
+        window.catioSync(window.AUTH_STATE);
       }
     } catch (e) { /* не критично */ }
   }

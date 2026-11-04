@@ -55,17 +55,30 @@ function getDB() {
         // Сессии
         // ВАЖНО: expires_at — TIMESTAMP NULL. Явный NOT NULL без DEFAULT даёт
         // неявный дефолт '0000-00-00 00:00:00', который запрещён NO_ZERO_DATE (ERROR 1067).
-        $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
-            id VARCHAR(64) PRIMARY KEY,
-            user_id INT UNSIGNED NOT NULL,
-            ip VARCHAR(45) NOT NULL,
-            user_agent VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMP NULL DEFAULT NULL,
-            INDEX idx_user_id (user_id),
-            INDEX idx_expires (expires_at),
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $createSessions = function () use ($pdo) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
+                id VARCHAR(64) PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL,
+                ip VARCHAR(45) NOT NULL,
+                user_agent VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NULL DEFAULT NULL,
+                INDEX idx_user_id (user_id),
+                INDEX idx_expires (expires_at),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        };
+        $createSessions();
+
+        // Если таблица досталась от старой схемы и id не VARCHAR(64) — токен сессии
+        // записывается обрезанным/не тем, и вход «не держится»: кука есть, а строки в базе нет.
+        // Пересоздаём таблицу (сессии — расходник, всех просто разлогинит).
+        $idCol = $pdo->query("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sessions' AND COLUMN_NAME = 'id'")->fetch();
+        if ($idCol && !(strtolower($idCol['DATA_TYPE']) === 'varchar' && (int)$idCol['CHARACTER_MAXIMUM_LENGTH'] === 64)) {
+            $pdo->exec("DROP TABLE sessions");
+            $createSessions();
+        }
 
         // Игры
         $pdo->exec("CREATE TABLE IF NOT EXISTS games (
@@ -90,6 +103,20 @@ function getDB() {
             INDEX idx_price (price),
             INDEX idx_published (is_published)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Авто-миграция: если таблица users уже существовала в старой схеме
+        // (например, из database/schema.sql) — доводим её до актуального набора колонок.
+        // БЕЗ ЭТОГО регистрация и вход молча ломаются: INSERT/SELECT падают по
+        // «unknown column», а гость этого не видит, потому что для гостя запрос не выполняется.
+        ensureColumn($pdo, 'users', 'role', "ENUM('admin','developer','user') NOT NULL DEFAULT 'user'");
+        ensureColumn($pdo, 'users', 'balance', "INT NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'users', 'avatar', "VARCHAR(10) NOT NULL DEFAULT ''");
+
+        // Сессии: в старой схеме таблицы не было вообще — CREATE выше создаст новую.
+        // А если она есть в старом виде — докидываем недостающие колонки.
+        ensureColumn($pdo, 'sessions', 'ip', "VARCHAR(45) NOT NULL DEFAULT ''");
+        ensureColumn($pdo, 'sessions', 'user_agent', "VARCHAR(255) NOT NULL DEFAULT ''");
+        ensureColumn($pdo, 'sessions', 'expires_at', "TIMESTAMP NULL DEFAULT NULL");
 
         // Авто-миграция: если таблица games уже существовала в старой схеме —
         // доводим её до актуального набора колонок

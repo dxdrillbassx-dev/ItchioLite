@@ -2,6 +2,15 @@
 // CATio — система авторизации
 require_once __DIR__ . '/db.php';
 
+// PHP-сессия (CSRF) живёт 30 дней — клиент не будет слетать при каждом запуске
+$sessionLifetime = 60 * 60 * 24 * 30;
+session_set_cookie_params([
+    'lifetime' => $sessionLifetime,
+    'path' => '/',
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
 session_start();
 
 // ========== CSRF ==========
@@ -58,8 +67,22 @@ function createSession($userId) {
     $stmt = $db->prepare("INSERT INTO sessions (id, user_id, ip, user_agent, expires_at) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))");
     $stmt->execute([$token, $userId, $ip, $ua]);
 
-    // HttpOnly cookie, 30 дней
-    setcookie('catio_session', $token, [
+    // Проверяем, что строка реально появилась в базе — иначе кука будет «мёртвой»:
+    // браузер её шлёт, а сессии в таблице нет
+    $check = $db->prepare("SELECT COUNT(*) FROM sessions WHERE id = ?");
+    $check->execute([$token]);
+    if ($check->fetchColumn() == 0) {
+        throw new RuntimeException('Сессия не сохранилась в базе — проверь таблицу sessions в phpMyAdmin');
+    }
+
+    // Зачищаем «зомби»-куки прошлых версий: куки с разными path сосуществуют,
+    // и старая (без явного path браузер прибивал её к /itch-steam-like/api)
+    // перекрывала новую — сервер видел дохлый токен и не пускал.
+    clearAuthCookies();
+
+    // HttpOnly cookie, 30 дней. Имя catio_sid — НОВОЕ, чтобы застрявшая
+    // зомби-кука catio_session больше не участвовала в авторизации вообще.
+    setcookie('catio_sid', $token, [
         'expires' => time() + 30 * 24 * 3600,
         'path' => '/',
         'httponly' => true,
@@ -69,15 +92,24 @@ function createSession($userId) {
     return $token;
 }
 
+// Удаляет auth-куки (старые и новые имена) на всех путях, где они могли застрять
+function clearAuthCookies() {
+    $paths = ['/', '/itch-steam-like/', '/itch-steam-like/api', '/itch-steam-like/api/'];
+    foreach ($paths as $path) {
+        setcookie('catio_session', '', ['expires' => 1, 'path' => $path]);
+        setcookie('catio_sid', '', ['expires' => 1, 'path' => $path]);
+    }
+}
+
 function destroySession($token) {
     $db = getDB();
     $stmt = $db->prepare("DELETE FROM sessions WHERE id = ?");
     $stmt->execute([$token]);
-    setcookie('catio_session', '', time() - 3600, '/');
+    clearAuthCookies();
 }
 
 function getCurrentUser() {
-    if (empty($_COOKIE['catio_session'])) return null;
+    if (empty($_COOKIE['catio_sid'])) return null;
 
     $db = getDB();
     $stmt = $db->prepare("
@@ -86,7 +118,7 @@ function getCurrentUser() {
         JOIN users u ON u.id = s.user_id
         WHERE s.id = ? AND s.expires_at > NOW()
     ");
-    $stmt->execute([$_COOKIE['catio_session']]);
+    $stmt->execute([$_COOKIE['catio_sid']]);
     $user = $stmt->fetch();
 
     return $user ?: null;
@@ -155,8 +187,8 @@ function loginUser($email, $password) {
 
 // ========== ВЫХОД ==========
 function logoutUser() {
-    if (!empty($_COOKIE['catio_session'])) {
-        destroySession($_COOKIE['catio_session']);
+    if (!empty($_COOKIE['catio_sid'])) {
+        destroySession($_COOKIE['catio_sid']);
     }
     session_destroy();
 }

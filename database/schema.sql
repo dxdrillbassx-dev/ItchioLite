@@ -10,13 +10,27 @@ USE itch_steam_local;
 -- Users
 CREATE TABLE IF NOT EXISTS users (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  username VARCHAR(64) NOT NULL UNIQUE,
+  username VARCHAR(32) NOT NULL UNIQUE,
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
-  display_name VARCHAR(128) DEFAULT NULL,
-  avatar_url VARCHAR(512) DEFAULT NULL,
+  role ENUM('admin','developer','user') NOT NULL DEFAULT 'user',
+  balance INT NOT NULL DEFAULT 0,
+  avatar VARCHAR(10) NOT NULL DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- Sessions (авторизация по куке catio_session)
+CREATE TABLE IF NOT EXISTS sessions (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  ip VARCHAR(45) NOT NULL,
+  user_agent VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP NULL DEFAULT NULL,
+  INDEX idx_user_id (user_id),
+  INDEX idx_expires (expires_at),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Games (like itch.io games)
