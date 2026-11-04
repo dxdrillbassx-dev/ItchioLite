@@ -784,13 +784,14 @@ html, body {
   color: var(--accent);
   font-size: 0.85rem;
   margin-bottom: 16px;
+  min-height: 42px;           /* место под ошибку всегда зарезервировано */
+  display: flex;
+  align-items: center;
 }
 
-.auth-error.hidden { display: none; }
-
-.auth-form {
-  display: grid;
-  gap: 14px;
+/* было: display: none */
+.auth-error.hidden {
+  visibility: hidden;         /* блок остаётся в потоке, вёрстка не прыгает */
 }
 
 .auth-form.hidden { display: none; }
