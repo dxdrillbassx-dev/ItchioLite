@@ -107,6 +107,7 @@ HWND g_toast = nullptr;
 std::string g_currentUrl = STORE_URL;
 std::string g_balance = "";
 std::string g_username = u8"Гость";
+std::string g_email = "";
 bool g_guest = true;
 
 // Режим «на весь экран без табов»: либо логин, либо офлайн-404
@@ -924,25 +925,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         drawText(hdc, rAv, avLetter.c_str(), COL_BG, 14, true, DT_CENTER);
         rx = avX - 10;
 
-        // Username
+        // Username (баланс из шапки убран — он живёт в меню под аватаркой)
         if (!g_guest) {
             std::wstring nick = toWide(g_username);
             RECT r = { rx - 80, y1, rx, y1 + h1 };
             drawText(hdc, r, nick.c_str(), COL_TEXT_BRT, 16, false, DT_RIGHT);
-            rx -= 90;
-            std::wstring bal = toWide(g_balance);
-            RECT rb = { rx - 100, y1, rx, y1 + h1 };
-            drawText(hdc, rb, bal.c_str(), COL_ACCENT, 16, true, DT_RIGHT);
         }
 
-        // ===== МЕНЮ ПОД АВАТАРКОЙ =====
+        // ===== МЕНЮ ПОД АВАТАРКОЙ (как на сайте) =====
         if (g_menuOpen && !g_guest) {
-            const int mw = 230;
-            const int hh = 56, ih = 42;
+            const int mw = 250;
+            const int hh = 52;   // шапка: имя + почта
+            const int bh = 34;   // строка баланса
+            const int ih = 40;   // пункты меню
             int mx = g_avatarRect.right - mw;
             if (mx < 8) mx = 8;
             int my = g_avatarRect.bottom + 8;
-            RECT m = { mx, my, mx + mw, my + hh + 1 + ih * 2 };
+            RECT m = { mx, my, mx + mw, my + hh + bh + 1 + ih * 2 };
             g_menuRect = m;
 
             HBRUSH mbg = CreateSolidBrush(COL_CARD);
@@ -954,25 +953,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             g_menuItems.clear();
 
-            // Шапка: баланс
+            // Шапка: имя + почта
             RECT hR = { mx + 14, my, mx + mw - 14, my + hh };
             g_menuItems.push_back({ hR, 0 });
-            RECT l1 = { hR.left, hR.top + 6, hR.right, hR.top + 24 };
-            drawText(hdc, l1, L"Баланс", COL_MUTED, 12, false, DT_LEFT);
-            RECT l2 = { hR.left, hR.top + 22, hR.right, hR.top + 50 };
+            RECT rName = { hR.left, hR.top + 8, hR.right, hR.top + 30 };
+            drawText(hdc, rName, toWide(g_username).c_str(), COL_TEXT_BRT, 15, true, DT_LEFT);
+            RECT rMail = { hR.left, hR.top + 28, hR.right, hR.top + 50 };
+            drawText(hdc, rMail, toWide(g_email).c_str(), COL_MUTED, 12, false, DT_LEFT);
+
+            // Баланс: подпись слева, сумма справа
+            RECT bR = { mx + 14, my + hh, mx + mw - 14, my + hh + bh };
+            g_menuItems.push_back({ bR, 0 });
+            drawText(hdc, bR, L"Баланс", COL_MUTED, 13, false, DT_LEFT);
             std::wstring bal = toWide(g_balance.empty() ? "0 \xE2\x82\xBD" : g_balance);
-            drawText(hdc, l2, bal.c_str(), COL_ACCENT, 16, true, DT_LEFT);
+            drawText(hdc, bR, bal.c_str(), COL_ACCENT, 15, true, DT_RIGHT);
 
             HPEN sep = CreatePen(PS_SOLID, 1, COL_BORDER);
             HPEN os = (HPEN)SelectObject(hdc, sep);
-            MoveToEx(hdc, mx, my + hh, nullptr);
-            LineTo(hdc, mx + mw, my + hh);
+            MoveToEx(hdc, mx, my + hh + bh, nullptr);
+            LineTo(hdc, mx + mw, my + hh + bh);
             SelectObject(hdc, os);
             DeleteObject(sep);
 
             struct Item { const wchar_t* txt; int id; bool danger; };
-            Item items[] = { { L"Настройки", 1, false }, { L"Выйти", 2, true } };
-            int iy = my + hh + 1;
+            Item items[] = { { L"⚙  Настройки", 1, false }, { L"↪  Выйти", 2, true } };
+            int iy = my + hh + bh + 1;
             for (auto& it : items) {
                 RECT r = { mx, iy, mx + mw, iy + ih };
                 g_menuItems.push_back({ r, it.id });
@@ -1201,6 +1206,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
 
     BOOL dark = TRUE;
     DwmSetWindowAttribute(g_hWnd, 20, &dark, sizeof(dark));
+    // Скруглённые углы на Windows 11: у окон без стандартной рамки (WS_POPUP)
+    // DWM их не рисует — просим явно через DWMWA_WINDOW_CORNER_PREFERENCE
+    int cornerPref = 2; // DWMWCP_ROUND
+    DwmSetWindowAttribute(g_hWnd, 33, &cornerPref, sizeof(cornerPref));
     MARGINS m = { 0, 0, 0, 0 };
     DwmExtendFrameIntoClientArea(g_hWnd, &m);
 
@@ -1223,6 +1232,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
             std::string name = jsonExtractStr(req, "username");
             if (name.empty()) name = u8"Гость";
             g_username = name;
+            g_email = auth ? jsonExtractStr(req, "email") : "";
             g_balance = auth ? formatBalance(jsonExtractInt(req, "balance")) : "";
 
             if (becameAuthed) {

@@ -38,7 +38,7 @@ async function fetchJSON(url, opts = {}) {
 function renderOffline(container, retryFn, title) {
   container.innerHTML = `
     <div class="offline-block">
-      <div class="offline-logo">C</div>
+      <img class="offline-logo" src="logo.ico" alt="" style="width:72px;height:72px;border-radius:18px;background:none;display:block" />
       <h2 class="offline-title">${escapeHtml(title || 'Кот ушёл в запой')}</h2>
       <p class="offline-text">
         Сервер CATio временно недоступен — страница не смогла дозвониться до полки.<br>

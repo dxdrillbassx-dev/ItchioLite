@@ -21,6 +21,7 @@ if (!$isAuthorized && $currentView !== 'auth') {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CATio</title>
+  <link rel="icon" type="image/x-icon" href="logo.ico" />
   <link rel="stylesheet" href="css/style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <?php if ($isClient): ?>
@@ -32,7 +33,7 @@ if (!$isAuthorized && $currentView !== 'auth') {
     <?php if (!$isClient): ?>
     <header class="topbar">
       <div class="logo">
-        <span class="logo-icon">C</span>
+        <img class="logo-img" src="logo.ico" alt="CATio" />
         <span class="logo-text">CATio</span>
       </div>
       <nav class="nav">
@@ -165,7 +166,7 @@ if (!$isAuthorized && $currentView !== 'auth') {
       <section id="view-auth" class="view <?php echo $currentView === 'auth' ? 'active' : ''; ?>">
         <div class="auth-page">
           <div class="auth-box">
-            <a class="auth-logo" href="?view=store<?php echo $isClient ? '&amp;client=1' : ''; ?>"><span class="logo-icon">C</span>CATio</a>
+            <a class="auth-logo" href="?view=store<?php echo $isClient ? '&amp;client=1' : ''; ?>"><img class="logo-img logo-img-lg" src="logo.ico" alt="" />CATio</a>
             <p class="auth-sub">Вход на полку. Первый аккаунт становится администратором и разработчиком.</p>
 
             <div class="auth-card">
