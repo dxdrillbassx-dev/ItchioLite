@@ -171,7 +171,8 @@ try {
                    g.price, g.category, g.genre, g.tags, g.rating,
                    g.cover_emoji, g.cover_color, g.developer_name, g.download_count,
                    l.added_at, l.last_played,
-                   (SELECT COUNT(*) FROM game_builds b WHERE b.game_id = g.id) AS builds_count
+                   (SELECT COUNT(*) FROM game_builds b WHERE b.game_id = g.id) AS builds_count,
+                   (SELECT GROUP_CONCAT(DISTINCT b.platform) FROM game_builds b WHERE b.game_id = g.id) AS platforms
             FROM library l
             JOIN games g ON g.id = l.game_id
             WHERE l.user_id = ?

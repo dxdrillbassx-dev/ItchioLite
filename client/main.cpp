@@ -67,12 +67,11 @@ a:hover{filter:brightness(1.1)}
 <p class="hint">Кот сам проверит сервер каждые 15 секунд</p>
 </div></body></html>)HTML";
 
-const int TOP_HEIGHT = 108;       // вся шапка (табы + URL-строка) стала тоньше на 20px
-const int ICON_SIZE_WIN = 8;      // кнопки окна — в 2 раза меньше
-const int ICON_SIZE_ARROW = 18;
-const int ICON_SIZE_REFRESH = 12;
-const int LOGO_SIZE = 36;         // logo.ico и аватар одного размера
-const int LOGO_MARGIN = 32;       // отступ лого слева и сверху от края окна
+const int TOP_HEIGHT = 40;        // тонкий тайтлбар как в Hydra (лого + кнопки окна)
+const int ICON_SIZE_WIN = 10;     // иконки кнопок окна в тонкой полоске
+const int WIN_BTN_W = 46;         // ширина кнопки окна (на всю высоту полоски)
+const int STRIP_LOGO = 20;        // размер лого в полоске
+const int STRIP_MARGIN = 12;      // отступ лого слева
 const int MENU_W = 230;           // как .user-menu width в веб
 const int MENU_RADIUS = 8;        // var(--radius)
 const int MENU_HH = 52;           // шапка: имя + почта
@@ -93,6 +92,7 @@ const COLORREF COL_BODY     = RGB(199, 192, 184);
 const COLORREF COL_MUTED    = RGB(138, 131, 124);
 const COLORREF COL_URL      = RGB(120, 110, 100);
 const COLORREF COL_DISABLED = RGB(80, 75, 70);
+const COLORREF COL_CLOSE_HOVER = RGB(196, 43, 28); // красный ховер крестика, как в Windows
 
 #define WM_CATIO_CHECK_DONE (WM_APP + 1)
 
@@ -311,9 +311,9 @@ void LoadIconSet(IconSet& set, const wchar_t* filename, int size) {
 
 void LoadAllIcons() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    LoadIconSet(g_icoBack,     L"back.png",     ICON_SIZE_ARROW);
-    LoadIconSet(g_icoForward,  L"forward.png",  ICON_SIZE_ARROW);
-    LoadIconSet(g_icoRefresh,  L"refresh.png",  ICON_SIZE_REFRESH);
+    LoadIconSet(g_icoBack,     L"back.png",     18);
+    LoadIconSet(g_icoForward,  L"forward.png",  18);
+    LoadIconSet(g_icoRefresh,  L"refresh.png",  12);
     LoadIconSet(g_icoMinimiz,  L"minimiz.png",  ICON_SIZE_WIN);
     LoadIconSet(g_icoMaximize, L"maximize.png", ICON_SIZE_WIN);
     LoadIconSet(g_icoRestore,  L"minimize.png", ICON_SIZE_WIN);
@@ -995,7 +995,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         FillRect(hdc, &rc, bg);
         DeleteObject(bg);
 
-        HPEN pen = CreatePen(PS_SOLID, 1, RGB(40, 36, 30));
+        HPEN pen = CreatePen(PS_SOLID, 1, COL_BORDER);
         HPEN op = (HPEN)SelectObject(hdc, pen);
         MoveToEx(hdc, 0, TOP_HEIGHT - 1, nullptr);
         LineTo(hdc, rc.right, TOP_HEIGHT - 1);
@@ -1012,173 +1012,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             DeleteObject(rowBg);
         }
 
-        // ===== ROW 1: лого + вкладки + аватар =====
-        // сверху такой же отступ, как слева у лого
-        int logoTop = LOGO_MARGIN;
-        int y1 = logoTop;
-        int h1 = LOGO_SIZE;
-
-        // Logo + CATio (отступ слева = LOGO_MARGIN)
-        int logoX = LOGO_MARGIN;
+        // ===== Тонкий тайтлбар как в Hydra: лого + CATio слева, кнопки окна справа =====
+        int logoY = (TOP_HEIGHT - STRIP_LOGO) / 2;
+        int logoX = STRIP_MARGIN;
         if (g_hLogo) {
-            DrawIconEx(hdc, logoX, logoTop, g_hLogo, LOGO_SIZE, LOGO_SIZE, 0, nullptr, DI_NORMAL);
-            logoX += LOGO_SIZE + 10;
+            DrawIconEx(hdc, logoX, logoY, g_hLogo, STRIP_LOGO, STRIP_LOGO, 0, nullptr, DI_NORMAL);
+            logoX += STRIP_LOGO + 8;
         } else {
             HBRUSH br = CreateSolidBrush(COL_ACCENT);
-            RECT box = { logoX, logoTop, logoX + LOGO_SIZE, logoTop + LOGO_SIZE };
+            RECT box = { logoX, logoY, logoX + STRIP_LOGO, logoY + STRIP_LOGO };
             FillRect(hdc, &box, br);
             DeleteObject(br);
-            drawText(hdc, box, L"C", COL_BG, 18, true, DT_CENTER);
-            logoX += LOGO_SIZE + 10;
+            drawText(hdc, box, L"C", COL_BG, 13, true, DT_CENTER);
+            logoX += STRIP_LOGO + 8;
         }
         {
-            RECT r = { logoX, y1, logoX + 100, y1 + h1 };
-            drawText(hdc, r, L"CATio", COL_ACCENT, 26, true, DT_LEFT);
+            RECT r = { logoX, 0, logoX + 120, TOP_HEIGHT };
+            drawText(hdc, r, L"CATio", COL_TEXT_BRT, 15, true, DT_LEFT);
         }
 
-        // Tabs
-        int x = 170;
-        auto addTab = [&](const wchar_t* label, int id, bool active, int w) {
-            RECT r = { x, y1, x + w, y1 + h1 };
-            g_buttons.push_back({ r, id });
-            COLORREF col = active ? COL_ACCENT : (hoverId == id ? COL_TEXT_BRT : COL_TEXT);
-            drawText(hdc, r, label, col, 17, true, DT_CENTER);
-            if (active) {
-                HPEN p2 = CreatePen(PS_SOLID, 3, COL_ACCENT);
-                HPEN o2 = (HPEN)SelectObject(hdc, p2);
-                MoveToEx(hdc, r.left + 6, r.bottom - 2, nullptr);
-                LineTo(hdc, r.right - 6, r.bottom - 2);
-                SelectObject(hdc, o2);
-                DeleteObject(p2);
-            }
-            x += w + 2;
-        };
-        addTab(L"КАТАЛОГ",    ID_STORE,     g_currentSection == Section::Store,     110);
-        addTab(L"БИБЛИОТЕКА", ID_LIBRARY,   g_currentSection == Section::Library,   125);
-        addTab(L"МАСТЕРСКАЯ", ID_COMMUNITY, g_currentSection == Section::Community, 125);
-
-        {
-            // У гостя — ВОЙТИ, у авторизованного — ник ВЕРХНИМ РЕГИСТРОМ
-            std::wstring tabLabel = g_guest ? L"ВОЙТИ" : toUpperW(g_username);
-            // ширина под текст ника
-            int w = 100;
-            {
-                HDC tmp = GetDC(hWnd);
-                HFONT f = CreateFontW(17, 0, 0, 0, FW_BOLD, 0, 0, 0,
-                    DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-                HFONT old = (HFONT)SelectObject(tmp, f);
-                SIZE sz = {};
-                GetTextExtentPoint32W(tmp, tabLabel.c_str(), (int)tabLabel.size(), &sz);
-                SelectObject(tmp, old);
-                DeleteObject(f);
-                ReleaseDC(hWnd, tmp);
-                w = (std::max)(80, (int)sz.cx + 24);
-            }
-            RECT r = { x, y1, x + w, y1 + h1 };
-            g_buttons.push_back({ r, ID_PROFILE });
-            bool active = g_currentSection == Section::Profile && !g_guest;
-            COLORREF col = active ? COL_ACCENT : (hoverId == ID_PROFILE ? COL_TEXT_BRT : COL_TEXT);
-            drawText(hdc, r, tabLabel.c_str(), col, 17, true, DT_CENTER);
-            if (active) {
-                HPEN p2 = CreatePen(PS_SOLID, 3, COL_ACCENT);
-                HPEN o2 = (HPEN)SelectObject(hdc, p2);
-                MoveToEx(hdc, r.left + 6, r.bottom - 2, nullptr);
-                LineTo(hdc, r.right - 6, r.bottom - 2);
-                SelectObject(hdc, o2);
-                DeleteObject(p2);
-            }
-        }
-
-        // ===== Кнопки окна — отдельный блок у верхнего правого угла =====
-        const int winBtnSize = 22;
-        const int winBtnGap  = 2;
-        int winY = 8;
-        int rx = rc.right - 6;
+        // Кнопки окна — широкие, на всю высоту полоски (как в Windows / Hydra)
+        int rx = rc.right;
         auto addWinBtn = [&](const IconSet& ico, int id) {
-            RECT r = { rx - winBtnSize, winY, rx, winY + winBtnSize };
+            RECT r = { rx - WIN_BTN_W, 0, rx, TOP_HEIGHT };
             g_buttons.push_back({ r, id });
-            DrawIconCentered(hdc, ico, r, ICON_SIZE_WIN, hoverId == id);
-            rx -= (winBtnSize + winBtnGap);
+            if (hoverId == id) {
+                HBRUSH hb = CreateSolidBrush(id == ID_CLOSE ? COL_CLOSE_HOVER : COL_HOVER);
+                FillRect(hdc, &r, hb);
+                DeleteObject(hb);
+            }
+            DrawIconCentered(hdc, ico, r, ICON_SIZE_WIN, hoverId == id, true);
+            rx -= WIN_BTN_W;
         };
         addWinBtn(g_icoClose, ID_CLOSE);
         addWinBtn(g_maximized ? g_icoRestore : g_icoMaximize, ID_MAX);
         addWinBtn(g_icoMinimiz, ID_MIN);
-
-        // Avatar левее кнопок окна, верх = как у лого (LOGO_MARGIN от края)
-        int av = LOGO_SIZE;
-        int avX = rx - 12 - av;   // сдвиг влево от кнопок
-        int avY = logoTop;
-        HBRUSH abr = CreateSolidBrush(COL_ACCENT);
-        HPEN apn = CreatePen(PS_SOLID, 1, COL_ACCENT);
-        HGDIOBJ ob = SelectObject(hdc, abr);
-        HGDIOBJ op2 = SelectObject(hdc, apn);
-        Ellipse(hdc, avX, avY, avX + av, avY + av);
-        SelectObject(hdc, ob);
-        SelectObject(hdc, op2);
-        DeleteObject(abr);
-        DeleteObject(apn);
-        RECT rAv = { avX, avY, avX + av, avY + av };
-        g_avatarRect = rAv;
-        g_buttons.push_back({ rAv, ID_AVATAR });
-        if (hoverId == ID_AVATAR && !g_guest) {
-            HPEN ring = CreatePen(PS_SOLID, 2, COL_TEXT_BRT);
-            HPEN oring = (HPEN)SelectObject(hdc, ring);
-            Ellipse(hdc, avX - 2, avY - 2, avX + av + 2, avY + av + 2);
-            SelectObject(hdc, oring);
-            DeleteObject(ring);
-        }
-        std::wstring avLetter = g_guest ? L"?" : toUpperW(g_username.substr(0, 1));
-        drawText(hdc, rAv, avLetter.c_str(), COL_BG, 16, true, DT_CENTER);
-
-        // Меню рисуется в отдельном popup-окне (openAvatarMenu), не здесь.
-
-        // ===== ROW 2: стрелки + refresh + url =====
-        int y2 = 80;
-        int h2 = 22;
-
-        int ax = 53;
-        bool canBack    = g_historyIndex > 0;
-        bool canForward = g_historyIndex + 1 < (int)g_history.size();
-
-        {
-            RECT r = { ax, y2, ax + 22, y2 + h2 };
-            g_buttons.push_back({ r, ID_BACK });
-            DrawIconCentered(hdc, g_icoBack, r, ICON_SIZE_ARROW, hoverId == ID_BACK && canBack, canBack);
-            ax += 22;
-        }
-        {
-            RECT r = { ax, y2, ax + 22, y2 + h2 };
-            g_buttons.push_back({ r, ID_FORWARD });
-            DrawIconCentered(hdc, g_icoForward, r, ICON_SIZE_ARROW, hoverId == ID_FORWARD && canForward, canForward);
-            ax += 24;
-        }
-        {
-            RECT r = { ax, y2, ax + 20, y2 + h2 };
-            g_buttons.push_back({ r, ID_REFRESH });
-            DrawIconCentered(hdc, g_icoRefresh, r, ICON_SIZE_REFRESH, hoverId == ID_REFRESH, true);
-            ax += 24;
-        }
-
-        x = ax + 6;
-
-        std::wstring urlW = toWide(g_currentUrl);
-        size_t p = urlW.find(L"?client=1");
-        if (p != std::wstring::npos) urlW = urlW.substr(0, p);
-        p = urlW.find(L"&client=1");
-        if (p != std::wstring::npos) urlW = urlW.substr(0, p);
-
-        HFONT fUrl = CreateFontW(12, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
-            DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-        HFONT oldF = (HFONT)SelectObject(hdc, fUrl);
-        SIZE sz = {};
-        GetTextExtentPoint32W(hdc, urlW.c_str(), (int)urlW.size(), &sz);
-        SelectObject(hdc, oldF);
-        DeleteObject(fUrl);
-
-        int urlWpx = sz.cx + 4;
-        RECT rUrl = { x, y2, x + urlWpx, y2 + h2 };
-        g_buttons.push_back({ rUrl, ID_URL });
-        drawText(hdc, rUrl, urlW.c_str(), hoverId == ID_URL ? COL_ACCENT : COL_URL, 12, false, DT_LEFT);
 
         EndPaint(hWnd, &ps);
         break;

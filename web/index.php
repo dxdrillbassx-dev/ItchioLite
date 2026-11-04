@@ -4,7 +4,7 @@ require_once __DIR__ . '/auth.php';
 getDB();
 
 $isClient = isset($_GET['client']) && $_GET['client'] == '1';
-$currentView = isset($_GET['view']) ? $_GET['view'] : 'store';
+$currentView = isset($_GET['view']) ? $_GET['view'] : 'home';
 $auth = getAuthState();
 $isAuthorized = $auth['authorized'];
 $user = $auth['user'];
@@ -16,13 +16,13 @@ if (!$isAuthorized && $currentView !== 'auth') {
 }
 
 // Личные разделы недоступны без аккаунта
-if (!$isAuthorized && in_array($currentView, ['library', 'downloads', 'profile'], true)) {
+if (!$isAuthorized && in_array($currentView, ['library', 'downloads', 'profile', 'settings'], true)) {
     $currentView = 'auth';
 }
 
 // Библиотека — только в десктоп-клиенте: в браузере её раздел не открывается
 if (!$isClient && $currentView === 'library') {
-    $currentView = 'store';
+    $currentView = 'home';
 }
 
 // Как выглядит аватар пользователя (эмодзи из настроек или первая буква имени)
@@ -54,21 +54,81 @@ if ($isAuthorized) {
   <style>.topbar{display:none!important}body{margin:0;background:#12110e}</style>
   <?php endif; ?>
 </head>
-<body>
+<body class="<?php echo ($isClient ? 'client' : 'web') . ($isAuthorized ? '' : ' guest'); ?>">
   <div id="app">
+    <?php if ($isClient && $isAuthorized): ?>
+    <!-- ===== САЙДБАР (как в Hydra) — только в десктоп-клиенте ===== -->
+    <aside class="sidebar">
+      <div class="side-user avatar-wrap">
+        <button type="button" class="side-user-btn" id="avatar-btn" aria-haspopup="true" aria-expanded="false">
+          <span class="side-avatar" id="side-avatar" style="background:<?php echo htmlspecialchars($avatarColor); ?>"><?php echo htmlspecialchars($avatarText); ?></span>
+          <span class="side-user-name"><?php echo htmlspecialchars($user['username']); ?></span>
+          <span class="side-user-arrow">▾</span>
+        </button>
+        <div class="user-menu hidden" id="user-menu" role="menu">
+          <div class="user-menu-head">
+            <div class="user-menu-name"><?php echo htmlspecialchars($user['username']); ?></div>
+            <div class="user-menu-mail"><?php echo htmlspecialchars($user['email']); ?></div>
+          </div>
+          <div class="user-menu-balance">
+            <span>Баланс</span>
+            <b id="user-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
+          </div>
+          <button type="button" class="user-menu-item" id="menu-profile">&#128100;&nbsp; Профиль</button>
+          <button type="button" class="user-menu-item" id="menu-downloads">&#8681;&nbsp; Загрузки</button>
+          <button type="button" class="user-menu-item" id="menu-settings">&#9881;&nbsp; Настройки</button>
+          <button type="button" class="user-menu-item danger" id="menu-logout">&#8618;&nbsp; Выйти</button>
+        </div>
+      </div>
+
+      <nav class="side-nav">
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'home' ? 'active' : ''; ?>" data-view="home"><span class="side-ico">⌂</span>Главная</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'store' ? 'active' : ''; ?>" data-view="store"><span class="side-ico">▦</span>Каталог</button>
+        <?php if ($isClient): ?>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'library' ? 'active' : ''; ?>" data-view="library"><span class="side-ico">📖</span>Библиотека</button>
+        <?php endif; ?>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'downloads' ? 'active' : ''; ?>" data-view="downloads"><span class="side-ico">⬇</span>Загрузки<span class="nav-badge hidden" id="downloads-badge">0</span></button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'settings' ? 'active' : ''; ?>" data-view="settings"><span class="side-ico">⚙</span>Настройки</button>
+      </nav>
+
+      <div class="side-lib">
+        <div class="side-lib-title">МОЯ БИБЛИОТЕКА</div>
+        <div class="side-lib-controls">
+          <input type="text" id="side-lib-search" class="side-lib-search" placeholder="Поиск" aria-label="Поиск в библиотеке" />
+          <button type="button" class="side-lib-tool" id="side-lib-installed" title="Показывать только установленные">✓</button>
+          <button type="button" class="side-lib-tool" id="side-lib-filters" title="Фильтры">🎚</button>
+        </div>
+        <div class="side-lib-modal hidden" id="side-lib-modal">
+          <div class="side-lib-modal-section">Платформы</div>
+          <button type="button" class="side-lib-opt active" data-plat="all">Все<span class="opt-check">✓</span></button>
+          <button type="button" class="side-lib-opt" data-plat="windows">ПК (Windows)<span class="opt-check">✓</span></button>
+          <button type="button" class="side-lib-opt" data-plat="linux">Linux<span class="opt-check">✓</span></button>
+          <div class="side-lib-modal-section">Сортировать по</div>
+          <button type="button" class="side-lib-opt active" data-sort="recent">Недавно сыгранные<span class="opt-check">✓</span></button>
+          <button type="button" class="side-lib-opt" data-sort="name">По названию<span class="opt-check">✓</span></button>
+          <button type="button" class="side-lib-opt" data-sort="rating">По оценке<span class="opt-check">✓</span></button>
+        </div>
+        <div id="side-lib-list"><div class="side-lib-empty">Загрузка...</div></div>
+      </div>
+
+      <div class="side-foot">
+        <span id="side-dl-status">Нет активных загрузок</span>
+        <span class="side-ver">CATio</span>
+      </div>
+    </aside>
+    <?php endif; ?>
+
     <?php if (!$isClient): ?>
+    <!-- ===== ВЕРХНЯЯ ШАПКА (классическая) — только в браузере ===== -->
     <header class="topbar">
       <div class="logo">
         <img class="logo-img" src="logo.ico" alt="CATio" />
         <span class="logo-text">CATio</span>
       </div>
       <nav class="nav">
+        <button class="nav-btn <?php echo $currentView === 'home' ? 'active' : ''; ?>" data-view="home">Главная</button>
         <button class="nav-btn <?php echo $currentView === 'store' ? 'active' : ''; ?>" data-view="store">Каталог</button>
-        <button class="nav-btn <?php echo $currentView === 'community' ? 'active' : ''; ?>" data-view="community">Мастерская</button>
         <?php if ($isAuthorized): ?>
-        <button class="nav-btn <?php echo $currentView === 'downloads' ? 'active' : ''; ?>" data-view="downloads">
-          Загрузки<span class="nav-badge hidden" id="downloads-badge">0</span>
-        </button>
         <button class="nav-btn <?php echo $currentView === 'profile' ? 'active' : ''; ?>" data-view="profile"><?php echo htmlspecialchars(strtoupper($user['username'])); ?></button>
         <?php endif; ?>
       </nav>
@@ -98,62 +158,88 @@ if ($isAuthorized) {
     </header>
     <?php endif; ?>
 
+    <div class="content">
+      <?php if ($isAuthorized): ?>
+      <!-- Блок над вкладкой: назад + название + поиск по вкладке (как в Hydra) -->
+      <header class="content-head">
+        <button type="button" class="head-back" id="head-back" title="Назад">←</button>
+        <h1 class="head-title" id="head-title">Главная</h1>
+        <div class="head-search" id="head-search">
+          <input type="text" id="head-search-input" placeholder="Поиск" aria-label="Поиск по вкладке" />
+        </div>
+      </header>
+      <?php endif; ?>
+
     <main class="main">
-      <!-- ===== КАТАЛОГ (только готовые игры; ассеты живут в Мастерской) ===== -->
+      <!-- ===== ГЛАВНАЯ (как в Hydra) ===== -->
+      <section id="view-home" class="view <?php echo $currentView === 'home' ? 'active' : ''; ?>">
+        <div class="home-hero hidden" id="home-hero">
+          <img class="home-hero-bg" id="home-hero-bg" src="" alt="" />
+          <div class="home-hero-grad"></div>
+          <div class="home-hero-info">
+            <h2 class="home-hero-title" id="home-hero-title"></h2>
+            <p class="home-hero-desc" id="home-hero-desc"></p>
+          </div>
+        </div>
+
+        <div class="home-pills" id="home-pills">
+          <button type="button" class="home-pill active" data-hsort="popular">🔥 Сейчас популярно</button>
+          <button type="button" class="home-pill" data-hsort="week">📈 Лучшие игры недели</button>
+          <button type="button" class="home-pill" data-hsort="new">✨ Новинки</button>
+          <button type="button" class="home-pill surprise" id="home-surprise">🎲 Удиви меня</button>
+        </div>
+
+        <h2 class="home-section-title" id="home-section-title">🔥 Сейчас популярно</h2>
+        <div class="home-grid" id="home-grid"><div class="loading">Загрузка...</div></div>
+      </section>
+
+      <!-- ===== КАТАЛОГ (список + фильтры справа, как в Hydra) ===== -->
       <section id="view-store" class="view <?php echo $currentView === 'store' ? 'active' : ''; ?>">
-        <div class="catalog-header">
-          <h1 class="catalog-title">Каталог</h1>
-          <p class="catalog-desc">Готовые игры независимых авторов: бесплатно или за учебные рубли. Ассеты и инструменты — в Мастерской.</p>
-        </div>
-
-        <div class="search-row">
-          <input type="text" id="search-input" class="search-input" placeholder="Название или описание" aria-label="Поиск" />
-          <select id="sort-select" class="sort-select" aria-label="Сортировка">
-            <option value="new">Сначала новые</option>
-            <option value="rating">По оценке</option>
-            <option value="price">Сначала дешевле</option>
-          </select>
-        </div>
-
-        <div class="chiprow" id="genre-chips">
-          <button type="button" class="chip active" data-genre="all">Все жанры</button>
-          <button type="button" class="chip" data-genre="RPG">RPG</button>
-          <button type="button" class="chip" data-genre="Аркада">Аркада</button>
-          <button type="button" class="chip" data-genre="Визуальная новелла">Визуальная новелла</button>
-          <button type="button" class="chip" data-genre="Головоломка">Головоломка</button>
-          <button type="button" class="chip" data-genre="Платформер">Платформер</button>
-          <button type="button" class="chip" data-genre="Приключение">Приключение</button>
-          <button type="button" class="chip" data-genre="Рогалик">Рогалик</button>
-          <button type="button" class="chip" data-genre="Симулятор">Симулятор</button>
-          <button type="button" class="chip" data-genre="Стратегия">Стратегия</button>
-          <button type="button" class="chip" data-genre="Хоррор">Хоррор</button>
-        </div>
-
-        <div class="hero featured-hero" id="featured-hero">
-          <div class="hero-info">
-            <p class="hero-genre">Платформер</p>
-            <h2 class="hero-title">Лисий фонарь</h2>
-            <p class="hero-desc">Ночной платформер про лисёнка с бумажным фонарём. Свет держится, только пока вы идёте, а лес запоминает, где вы уже были.</p>
-            <p class="hero-author">автор mast</p>
-            <div class="hero-meta">
-              <div class="stars" aria-label="Рейтинг 5 из 5">
-                <span class="star filled">★</span>
-                <span class="star filled">★</span>
-                <span class="star filled">★</span>
-                <span class="star filled">★</span>
-                <span class="star filled">★</span>
+        <div class="store-layout">
+          <div class="store-main">
+            <div class="store-head">
+              <div class="store-count-line">
+                <b id="store-count">0</b> результатов
+                <span class="store-hint">Используй боковую панель для уточнения поиска</span>
               </div>
-              <span class="hero-rating">5.0</span>
-              <span class="hero-price free">Бесплатно</span>
+              <label class="sort-label">
+                Сортировать по
+                <select id="sort-select" class="sort-select" aria-label="Сортировка">
+                  <option value="popular">Популярности</option>
+                  <option value="new">Новизне</option>
+                  <option value="rating">Оценке</option>
+                  <option value="price">Цене</option>
+                </select>
+              </label>
             </div>
+            <div id="store-list" class="store-list"><div class="loading">Загрузка каталога...</div></div>
           </div>
-          <div class="hero-cover" id="featured-hero-cover">
-            <div class="hero-cover-placeholder">🦊</div>
-          </div>
-        </div>
 
-        <div class="section-header"><h2 id="store-section-title">Все игры</h2></div>
-        <div id="games-grid" class="games-grid"><div class="loading">Загрузка каталога...</div></div>
+          <aside class="store-filters">
+            <div class="filter-block">
+              <button type="button" class="filter-block-head">
+                <span class="filter-dot" style="background:#a78bfa"></span>
+                Жанры
+                <span class="filter-count" id="genre-count"></span>
+              </button>
+              <div class="filter-block-body">
+                <input type="text" class="filter-search" id="genre-filter-search" placeholder="Фильтр..." />
+                <div class="filter-opts" id="genre-opts"></div>
+              </div>
+            </div>
+            <div class="filter-block">
+              <button type="button" class="filter-block-head">
+                <span class="filter-dot" style="background:#f472b6"></span>
+                Разработчики
+                <span class="filter-count" id="dev-count"></span>
+              </button>
+              <div class="filter-block-body">
+                <input type="text" class="filter-search" id="dev-filter-search" placeholder="Фильтр..." />
+                <div class="filter-opts" id="dev-opts"></div>
+              </div>
+            </div>
+          </aside>
+        </div>
       </section>
 
       <!-- ===== СТРАНИЦА ИГРЫ (как на itch.io) ===== -->
@@ -161,42 +247,38 @@ if ($isAuthorized) {
         <div id="game-page"><div class="loading">Загрузка страницы игры...</div></div>
       </section>
 
-      <!-- ===== БИБЛИОТЕКА (как в Steam) ===== -->
+      <!-- ===== БИБЛИОТЕКА (сетка карточек, как в Hydra) ===== -->
       <section id="view-library" class="view <?php echo $currentView === 'library' ? 'active' : ''; ?>">
-        <div class="library-layout">
-          <aside class="library-side">
-            <div class="library-side-head">
-              <h2 class="library-title">Библиотека</h2>
-              <input type="text" id="library-search" class="library-search" placeholder="Поиск в библиотеке" aria-label="Поиск в библиотеке" />
-              <div class="library-filters" id="library-filters">
-                <button type="button" class="lib-filter active" data-filter="all">Все</button>
-                <button type="button" class="lib-filter" data-filter="game">Игры</button>
-                <button type="button" class="lib-filter" data-filter="asset">Ассеты</button>
-              </div>
-            </div>
-            <div id="library-list" class="library-list"><div class="loading">Загрузка библиотеки...</div></div>
-          </aside>
-          <div class="library-detail" id="library-detail">
-            <div class="library-detail-empty">
-              <div class="library-detail-empty-icon">🐈</div>
-              <p>Выбери игру слева — здесь появятся подробности, сборки и скриншоты.</p>
-            </div>
+        <div class="lib-head">
+          <div class="lib-pills" id="library-filters">
+            <button type="button" class="lib-filter active" data-filter="all">Все</button>
+            <button type="button" class="lib-filter" data-filter="game">Игры</button>
+            <button type="button" class="lib-filter" data-filter="asset">Ассеты</button>
+            <button type="button" class="lib-filter" data-filter="installed">✓ Установленные</button>
           </div>
+          <label class="sort-label">
+            Сортировать по
+            <select id="library-sort" class="sort-select" aria-label="Сортировка библиотеки">
+              <option value="name">По названию (А-Я)</option>
+              <option value="recent">Недавно добавленные</option>
+              <option value="rating">По оценке</option>
+            </select>
+          </label>
         </div>
+        <div id="library-grid" class="lib-grid"><div class="loading">Загрузка библиотеки...</div></div>
       </section>
 
-      <!-- ===== ЗАГРУЗКИ (как в Steam) ===== -->
+      <!-- ===== ЗАГРУЗКИ (как в Hydra) ===== -->
       <section id="view-downloads" class="view <?php echo $currentView === 'downloads' ? 'active' : ''; ?>">
-        <div class="section-header"><h2>Загрузки</h2></div>
         <div class="downloads-page">
           <div class="downloads-active" id="downloads-active">
             <div class="downloads-empty" id="downloads-empty">
-              <div class="downloads-empty-icon">⬇</div>
-              <p>Нет активных загрузок. Зайди в библиотеку и скачай что-нибудь тёплое.</p>
-              <button type="button" class="btn-primary" onclick="gotoView('library')">Открыть библиотеку</button>
+              <div class="downloads-empty-icon">↓</div>
+              <p class="downloads-empty-title">Здесь так пусто...</p>
+              <p class="downloads-empty-sub">Вы ещё ничего не скачали через CATio, но никогда не поздно начать.</p>
             </div>
           </div>
-          <div class="downloads-history-wrap">
+          <div class="downloads-history-wrap" id="downloads-history-wrap">
             <h3 class="downloads-history-title">Завершённые</h3>
             <div id="downloads-history" class="downloads-history">
               <p class="downloads-history-empty">Пока пусто</p>
@@ -215,7 +297,7 @@ if ($isAuthorized) {
       </section>
 
       <?php if ($isAuthorized): ?>
-      <!-- ===== ПРОФИЛЬ (как в Steam) ===== -->
+      <!-- ===== ПРОФИЛЬ (как в Hydra) ===== -->
       <section id="view-profile" class="view <?php echo $currentView === 'profile' ? 'active' : ''; ?>">
         <div class="profile-page">
           <div class="profile-banner" style="background:linear-gradient(120deg, <?php echo htmlspecialchars($avatarColor); ?>33, transparent 60%)">
@@ -224,39 +306,84 @@ if ($isAuthorized) {
               <div class="profile-info">
                 <h1 class="profile-name"><?php echo htmlspecialchars($user['username']); ?></h1>
                 <p class="profile-meta">
-                  <span class="profile-level">Уровень <b id="profile-level">0</b></span>
-                  · В CATio с <?php echo $memberSince; ?>
+                  В CATio с <?php echo $memberSince; ?>
                   <?php if ($user['role'] === 'admin'): ?>
                   · <span class="role-badge">Администратор</span>
                   <?php endif; ?>
                 </p>
-                <p class="profile-balance-line">Баланс: <b id="profile-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
-                  <button type="button" class="btn-link" id="btn-topup-open">Пополнить</button>
-                </p>
               </div>
-              <button type="button" class="btn-settings" id="btn-settings-open">&#9881; Настройки</button>
             </div>
           </div>
 
-          <div class="profile-stats" id="profile-stats">
-            <div class="stat"><div class="stat-num" id="stat-games">0</div><div class="stat-label">Игр и ассетов</div></div>
-            <div class="stat"><div class="stat-num" id="stat-comments">0</div><div class="stat-label">Комментариев</div></div>
-            <div class="stat"><div class="stat-num" id="stat-ratings">0</div><div class="stat-label">Оценок</div></div>
-            <div class="stat"><div class="stat-num" id="stat-spent">0 ₽</div><div class="stat-label">Потрачено</div></div>
+          <div class="profile-actions">
+            <button type="button" class="btn-ghost" id="btn-settings-open">✎ Редактировать Профиль</button>
+            <button type="button" class="btn-logout" onclick="logout()">↪ Выйти</button>
           </div>
 
-          <div class="profile-cols">
-            <div class="profile-col-main">
-              <div class="section-header"><h2>Недавняя активность</h2></div>
-              <div id="profile-activity" class="profile-activity"><div class="loading">Загрузка...</div></div>
+          <div class="profile-body">
+            <div class="profile-main">
+              <div class="section-header"><h2>Библиотека <span class="filter-count" id="profile-games-count"></span></h2></div>
+              <div id="profile-games" class="profile-games-grid"><div class="loading">Загрузка...</div></div>
             </div>
-            <div class="profile-col-side">
-              <div class="section-header"><h2>Мои игры</h2></div>
-              <div id="profile-games" class="profile-games"><div class="loading">Загрузка...</div></div>
+            <aside class="profile-side">
+              <div class="side-card">
+                <div class="side-card-head">Статистика</div>
+                <div class="side-card-body">
+                  <div class="pstat"><span>Игр в библиотеке</span><b id="stat-games">0</b></div>
+                  <div class="pstat"><span>Комментариев</span><b id="stat-comments">0</b></div>
+                  <div class="pstat"><span>Оценок</span><b id="stat-ratings">0</b></div>
+                  <div class="pstat"><span>Потрачено</span><b id="stat-spent">0 ₽</b></div>
+                  <div class="pstat"><span>Уровень</span><b id="profile-level">0</b></div>
+                  <div class="pstat"><span>Баланс</span><span><b id="profile-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b> <button type="button" class="btn-link" id="btn-topup-open">Пополнить</button></span></div>
+                </div>
+              </div>
+              <div class="side-card">
+                <div class="side-card-head">Недавняя активность</div>
+                <div class="side-card-body" id="profile-activity"><div class="loading">Загрузка...</div></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== НАСТРОЙКИ (вкладка, как в Hydra) ===== -->
+      <section id="view-settings" class="view <?php echo $currentView === 'settings' ? 'active' : ''; ?>">
+        <div class="settings-layout">
+          <aside class="settings-nav" id="settings-nav">
+            <button type="button" class="settings-nav-btn active" data-stab="general">⚙ Основные</button>
+            <button type="button" class="settings-nav-btn" data-stab="balance">↓ Баланс</button>
+          </aside>
+          <div class="settings-main">
+            <div class="settings-pane" id="settings-pane-general">
+              <h2 class="settings-title">ОСНОВНЫЕ</h2>
+              <p class="settings-sub">Основные настройки профиля</p>
+
+              <div class="settings-avatar-preview" id="settings-avatar-preview"><?php echo htmlspecialchars($avatarText); ?></div>
+
+              <label class="settings-label">
+                <span>Эмодзи аватара (до 4 символов)</span>
+                <input type="text" id="settings-avatar-input" class="auth-input" maxlength="4" value="<?php echo htmlspecialchars($user['avatar']); ?>" placeholder="🐱" />
+              </label>
+
+              <label class="settings-label">
+                <span>Цвет аватара</span>
+                <input type="color" id="settings-color-input" class="settings-color" value="<?php echo htmlspecialchars($avatarColor); ?>" />
+              </label>
+
+              <p id="settings-error" class="auth-error hidden"></p>
+              <button type="button" class="auth-submit" id="settings-save">Сохранить</button>
+            </div>
+            <div class="settings-pane hidden" id="settings-pane-balance">
+              <h2 class="settings-title">БАЛАНС</h2>
+              <p class="settings-sub">Учебные рубли — ими можно покупать игры в каталоге</p>
+              <p class="settings-balance-line">Текущий баланс: <b id="settings-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b></p>
+              <div class="settings-topup-row">
+                <button type="button" class="btn-topup" data-amount="100">+100 ₽</button>
+                <button type="button" class="btn-topup" data-amount="500">+500 ₽</button>
+                <button type="button" class="btn-topup" data-amount="1000">+1000 ₽</button>
+              </div>
             </div>
           </div>
-
-          <button class="btn-logout" onclick="logout()">Выйти</button>
         </div>
       </section>
       <?php endif; ?>
@@ -310,42 +437,10 @@ if ($isAuthorized) {
       </section>
       <?php endif; ?>
     </main>
-  </div>
+    </div><!-- /content -->
+  </div><!-- /app -->
 
   <?php if ($isAuthorized): ?>
-  <!-- ===== МОДАЛКА НАСТРОЕК ПРОФИЛЯ ===== -->
-  <div id="settings-modal" class="modal hidden">
-    <div class="modal-backdrop" id="settings-backdrop"></div>
-    <div class="modal-content settings-content">
-      <button class="modal-close" id="settings-close">×</button>
-      <h2 class="modal-title">Настройки профиля</h2>
-
-      <div class="settings-avatar-preview" id="settings-avatar-preview"><?php echo htmlspecialchars($avatarText); ?></div>
-
-      <label class="settings-label">
-        <span>Эмодзи аватара (до 4 символов)</span>
-        <input type="text" id="settings-avatar-input" class="auth-input" maxlength="4" value="<?php echo htmlspecialchars($user['avatar']); ?>" placeholder="🐱" />
-      </label>
-
-      <label class="settings-label">
-        <span>Цвет аватара</span>
-        <input type="color" id="settings-color-input" class="settings-color" value="<?php echo htmlspecialchars($avatarColor); ?>" />
-      </label>
-
-      <p id="settings-error" class="auth-error hidden"></p>
-      <button type="button" class="auth-submit" id="settings-save">Сохранить</button>
-
-      <div class="settings-topup">
-        <h3 class="settings-topup-title">Пополнить баланс (учебные рубли)</h3>
-        <div class="settings-topup-row">
-          <button type="button" class="btn-topup" data-amount="100">+100 ₽</button>
-          <button type="button" class="btn-topup" data-amount="500">+500 ₽</button>
-          <button type="button" class="btn-topup" data-amount="1000">+1000 ₽</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- ===== ЛАЙТБОКС ДЛЯ СКРИНШОТОВ ===== -->
   <div id="lightbox" class="lightbox hidden">
     <div class="lightbox-backdrop" id="lightbox-backdrop"></div>
@@ -362,18 +457,6 @@ if ($isAuthorized) {
     window.GAME_ID_FROM_URL = <?= (int)($_GET['id'] ?? 0) ?>;
   </script>
   <script>
-// горизонтальный скролл чипов колесиком при наведении
-document.addEventListener('DOMContentLoaded', () => {
-  const row = document.getElementById('genre-chips');
-  if (!row) return;
-  row.addEventListener('wheel', (e) => {
-    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-      e.preventDefault();
-      row.scrollLeft += e.deltaY;
-    }
-  }, { passive: false });
-});
-
 // ===== AUTH =====
 function switchAuthTab(tab) {
   document.getElementById('tab-login').classList.toggle('active', tab === 'login');
@@ -427,7 +510,7 @@ async function doLogin(e) {
 
     if (data.success) {
       // В клиенте сохраняем client=1 — иначе сломается синхронизация с C++
-      window.location.href = window.IS_CLIENT ? '?view=store&client=1' : '?view=store';
+      window.location.href = window.IS_CLIENT ? '?view=home&client=1' : '?view=home';
     } else {
       showAuthError(data.error || Object.values(data.errors || {})[0] || 'Ошибка входа');
       btn.disabled = false;
@@ -464,7 +547,7 @@ async function doRegister(e) {
     const data = await readApiJson(res);
 
     if (data.success) {
-      window.location.href = window.IS_CLIENT ? '?view=store&client=1' : '?view=store';
+      window.location.href = window.IS_CLIENT ? '?view=home&client=1' : '?view=home';
     } else {
       const errs = data.errors || {};
       showAuthError(data.error || Object.values(errs)[0] || 'Ошибка регистрации');
@@ -487,7 +570,7 @@ async function logout() {
       body: JSON.stringify({ csrf_token: window.CSRF_TOKEN }),
     });
   } catch (e) {}
-  window.location.href = window.IS_CLIENT ? '?view=store&client=1' : '?view=store';
+  window.location.href = window.IS_CLIENT ? '?view=home&client=1' : '?view=home';
 }
 
 function socialAuth(provider) {

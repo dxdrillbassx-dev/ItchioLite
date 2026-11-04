@@ -127,8 +127,10 @@ function updateBalance(balance) {
   const text = `${Number(balance).toLocaleString('ru-RU')} ₽`;
   const b1 = $('#user-balance');
   const b2 = $('#profile-balance');
+  const b3 = $('#settings-balance');
   if (b1) b1.textContent = text;
   if (b2) b2.textContent = text;
+  if (b3) b3.textContent = text;
   if (window.AUTH_STATE && window.AUTH_STATE.user) {
     window.AUTH_STATE.user.balance = balance;
     if (window.IS_CLIENT && typeof window.catioSync === 'function') {
@@ -138,9 +140,22 @@ function updateBalance(balance) {
 }
 
 // ---------- Навигация по видам ----------
+const VIEW_TITLES = {
+  home: 'Главная',
+  store: 'Каталог',
+  community: 'Мастерская',
+  library: 'Библиотека',
+  downloads: 'Загрузки',
+  profile: 'Профиль',
+  settings: 'Настройки',
+  game: 'Страница игры',
+  auth: 'Вход',
+};
+let prevView = 'home';
+
 function getViewFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  return params.get('view') || 'store';
+  return params.get('view') || 'home';
 }
 
 function syncUrl(view, gameId) {
@@ -153,7 +168,10 @@ function syncUrl(view, gameId) {
 
 function showView(name, gameId) {
   // Библиотека живёт только в десктоп-клиенте
-  if (name === 'library' && !window.IS_CLIENT) name = 'store';
+  if (name === 'library' && !window.IS_CLIENT) name = 'home';
+
+  const prev = getViewFromUrl();
+  if (prev !== name) prevView = prev;
 
   $$('.view').forEach(v => v.classList.remove('active'));
   const el = $(`#view-${name}`);
@@ -162,8 +180,22 @@ function showView(name, gameId) {
 
   $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
 
+  const headTitle = $('#head-title');
+  if (headTitle) headTitle.textContent = VIEW_TITLES[name] || 'CATio';
+
+  // Поиск в шапке есть не во всех вкладках
+  const headSearch = $('#head-search');
+  if (headSearch) {
+    headSearch.style.display = (name === 'game' || name === 'auth' || name === 'settings') ? 'none' : '';
+  }
+
+  const main = $('.main');
+  if (main) main.scrollTop = 0;
+  window.scrollTo(0, 0);
+
   syncUrl(name, gameId);
 
+  if (name === 'home') loadHome();
   if (name === 'store') loadStore();
   if (name === 'library') loadLibrary();
   if (name === 'community') loadWorkshop();
@@ -181,51 +213,369 @@ function gotoGame(id) {
 }
 
 // ============================================================
-//  КАТАЛОГ (только готовые игры; ассеты — в Мастерской)
+//  ГЛАВНАЯ (как в Hydra): hero-баннер, подборки, «Удиви меня»
+// ============================================================
+let homeCache = null;
+let homeSort = 'popular';
+let homeSearch = '';
+let dlSearch = '';
+let profileSearch = '';
+
+const HOME_SORT_TITLES = {
+  popular: '🔥 Сейчас популярно',
+  week: '📈 Лучшие игры недели',
+  new: '✨ Новинки',
+};
+
+async function loadHome() {
+  const grid = $('#home-grid');
+  if (!grid) return;
+
+  if (!homeCache) {
+    try {
+      const data = await fetchJSON(`${API_BASE}?action=list&category=game`);
+      if (!data.ok) throw new Error(data.error || 'Ошибка загрузки');
+      homeCache = data.games || [];
+    } catch (err) {
+      if (isOffline(err)) {
+        renderOffline(grid, () => { homeCache = null; loadHome(); }, 'Кот ушёл в запой');
+      } else {
+        grid.innerHTML = `<div class="loading">Не удалось загрузить главную.<br><small>${escapeHtml(err.message)}</small></div>`;
+      }
+      return;
+    }
+  }
+
+  renderHomeHero();
+  renderHomeGrid();
+}
+
+function renderHomeHero() {
+  const hero = $('#home-hero');
+  if (!hero || !homeCache || !homeCache.length) return;
+  const game = homeCache.find(g => g.slug === 'lisiy-fonar') || homeCache[0];
+  const bg = $('#home-hero-bg');
+  bg.src = `media.php?type=hero&id=${game.id}`;
+  bg.alt = game.title || '';
+  $('#home-hero-title').textContent = game.title || '';
+  $('#home-hero-desc').textContent = game.short_description || game.description || '';
+  hero.classList.remove('hidden');
+  hero.onclick = () => gotoGame(game.id);
+}
+
+function renderHomeGrid() {
+  const grid = $('#home-grid');
+  if (!grid) return;
+  let games = [...(homeCache || [])];
+
+  if (homeSearch) {
+    const q = homeSearch.toLowerCase();
+    games = games.filter(g =>
+      (g.title || '').toLowerCase().includes(q) ||
+      (g.developer_name || '').toLowerCase().includes(q) ||
+      (g.genre || '').toLowerCase().includes(q)
+    );
+  }
+
+  if (homeSort === 'popular') {
+    games.sort((a, b) => (parseInt(b.download_count, 10) || 0) - (parseInt(a.download_count, 10) || 0));
+  } else if (homeSort === 'week') {
+    games.sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
+  } // 'new' — порядок из API (сначала новые)
+
+  games = games.slice(0, 6);
+  if (!games.length) {
+    grid.innerHTML = '<div class="loading">В каталоге пока пусто.</div>';
+    return;
+  }
+
+  grid.innerHTML = games.map(g => `
+    <article class="home-card" data-id="${g.id}">
+      <div class="home-card-cover">
+        <img src="${escapeHtml(g.cover_src || ('media.php?type=cover&id=' + g.id))}" alt="${escapeHtml(g.title)}" loading="lazy" />
+      </div>
+      <div class="home-card-info">
+        <div class="home-card-title">${escapeHtml(g.title)}</div>
+        <div class="home-card-sub">${escapeHtml(g.developer_name || '')}${g.genre ? ' · ' + escapeHtml(g.genre) : ''}</div>
+      </div>
+    </article>`).join('');
+
+  $$('.home-card', grid).forEach(card => {
+    card.addEventListener('click', () => gotoGame(card.dataset.id));
+  });
+}
+
+function initHomeControls() {
+  $$('#home-pills .home-pill[data-hsort]').forEach(pill => {
+    pill.addEventListener('click', () => {
+      $$('#home-pills .home-pill[data-hsort]').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      homeSort = pill.dataset.hsort;
+      const title = $('#home-section-title');
+      if (title) title.textContent = HOME_SORT_TITLES[homeSort] || '';
+      renderHomeGrid();
+    });
+  });
+
+  const surprise = $('#home-surprise');
+  if (surprise) {
+    surprise.addEventListener('click', async () => {
+      if (!homeCache || !homeCache.length) {
+        await loadHome();
+      }
+      if (homeCache && homeCache.length) {
+        const g = homeCache[Math.floor(Math.random() * homeCache.length)];
+        gotoGame(g.id);
+      } else {
+        toast('Каталог пуст — удивлять нечем');
+      }
+    });
+  }
+}
+
+// ---------- Сайдбар: моя библиотека ----------
+let sideLibCache = null;
+let sideLibInstalledOnly = false;
+let sideLibPlat = 'all';
+let sideLibSort = 'recent';
+
+// «Установленные» — игры, сборки которых скачивались на этом ПК
+function getInstalledIds() {
+  try { return JSON.parse(localStorage.getItem('catio_installed') || '[]'); }
+  catch (e) { return []; }
+}
+
+function markInstalled(id) {
+  if (!id) return;
+  const ids = getInstalledIds();
+  if (!ids.includes(+id)) {
+    ids.push(+id);
+    localStorage.setItem('catio_installed', JSON.stringify(ids));
+  }
+}
+
+async function loadSideLibrary() {
+  const list = $('#side-lib-list');
+  if (!list) return;
+  if (!window.AUTH_STATE || !window.AUTH_STATE.authorized) {
+    list.innerHTML = '';
+    return;
+  }
+  try {
+    const data = await fetchJSON(`${API_BASE}?action=library`);
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    sideLibCache = data.library || [];
+    renderSideLibrary();
+  } catch (err) {
+    list.innerHTML = '<div class="side-lib-empty">Не удалось загрузить</div>';
+  }
+}
+
+function renderSideLibrary(filter) {
+  const list = $('#side-lib-list');
+  if (!list) return;
+  let games = sideLibCache || [];
+  const searchEl = $('#side-lib-search');
+  const q = (filter !== undefined ? filter : (searchEl ? searchEl.value : '')).trim().toLowerCase();
+  if (q) games = games.filter(g => (g.title || '').toLowerCase().includes(q));
+
+  if (sideLibInstalledOnly) {
+    const ids = getInstalledIds();
+    games = games.filter(g => ids.includes(+g.id));
+  }
+
+  if (sideLibPlat !== 'all') {
+    games = games.filter(g => (g.platforms || '').split(',').includes(sideLibPlat));
+  }
+
+  if (sideLibSort === 'name') {
+    games = [...games].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
+  } else if (sideLibSort === 'rating') {
+    games = [...games].sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
+  } // recent — порядок из API (недавно сыгранные)
+
+  if (!games.length) {
+    const msg = sideLibInstalledOnly ? 'Ничего не установлено' : (q ? 'Ничего не найдено' : 'Пока пусто');
+    list.innerHTML = `<div class="side-lib-empty">${msg}</div>`;
+    return;
+  }
+
+  list.innerHTML = games.map(g => `
+    <button type="button" class="side-lib-item" data-id="${g.id}">
+      <img src="media.php?type=icon&id=${g.id}" alt="" loading="lazy" />
+      <span class="side-lib-name">${escapeHtml(g.title)}</span>
+    </button>`).join('');
+
+  $$('.side-lib-item', list).forEach(btn => {
+    btn.addEventListener('click', () => gotoGame(btn.dataset.id));
+  });
+}
+
+function initSideLibrary() {
+  const search = $('#side-lib-search');
+  if (search) {
+    search.addEventListener('input', () => renderSideLibrary(search.value));
+  }
+
+  // Галочка «только установленные»
+  const installedBtn = $('#side-lib-installed');
+  if (installedBtn) {
+    installedBtn.addEventListener('click', () => {
+      sideLibInstalledOnly = !sideLibInstalledOnly;
+      installedBtn.classList.toggle('active', sideLibInstalledOnly);
+      renderSideLibrary();
+    });
+  }
+
+  // Кнопка фильтров — открывает/закрывает модалку
+  const filtersBtn = $('#side-lib-filters');
+  const modal = $('#side-lib-modal');
+  if (filtersBtn && modal) {
+    filtersBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modal.classList.toggle('hidden');
+      filtersBtn.classList.toggle('active', !modal.classList.contains('hidden'));
+    });
+    document.addEventListener('click', (e) => {
+      if (!modal.classList.contains('hidden') && !modal.contains(e.target) && e.target !== filtersBtn) {
+        modal.classList.add('hidden');
+        filtersBtn.classList.remove('active');
+      }
+    });
+
+    $$('.side-lib-opt[data-plat]', modal).forEach(opt => {
+      opt.addEventListener('click', () => {
+        $$('.side-lib-opt[data-plat]', modal).forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        sideLibPlat = opt.dataset.plat;
+        renderSideLibrary();
+      });
+    });
+    $$('.side-lib-opt[data-sort]', modal).forEach(opt => {
+      opt.addEventListener('click', () => {
+        $$('.side-lib-opt[data-sort]', modal).forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        sideLibSort = opt.dataset.sort;
+        renderSideLibrary();
+      });
+    });
+  }
+}
+
+// ---------- Шапка контента: назад + поиск по вкладке ----------
+function initContentHead() {
+  const back = $('#head-back');
+  if (back) {
+    back.addEventListener('click', () => {
+      const cur = getViewFromUrl();
+      showView(prevView && prevView !== cur ? prevView : 'home');
+    });
+  }
+
+  const hs = $('#head-search-input');
+  if (hs) {
+    hs.addEventListener('input', () => {
+      const q = hs.value.trim();
+      const view = getViewFromUrl();
+      if (view === 'store') {
+        storeSearch = q;
+        if (storeCache.length) renderStoreList();
+      } else if (view === 'home') {
+        homeSearch = q;
+        renderHomeGrid();
+      } else if (view === 'library') {
+        librarySearch = q;
+        renderLibraryGrid();
+      } else if (view === 'downloads') {
+        dlSearch = q;
+        renderDownloadsView();
+      } else if (view === 'profile') {
+        profileSearch = q;
+        loadProfileGames();
+      }
+    });
+  }
+}
+
+// ============================================================
+//  КАТАЛОГ (список строк + панель фильтров справа, как в Hydra)
 // ============================================================
 let storeCache = [];
-let storeGenre = 'all';
+let storeGenres = new Set();
+let storeDevs = new Set();
 let storeSearch = '';
-let storeSort = 'new';
+let storeSort = 'popular';
 
 async function loadStore() {
-  const grid = $('#games-grid');
-  if (!grid) return;
-  grid.innerHTML = '<div class="loading">Загрузка каталога...</div>';
+  const list = $('#store-list');
+  if (!list) return;
+  list.innerHTML = '<div class="loading">Загрузка каталога...</div>';
 
   try {
     const data = await fetchJSON(`${API_BASE}?action=list&category=game`);
     if (!data.ok) throw new Error(data.error || 'Ошибка загрузки');
 
     storeCache = data.games || [];
-    updateFeaturedHero();
-    renderStoreGrid();
+    buildStoreFilters();
+    renderStoreList();
   } catch (err) {
     if (isOffline(err)) {
-      renderOffline(grid, loadStore, 'Кот ушёл в запой');
+      renderOffline(list, loadStore, 'Кот ушёл в запой');
     } else {
-      grid.innerHTML = `<div class="loading">Не удалось загрузить каталог.<br><small>${escapeHtml(err.message)}</small></div>`;
+      list.innerHTML = `<div class="loading">Не удалось загрузить каталог.<br><small>${escapeHtml(err.message)}</small></div>`;
     }
   }
 }
 
-function updateFeaturedHero() {
-  // Герой каталога ведёт на реальную страницу игры, если она есть в базе
-  const hero = $('#featured-hero');
-  const game = storeCache.find(g => g.slug === 'lisiy-fonar') || storeCache[0];
-  if (!hero || !game) return;
-  const cover = $('#featured-hero-cover');
-  if (cover) {
-    cover.innerHTML = `<img src="${escapeHtml(game.cover_src)}" alt="${escapeHtml(game.title)}" class="hero-cover-img" />`;
-  }
-  hero.style.cursor = 'pointer';
-  hero.onclick = () => gotoGame(game.id);
+// Панель фильтров: жанры и разработчики собираются из реальных данных каталога
+function buildStoreFilters() {
+  const genres = [...new Set(storeCache.map(g => g.genre).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+  const devs = [...new Set(storeCache.map(g => g.developer_name || g.developer).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+
+  const gc = $('#genre-count');
+  if (gc) gc.textContent = genres.length;
+  const dc = $('#dev-count');
+  if (dc) dc.textContent = devs.length;
+
+  const renderOpts = (box, values, set) => {
+    if (!box) return;
+    box.innerHTML = values.map(v => `
+      <label class="filter-opt" data-value="${escapeHtml(v.toLowerCase())}">
+        <input type="checkbox" value="${escapeHtml(v)}" ${set.has(v) ? 'checked' : ''} />
+        <span>${escapeHtml(v)}</span>
+      </label>`).join('');
+    $$('input[type="checkbox"]', box).forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) set.add(cb.value); else set.delete(cb.value);
+        renderStoreList();
+      });
+    });
+  };
+  renderOpts($('#genre-opts'), genres, storeGenres);
+  renderOpts($('#dev-opts'), devs, storeDevs);
+
+  // Поиск внутри списка фильтров
+  const bindFilterSearch = (inputId, boxId) => {
+    const inp = $(inputId);
+    if (!inp) return;
+    inp.addEventListener('input', () => {
+      const q = inp.value.trim().toLowerCase();
+      $$('.filter-opt', $(boxId)).forEach(opt => {
+        opt.style.display = !q || opt.dataset.value.includes(q) ? '' : 'none';
+      });
+    });
+  };
+  bindFilterSearch('#genre-filter-search', '#genre-opts');
+  bindFilterSearch('#dev-filter-search', '#dev-opts');
 }
 
 function applyStoreFilters(games) {
   let out = games;
-  if (storeGenre !== 'all') {
-    out = out.filter(g => g.genre === storeGenre);
+  if (storeGenres.size) {
+    out = out.filter(g => g.genre && storeGenres.has(g.genre));
+  }
+  if (storeDevs.size) {
+    out = out.filter(g => storeDevs.has(g.developer_name || g.developer));
   }
   if (storeSearch) {
     const q = storeSearch.toLowerCase();
@@ -235,26 +585,61 @@ function applyStoreFilters(games) {
       (g.developer_name || '').toLowerCase().includes(q)
     );
   }
-  if (storeSort === 'rating') {
+  if (storeSort === 'popular') {
+    out = [...out].sort((a, b) => (b.download_count || 0) - (a.download_count || 0));
+  } else if (storeSort === 'rating') {
     out = [...out].sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
   } else if (storeSort === 'price') {
     out = [...out].sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
   }
+  // 'new' — порядок из API (сначала новые)
   return out;
 }
 
-function renderStoreGrid() {
-  const grid = $('#games-grid');
-  if (!grid) return;
+function renderStoreList() {
+  const list = $('#store-list');
+  if (!list) return;
   const games = applyStoreFilters(storeCache);
 
+  const count = $('#store-count');
+  if (count) count.textContent = games.length.toLocaleString('ru-RU');
+
   if (!games.length) {
-    grid.innerHTML = '<div class="loading">Ничего не найдено. Попробуй другой запрос.</div>';
+    list.innerHTML = '<div class="loading">Ничего не найдено. Попробуй другой запрос.</div>';
     return;
   }
 
-  grid.innerHTML = '';
-  games.forEach(game => grid.appendChild(createGameCard(game)));
+  list.innerHTML = '';
+  games.forEach(game => {
+    const price = formatPrice(game.price);
+    const row = document.createElement('article');
+    row.className = 'store-row';
+    row.dataset.id = game.id;
+    row.innerHTML = `
+      <div class="store-row-cover">
+        <img src="${escapeHtml(game.cover_src || ('media.php?type=cover&id=' + game.id))}" alt="${escapeHtml(game.title)}" loading="lazy" />
+        ${game.owned ? '<span class="card-badge owned">В библиотеке</span>' : ''}
+      </div>
+      <div class="store-row-info">
+        <h3 class="store-row-title">${escapeHtml(game.title)}</h3>
+        <div class="store-row-meta">${escapeHtml([game.genre, game.developer_name || game.developer].filter(Boolean).join(' · '))}</div>
+        <div class="store-row-rating">${starsHtml(game.rating, game.ratings_count)}</div>
+      </div>
+      <div class="store-row-side">
+        <span class="price ${price.className}">${price.text}</span>
+        <button type="button" class="btn-get ${game.owned ? 'owned' : ''}" data-id="${game.id}"></button>
+      </div>
+      <span class="store-row-arrow">›</span>
+    `;
+    const btn = row.querySelector('.btn-get');
+    paintCardButton(btn, game, price);
+    row.addEventListener('click', () => gotoGame(game.id));
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      buyFromCard(btn, game, price);
+    });
+    list.appendChild(row);
+  });
 }
 
 // ============================================================
@@ -355,6 +740,7 @@ async function buyFromCard(btn, game, price) {
     if (data.balance !== undefined) updateBalance(data.balance);
     game.owned = true;
     paintCardButton(btn, game, price);
+    loadSideLibrary(); // обновить список в сайдбаре
     // Бейдж «В библиотеке» на обложке
     const cover = btn.closest('.game-card').querySelector('.game-cover');
     if (cover && !cover.querySelector('.card-badge.owned')) {
@@ -372,28 +758,18 @@ async function buyFromCard(btn, game, price) {
 }
 
 function initStoreControls() {
-  const search = $('#search-input');
-  if (search) {
-    search.addEventListener('input', () => {
-      storeSearch = search.value.trim();
-      renderStoreGrid();
-    });
-  }
-
   const sort = $('#sort-select');
   if (sort) {
     sort.addEventListener('change', () => {
       storeSort = sort.value;
-      renderStoreGrid();
+      renderStoreList();
     });
   }
 
-  $$('#genre-chips .chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      $$('#genre-chips .chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      storeGenre = chip.dataset.genre;
-      renderStoreGrid();
+  // Сворачивание блоков фильтров (жанры / разработчики)
+  $$('.filter-block-head').forEach(head => {
+    head.addEventListener('click', () => {
+      head.closest('.filter-block').classList.toggle('collapsed');
     });
   });
 }
@@ -413,6 +789,9 @@ async function loadGamePage(id) {
     if (!data.ok) throw new Error(data.error || 'Игра не найдена');
     currentGame = data;
     renderGamePage(wrap, data);
+    // В шапке показываем название игры, как в Hydra
+    const headTitle = $('#head-title');
+    if (headTitle && data.game) headTitle.textContent = data.game.title;
   } catch (err) {
     if (isOffline(err)) {
       renderOffline(wrap, () => loadGamePage(id), 'Кот ушёл в запой');
@@ -431,58 +810,36 @@ function renderGamePage(wrap, data) {
 
   wrap.innerHTML = `
     <div class="game-page">
-      <button type="button" class="btn-back" onclick="gotoView('store')">← Назад в каталог</button>
-
-      <div class="game-hero">
-        <div class="game-gallery">
-          <div class="game-gallery-main">
-            <img id="gallery-main-img" src="${escapeHtml(shots[0] || g.cover_src)}" alt="${escapeHtml(g.title)}" />
-          </div>
-          ${shots.length > 1 ? `
-          <div class="game-gallery-thumbs" id="gallery-thumbs">
-            ${shots.map((s, i) => `
-              <button type="button" class="gallery-thumb ${i === 0 ? 'active' : ''}" data-src="${escapeHtml(s)}">
-                <img src="${escapeHtml(s)}" alt="Скриншот ${i + 1}" loading="lazy" />
-              </button>`).join('')}
-          </div>` : ''}
-        </div>
-
-        <div class="game-side">
-          <img class="game-side-cover" src="${escapeHtml(g.cover_src)}" alt="" />
-          <h1 class="game-page-title">${escapeHtml(g.title)}</h1>
-          <p class="game-page-dev">от <b>${escapeHtml(g.developer_name || g.developer || 'Unknown')}</b></p>
-          <div class="game-page-rating">${starsHtml(g.rating, data.ratings_count)}</div>
-
-          ${g.short_description ? `<p class="game-page-short">${escapeHtml(g.short_description)}</p>` : ''}
-
-          <div class="game-tags game-page-tags">
-            ${g.genre ? `<span class="tag genre">${escapeHtml(g.genre)}</span>` : ''}
-            ${tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
-          </div>
-
-          <div class="game-buy-box">
-            <div class="game-buy-price price ${price.className}">${price.text}</div>
+      <div class="game-hero2">
+        <img class="game-hero2-bg" src="media.php?type=hero&id=${g.id}" alt="" />
+        <div class="game-hero2-grad"></div>
+        <div class="game-actionbar">
+          <span class="game-actionbar-note">${g.owned ? `«${escapeHtml(g.title)}» в твоей библиотеке` : `Вы ещё не играли в ${escapeHtml(g.title)}`}</span>
+          <div class="game-actionbar-btns">
+            <span class="game-buy-price price ${price.className}">${price.text}</span>
             <button type="button" class="btn-primary btn-buy" id="btn-buy-game"></button>
-            <p class="game-buy-note" id="buy-note"></p>
-          </div>
-
-          ${authorized ? `
-          <div class="game-rate-box">
-            <p class="game-rate-label">Твоя оценка:</p>
-            <div class="rate-stars" id="rate-stars">
-              ${[1,2,3,4,5].map(v => `<button type="button" class="rate-star ${g.user_rating && v <= g.user_rating ? 'filled' : ''}" data-value="${v}">★</button>`).join('')}
-            </div>
-          </div>` : ''}
-
-          <div class="game-page-meta">
-            <div><span>Скачиваний</span><b>${Number(g.download_count || 0).toLocaleString('ru-RU')}</b></div>
-            <div><span>Добавлена</span><b>${formatDate(g.created_at)}</b></div>
           </div>
         </div>
       </div>
+      <p class="game-buy-note" id="buy-note"></p>
 
-      <div class="game-cols">
-        <div class="game-col-main">
+      <p class="game-sub-meta">Добавлена ${formatDate(g.created_at)} · Разработчик ${escapeHtml(g.developer_name || g.developer || 'Unknown')}</p>
+
+      <div class="game-layout">
+        <div class="game-main">
+          <div class="game-gallery">
+            <div class="game-gallery-main">
+              <img id="gallery-main-img" src="${escapeHtml(shots[0] || g.cover_src)}" alt="${escapeHtml(g.title)}" />
+            </div>
+            ${shots.length > 1 ? `
+            <div class="game-gallery-thumbs" id="gallery-thumbs">
+              ${shots.map((s, i) => `
+                <button type="button" class="gallery-thumb ${i === 0 ? 'active' : ''}" data-src="${escapeHtml(s)}">
+                  <img src="${escapeHtml(s)}" alt="Скриншот ${i + 1}" loading="lazy" />
+                </button>`).join('')}
+            </div>` : ''}
+          </div>
+
           <div class="section-header"><h2>Об игре</h2></div>
           <div class="game-description">
             ${(g.description || 'Описание отсутствует.').split(/\n+/).map(p => `<p>${escapeHtml(p)}</p>`).join('')}
@@ -503,6 +860,37 @@ function renderGamePage(wrap, data) {
           </form>` : '<p class="comment-login-note">Войди, чтобы оставить комментарий.</p>'}
           <div id="comments-list" class="comments-list"></div>
         </div>
+
+        <aside class="game-aside">
+          <div class="side-card">
+            <div class="side-card-head">Статистика</div>
+            <div class="side-card-body">
+              <div class="pstat"><span>⬇ Загрузки</span><b>${Number(g.download_count || 0).toLocaleString('ru-RU')}</b></div>
+              <div class="pstat"><span>💬 Комментарии</span><b>${data.comments.length}</b></div>
+              <div class="pstat"><span>★ Оценка</span><b class="game-page-rating">${starsHtml(g.rating, data.ratings_count)}</b></div>
+            </div>
+          </div>
+
+          ${authorized ? `
+          <div class="side-card">
+            <div class="side-card-head">Твоя оценка</div>
+            <div class="side-card-body">
+              <div class="rate-stars" id="rate-stars">
+                ${[1,2,3,4,5].map(v => `<button type="button" class="rate-star ${g.user_rating && v <= g.user_rating ? 'filled' : ''}" data-value="${v}">★</button>`).join('')}
+              </div>
+            </div>
+          </div>` : ''}
+
+          <div class="side-card">
+            <div class="side-card-head">Жанр и теги</div>
+            <div class="side-card-body">
+              <div class="game-tags game-page-tags">
+                ${g.genre ? `<span class="tag genre">${escapeHtml(g.genre)}</span>` : ''}
+                ${tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   `;
@@ -559,7 +947,7 @@ function refreshBuyButton(g) {
   if (g.owned) {
     btn.textContent = 'Скачать';
     btn.classList.add('owned');
-    if (note) note.textContent = 'Уже в твоей библиотеке';
+    if (note) note.textContent = ''; // «в библиотеке» уже написано на панели под обложкой
   } else {
     btn.textContent = price.className === 'free' ? 'Получить бесплатно' : `Купить за ${price.text}`;
     btn.classList.remove('owned');
@@ -752,57 +1140,57 @@ function initCommentForm(g, viewer) {
 }
 
 // ============================================================
-//  БИБЛИОТЕКА (как в Steam: список слева, детали справа)
+//  БИБЛИОТЕКА (сетка карточек, как в Hydra)
 // ============================================================
 let libraryCache = [];
 let libraryFilter = 'all';
 let librarySearch = '';
-let librarySelectedId = null;
+let librarySort = 'name';
 
 async function loadLibrary() {
-  const list = $('#library-list');
-  if (!list) return;
-  list.innerHTML = '<div class="loading">Загрузка библиотеки...</div>';
+  const grid = $('#library-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="loading">Загрузка библиотеки...</div>';
 
   try {
     const data = await fetchJSON(`${API_BASE}?action=library`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
 
     libraryCache = data.library || [];
-    renderLibraryList();
-
-    // Автовыбор первой игры, если ещё ничего не выбрано
-    if (libraryCache.length && !librarySelectedId) {
-      selectLibraryGame(libraryCache[0].id);
-    } else if (librarySelectedId) {
-      selectLibraryGame(librarySelectedId);
-    } else {
-      renderLibraryEmptyDetail();
-    }
+    renderLibraryGrid();
   } catch (err) {
     if (isOffline(err)) {
-      renderOffline(list, loadLibrary, 'Кот ушёл в запой');
+      renderOffline(grid, loadLibrary, 'Кот ушёл в запой');
     } else {
-      list.innerHTML = `<div class="loading">Ошибка загрузки<br><small>${escapeHtml(err.message)}</small></div>`;
+      grid.innerHTML = `<div class="loading">Ошибка загрузки<br><small>${escapeHtml(err.message)}</small></div>`;
     }
   }
 }
 
-function renderLibraryList() {
-  const list = $('#library-list');
-  if (!list) return;
+function renderLibraryGrid() {
+  const grid = $('#library-grid');
+  if (!grid) return;
 
   let items = libraryCache;
-  if (libraryFilter !== 'all') {
+  if (libraryFilter === 'installed') {
+    const ids = getInstalledIds();
+    items = items.filter(g => ids.includes(+g.id));
+  } else if (libraryFilter !== 'all') {
     items = items.filter(g => g.category === libraryFilter);
   }
   if (librarySearch) {
     const q = librarySearch.toLowerCase();
     items = items.filter(g => (g.title || '').toLowerCase().includes(q));
   }
+  if (librarySort === 'name') {
+    items = [...items].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
+  } else if (librarySort === 'rating') {
+    items = [...items].sort((a, b) => parseFloat(b.rating || 0) - parseFloat(a.rating || 0));
+  }
+  // 'recent' — порядок из API (недавно добавленные)
 
   if (!items.length) {
-    list.innerHTML = libraryCache.length
+    grid.innerHTML = libraryCache.length
       ? '<div class="loading">Ничего не найдено</div>'
       : `<div class="library-empty">
           <p>Библиотека пуста.</p>
@@ -811,131 +1199,28 @@ function renderLibraryList() {
     return;
   }
 
-  list.innerHTML = '';
+  const installed = getInstalledIds();
+  grid.innerHTML = '';
   items.forEach(g => {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'library-item' + (+librarySelectedId === +g.id ? ' active' : '');
-    item.dataset.id = g.id;
-    item.innerHTML = `
-      <span class="library-item-cover" style="background:${escapeHtml(g.cover_color || '#2e2a24')}">${escapeHtml(g.cover_emoji || '🎮')}</span>
-      <span class="library-item-info">
-        <span class="library-item-title">${escapeHtml(g.title)}</span>
-        <span class="library-item-meta">${g.category === 'asset' ? 'Ассет' : escapeHtml(g.genre || '')}</span>
-      </span>
+    const card = document.createElement('article');
+    card.className = 'lib-card';
+    card.dataset.id = g.id;
+    card.innerHTML = `
+      <div class="lib-card-cover">
+        <img src="media.php?type=cover&id=${g.id}" alt="${escapeHtml(g.title)}" loading="lazy" />
+        ${installed.includes(+g.id) ? '<span class="lib-card-badge">✓ установлена</span>' : ''}
+      </div>
+      <div class="lib-card-info">
+        <div class="lib-card-title">${escapeHtml(g.title)}</div>
+        <div class="lib-card-meta">${g.category === 'asset' ? 'Ассет' : escapeHtml(g.genre || '')}</div>
+      </div>
     `;
-    item.addEventListener('click', () => selectLibraryGame(g.id));
-    list.appendChild(item);
-  });
-}
-
-function renderLibraryEmptyDetail() {
-  const detail = $('#library-detail');
-  if (!detail) return;
-  detail.innerHTML = `
-    <div class="library-detail-empty">
-      <div class="library-detail-empty-icon">🐈</div>
-      <p>Выбери игру слева — здесь появятся подробности, сборки и скриншоты.</p>
-    </div>`;
-}
-
-async function selectLibraryGame(id) {
-  librarySelectedId = id;
-  $$('#library-list .library-item').forEach(el => {
-    el.classList.toggle('active', +el.dataset.id === +id);
-  });
-
-  const detail = $('#library-detail');
-  if (!detail) return;
-  detail.innerHTML = '<div class="loading">Загружаю полку...</div>';
-
-  try {
-    const data = await fetchJSON(`${API_BASE}?action=get&id=${id}`);
-    if (!data.ok) throw new Error(data.error || 'Ошибка');
-    renderLibraryDetail(detail, data);
-  } catch (err) {
-    if (isOffline(err)) {
-      renderOffline(detail, () => selectLibraryGame(id), 'Кот ушёл в запой');
-    } else {
-      detail.innerHTML = `<div class="loading">${escapeHtml(err.message)}</div>`;
-    }
-  }
-}
-
-function renderLibraryDetail(detail, data) {
-  const g = data.game;
-  const entry = libraryCache.find(x => +x.id === +g.id) || {};
-  const shots = data.screenshots || [];
-  const price = formatPrice(g.price);
-
-  detail.innerHTML = `
-    <div class="lib-detail-inner">
-      <div class="lib-detail-hero" style="background:linear-gradient(160deg, ${escapeHtml(g.cover_color || '#ef5b2c')}2e, transparent 55%)">
-        <img class="lib-detail-cover" src="${escapeHtml(g.cover_src)}" alt="" />
-        <div class="lib-detail-head">
-          <h2 class="lib-detail-title">${escapeHtml(g.title)}</h2>
-          <p class="lib-detail-dev">от ${escapeHtml(g.developer_name || g.developer || 'Unknown')}</p>
-          <div class="lib-detail-rating">${starsHtml(g.rating)}</div>
-          <div class="lib-detail-meta">
-            <div><span>Тип</span><b>${g.category === 'asset' ? 'Ассет-пак' : 'Игра'}</b></div>
-            <div><span>Цена</span><b>${price.text}</b></div>
-            <div><span>Добавлена</span><b>${formatDate(entry.added_at)}</b></div>
-            <div><span>Последний запуск</span><b>${entry.last_played ? formatDateTime(entry.last_played) : 'ещё не запускалась'}</b></div>
-          </div>
-          <div class="lib-detail-actions">
-            <button type="button" class="btn-primary" id="lib-play-btn">
-              ${g.category === 'asset' ? 'Скачать пакет' : 'Играть'}
-            </button>
-            <button type="button" class="btn-ghost" id="lib-page-btn">Страница игры</button>
-          </div>
-        </div>
-      </div>
-
-      ${shots.length ? `
-      <div class="section-header"><h3>Скриншоты</h3></div>
-      <div class="lib-shots">
-        ${shots.map(s => `<button type="button" class="lib-shot" data-src="${escapeHtml(s)}"><img src="${escapeHtml(s)}" alt="Скриншот" loading="lazy" /></button>`).join('')}
-      </div>` : ''}
-
-      <div class="section-header"><h3>Файлы</h3></div>
-      <div id="lib-builds">${renderBuildsList(data.builds || [], g)}</div>
-
-      <div class="section-header"><h3>Описание</h3></div>
-      <div class="lib-description">
-        ${(g.description || '').split(/\n+/).filter(Boolean).map(p => `<p>${escapeHtml(p)}</p>`).join('') || '<p>Без описания.</p>'}
-      </div>
-    </div>
-  `;
-
-  $('#lib-page-btn', detail).addEventListener('click', () => gotoGame(g.id));
-
-  $('#lib-play-btn', detail).addEventListener('click', async () => {
-    // «Играть» как в Steam: отмечаем запуск и отдаём сборку
-    postJSON(`${API_BASE}?action=launch`, { game_id: g.id }).catch(() => {});
-    if (entry) entry.last_played = new Date().toISOString();
-    const first = $('#lib-builds .btn-download', detail);
-    if (first) {
-      first.click();
-    } else {
-      toast('Сборок пока нет');
-    }
-  });
-
-  initBuildButtons(detail, g);
-
-  $$('.lib-shot', detail).forEach(shot => {
-    shot.addEventListener('click', () => openLightbox(shot.dataset.src));
+    card.addEventListener('click', () => gotoGame(g.id));
+    grid.appendChild(card);
   });
 }
 
 function initLibraryControls() {
-  const search = $('#library-search');
-  if (search) {
-    search.addEventListener('input', () => {
-      librarySearch = search.value.trim();
-      renderLibraryList();
-    });
-  }
   const filters = $('#library-filters');
   if (filters) {
     $$('.lib-filter', filters).forEach(btn => {
@@ -943,8 +1228,15 @@ function initLibraryControls() {
         $$('.lib-filter', filters).forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         libraryFilter = btn.dataset.filter;
-        renderLibraryList();
+        renderLibraryGrid();
       });
+    });
+  }
+  const sort = $('#library-sort');
+  if (sort) {
+    sort.addEventListener('change', () => {
+      librarySort = sort.value;
+      renderLibraryGrid();
     });
   }
 }
@@ -964,10 +1256,15 @@ const dm = {
 
 function updateDownloadsBadge() {
   const badge = $('#downloads-badge');
-  if (!badge) return;
   const n = dm.queue.length + (dm.active ? 1 : 0) + (dm.pausedItem ? 1 : 0);
-  badge.textContent = n;
-  badge.classList.toggle('hidden', n === 0);
+  if (badge) {
+    badge.textContent = n;
+    badge.classList.toggle('hidden', n === 0);
+  }
+  const st = $('#side-dl-status');
+  if (st) {
+    st.textContent = n > 0 ? `Активных загрузок: ${n}` : 'Нет активных загрузок';
+  }
 }
 
 function enqueueDownload(item) {
@@ -1084,6 +1381,7 @@ async function runDownload(item, offset) {
       size: item.received,
       at: new Date().toISOString(),
     });
+    markInstalled(item.gameId); // игра считается установленной на этом ПК
     toast(`«${item.title}» скачана`);
     renderDownloadsView();
     updateDownloadsBadge();
@@ -1160,14 +1458,16 @@ function renderDownloadsView() {
   if (!activeBox) return;
 
   const item = dm.active || dm.pausedItem;
-  const queued = dm.queue;
+  const queued = dlSearch
+    ? dm.queue.filter(q => (q.title || '').toLowerCase().includes(dlSearch.toLowerCase()))
+    : dm.queue;
 
   if (!item && !queued.length) {
     activeBox.innerHTML = `
       <div class="downloads-empty" id="downloads-empty">
-        <div class="downloads-empty-icon">⬇</div>
-        <p>Нет активных загрузок. Зайди в библиотеку и скачай что-нибудь тёплое.</p>
-        <button type="button" class="btn-primary" onclick="gotoView('library')">Открыть библиотеку</button>
+        <div class="downloads-empty-icon">↓</div>
+        <p class="downloads-empty-title">Здесь так пусто...</p>
+        <p class="downloads-empty-sub">Вы ещё ничего не скачали через CATio, но никогда не поздно начать.</p>
       </div>`;
   } else {
     let html = '';
@@ -1277,11 +1577,14 @@ function updateDownloadProgressDom(item) {
 function renderDownloadsHistory() {
   const box = $('#downloads-history');
   if (!box) return;
-  if (!dm.history.length) {
+  const history = dlSearch
+    ? dm.history.filter(h => (h.title || '').toLowerCase().includes(dlSearch.toLowerCase()))
+    : dm.history;
+  if (!history.length) {
     box.innerHTML = '<p class="downloads-history-empty">Пока пусто</p>';
     return;
   }
-  box.innerHTML = dm.history.map(h => `
+  box.innerHTML = history.map(h => `
     <div class="dl-history-row">
       <div class="dl-info">
         <div class="dl-title">${escapeHtml(h.title)}</div>
@@ -1354,46 +1657,55 @@ async function loadProfileGames() {
   try {
     const data = await fetchJSON(`${API_BASE}?action=library`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
+    const count = $('#profile-games-count');
+    if (count) count.textContent = data.library.length || '';
     if (!data.library.length) {
       box.innerHTML = '<p class="profile-games-empty">Пусто. Самое время зайти в каталог.</p>';
       return;
     }
-    box.innerHTML = data.library.slice(0, 6).map(g => `
-      <button type="button" class="profile-game-row" data-id="${g.id}">
-        <span class="library-item-cover" style="background:${escapeHtml(g.cover_color || '#2e2a24')}">${escapeHtml(g.cover_emoji || '🎮')}</span>
+    box.innerHTML = data.library.map(g => `
+      <button type="button" class="profile-game-card" data-id="${g.id}" data-title="${escapeHtml((g.title || '').toLowerCase())}">
+        <span class="profile-game-cover"><img src="media.php?type=cover&id=${g.id}" alt="${escapeHtml(g.title)}" loading="lazy" /></span>
         <span class="profile-game-title">${escapeHtml(g.title)}</span>
       </button>`).join('');
-    $$('.profile-game-row', box).forEach(row => {
+    $$('.profile-game-card', box).forEach(row => {
       row.addEventListener('click', () => gotoGame(row.dataset.id));
     });
+    // Поиск по вкладке профиля — прячем неподходящие карточки
+    if (profileSearch) {
+      const q = profileSearch.toLowerCase();
+      $$('.profile-game-card', box).forEach(row => {
+        row.style.display = row.dataset.title.includes(q) ? '' : 'none';
+      });
+    }
   } catch (err) {
     box.innerHTML = `<p class="profile-games-empty">${escapeHtml(err.message)}</p>`;
   }
 }
 
-// ---------- Модалка настроек ----------
-function initSettingsModal() {
-  const modal = $('#settings-modal');
-  if (!modal) return;
+// ---------- Вкладка настроек ----------
+function initSettingsView() {
+  const view = $('#view-settings');
+  if (!view) return;
 
-  const open = () => modal.classList.remove('hidden');
-  const close = () => modal.classList.add('hidden');
-
+  // Кнопки, которые ведут на вкладку настроек
   const openBtn = $('#btn-settings-open');
-  if (openBtn) openBtn.addEventListener('click', open);
+  if (openBtn) openBtn.addEventListener('click', () => gotoView('settings'));
   const menuSettings = $('#menu-settings');
   if (menuSettings) menuSettings.addEventListener('click', () => {
     const menu = $('#user-menu');
     if (menu) menu.classList.add('hidden');
-    open();
+    gotoView('settings');
   });
   const topupOpen = $('#btn-topup-open');
-  if (topupOpen) topupOpen.addEventListener('click', open);
+  if (topupOpen) topupOpen.addEventListener('click', () => {
+    gotoView('settings');
+    switchSettingsTab('balance');
+  });
 
-  $('#settings-close').addEventListener('click', close);
-  $('#settings-backdrop').addEventListener('click', close);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') close();
+  // Под-вкладки: Основные / Баланс
+  $$('.settings-nav-btn', view).forEach(btn => {
+    btn.addEventListener('click', () => switchSettingsTab(btn.dataset.stab));
   });
 
   // Живой предпросмотр аватара
@@ -1427,17 +1739,24 @@ function initSettingsModal() {
           window.AUTH_STATE.user.avatar = data.user.avatar;
           window.AUTH_STATE.user.avatar_color = data.user.avatar_color;
         }
-        const avatarBtn = $('#avatar-btn');
-        if (avatarBtn) {
-          avatarBtn.textContent = data.user.avatar || avatarBtn.textContent;
-          avatarBtn.style.background = data.user.avatar_color || avatarBtn.style.background;
+        const sideAva = $('#side-avatar');
+        if (sideAva) {
+          // клиент: аватарка живёт в сайдбаре
+          sideAva.textContent = data.user.avatar || sideAva.textContent;
+          sideAva.style.background = data.user.avatar_color || sideAva.style.background;
+        } else {
+          // браузер: аватарка в топбаре
+          const avatarBtn = $('#avatar-btn');
+          if (avatarBtn) {
+            avatarBtn.textContent = data.user.avatar || avatarBtn.textContent;
+            avatarBtn.style.background = data.user.avatar_color || avatarBtn.style.background;
+          }
         }
         const profileAvatar = $('.profile-avatar');
         if (profileAvatar) {
           profileAvatar.textContent = data.user.avatar || profileAvatar.textContent;
           profileAvatar.style.background = data.user.avatar_color || profileAvatar.style.background;
         }
-        close();
         toast('Настройки сохранены');
       } catch (err) {
         errBox.textContent = err.message || 'Ошибка';
@@ -1450,7 +1769,7 @@ function initSettingsModal() {
   }
 
   // Пополнение баланса
-  $$('.btn-topup', modal).forEach(btn => {
+  $$('.btn-topup', view).forEach(btn => {
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       try {
@@ -1465,6 +1784,11 @@ function initSettingsModal() {
       }
     });
   });
+}
+
+function switchSettingsTab(tab) {
+  $$('.settings-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.stab === tab));
+  $$('.settings-pane').forEach(p => p.classList.toggle('hidden', p.id !== `settings-pane-${tab}`));
 }
 
 // ---------- Меню под аватаркой ----------
@@ -1548,13 +1872,17 @@ document.addEventListener('DOMContentLoaded', () => {
   initAvatarMenu();
   initStoreControls();
   initLibraryControls();
-  initSettingsModal();
+  initSettingsView();
   initLightbox();
+  initHomeControls();
+  initSideLibrary();
+  initContentHead();
   updateDownloadsBadge();
+  loadSideLibrary();
 
   // Неавторизованным всегда показываем auth, даже если в URL другой view
   let view = (window.FORCE_AUTH_VIEW && $('#view-auth')) ? 'auth' : getViewFromUrl();
   const gameId = window.GAME_ID_FROM_URL || 0;
-  if (view === 'game' && !gameId) view = 'store';
+  if (view === 'game' && !gameId) view = 'home';
   showView(view, gameId);
 });

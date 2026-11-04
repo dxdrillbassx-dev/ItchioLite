@@ -1,16 +1,53 @@
 <?php
-// CATio — процедурные картинки для игр (SVG, без GD и внешних файлов).
-// Обложка:  media.php?type=cover&id=N
-// Скриншот: media.php?type=shot&id=N&i=1..4
+// CATio — картинки для игр.
+// Если в папке covers/ лежит настоящий файл — отдаём его,
+// иначе рисуем процедурный SVG (без GD и внешних файлов).
+//
+// Обложка:  media.php?type=cover&id=N   → covers/cover_N.jpg|png|webp
+// Баннер:   media.php?type=hero&id=N    → covers/hero_N.*  (нет — берём cover_N.*, потом SVG)
+// Иконка:   media.php?type=icon&id=N    → covers/icon_N.*  (нет — cover_N.*, потом SVG)
+// Скриншот: media.php?type=shot&id=N&i=1..4 (всегда SVG)
 require_once __DIR__ . '/db.php';
-
-header('Content-Type: image/svg+xml; charset=utf-8');
-header('Cache-Control: public, max-age=86400');
-header('X-Content-Type-Options: nosniff');
 
 $type = $_GET['type'] ?? 'cover';
 $id   = (int)($_GET['id'] ?? 0);
 $i    = max(1, (int)($_GET['i'] ?? 1));
+
+// ---------- настоящие файлы из web/covers/ ----------
+function serveLocalImage(int $id, array $kinds): bool {
+    $dir = __DIR__ . '/covers';
+    $mimes = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
+    foreach ($kinds as $kind) {
+        foreach ($mimes as $ext => $mime) {
+            $file = "$dir/{$kind}_{$id}.{$ext}";
+            if (is_file($file)) {
+                header('Content-Type: ' . $mime);
+                header('Cache-Control: public, max-age=3600');
+                header('X-Content-Type-Options: nosniff');
+                readfile($file);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+if ($id > 0 && $type !== 'shot') {
+    if ($type === 'hero') {
+        $kinds = ['hero', 'cover'];
+    } elseif ($type === 'icon') {
+        $kinds = ['icon', 'cover'];
+    } else {
+        $kinds = ['cover'];
+    }
+    if (serveLocalImage($id, $kinds)) {
+        exit;
+    }
+}
+
+header('Content-Type: image/svg+xml; charset=utf-8');
+header('Cache-Control: public, max-age=86400');
+header('X-Content-Type-Options: nosniff');
 
 $pdo = getDB();
 $stmt = $pdo->prepare("SELECT title, genre, category, cover_emoji, cover_color FROM games WHERE id = ?");
@@ -61,10 +98,11 @@ $color = $game['cover_color'] ?: '#ef5b2c';
 $title = $game['title'];
 $emoji = $game['cover_emoji'] ?: '🎮';
 
-if ($type === 'cover') {
-    renderCover($title, $emoji, $color, $game['genre'], $game['category'], $id);
-} else {
+if ($type === 'shot') {
     renderShot($title, $color, $id, $i);
+} else {
+    // cover / hero / icon без файла — рисуем SVG-обложку
+    renderCover($title, $emoji, $color, $game['genre'], $game['category'], $id);
 }
 exit;
 
