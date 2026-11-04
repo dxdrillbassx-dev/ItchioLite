@@ -509,6 +509,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         auto addTab = [&](const wchar_t* label, int id, bool active, int w) {
             RECT r = { x, y1, x + w, y1 + h1 };
             g_buttons.push_back({ r, id });
+            // Фон таба #1a1814 как в веб-версии
+            HBRUSH tabBg = CreateSolidBrush(RGB(26, 24, 20));
+            FillRect(hdc, &r, tabBg);
+            DeleteObject(tabBg);
             COLORREF col = active ? COL_ACCENT : (hoverId == id ? COL_TEXT_BRT : COL_TEXT);
             drawText(hdc, r, label, col, 20, true, DT_CENTER);
             if (active) {

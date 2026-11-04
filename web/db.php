@@ -1,109 +1,105 @@
 <?php
-require_once __DIR__ . '/config.php';
+// CATio — подключение к БД + автосоздание таблиц
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'itch_steam_local');
+define('DB_USER', 'root');
+define('DB_PASS', '');
 
-function getDB(): PDO {
+function getDB() {
     static $pdo = null;
+    if ($pdo) return $pdo;
 
-    if ($pdo === null) {
-        $dsn = "mysql:host=" . DB_HOST . ";charset=" . DB_CHARSET;
-        $options = [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
-        ];
+    try {
+        // Подключаемся без выбора БД сначала
+        $pdo = new PDO(
+            'mysql:host=' . DB_HOST . ';charset=utf8mb4',
+            DB_USER, DB_PASS,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ]
+        );
 
-        try {
-            // Connect without database first (to create it if needed)
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-            $pdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-            $pdo->exec("USE `" . DB_NAME . "`");
-        } catch (PDOException $e) {
-            http_response_code(500);
-            die(json_encode(['error' => 'Database connection failed: ' . $e->getMessage()]));
+        // Создаём БД если нет
+        $pdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        $pdo->exec("USE `" . DB_NAME . "`");
+
+        // === АВТОСОЗДАНИЕ ТАБЛИЦ ===
+
+        // Пользователи
+        $pdo->exec("CREATE TABLE IF NOT EXISTS users (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(32) NOT NULL UNIQUE,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
+            role ENUM('admin','developer','user') NOT NULL DEFAULT 'user',
+            balance INT NOT NULL DEFAULT 0,
+            avatar VARCHAR(10) NOT NULL DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_email (email),
+            INDEX idx_username (username)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Сессии
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
+            id VARCHAR(64) PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            ip VARCHAR(45) NOT NULL,
+            user_agent VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            INDEX idx_user_id (user_id),
+            INDEX idx_expires (expires_at),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Игры (если нет)
+        $pdo->exec("CREATE TABLE IF NOT EXISTS games (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            developer VARCHAR(255) NOT NULL DEFAULT '',
+            price INT NOT NULL DEFAULT 0,
+            genre VARCHAR(100) NOT NULL DEFAULT '',
+            cover VARCHAR(255) NOT NULL DEFAULT '',
+            rating DECIMAL(3,1) NOT NULL DEFAULT 0.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_genre (genre),
+            INDEX idx_price (price)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Библиотека пользователя
+        $pdo->exec("CREATE TABLE IF NOT EXISTS library (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            game_id INT UNSIGNED NOT NULL,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_user_game (user_id, game_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Демо-игры если таблица пустая
+        $stmt = $pdo->query("SELECT COUNT(*) as cnt FROM games");
+        if ($stmt->fetch()['cnt'] == 0) {
+            $demoGames = [
+                ['Лисий фонарь', 'Ночной платформер про лисёнка с бумажным фонарём.', 'mast', 0, 'Платформер', 5.0],
+                ['Тихий мох', 'Медитативная головоломка о лесном духе.', 'daria', 199, 'Головоломка', 4.5],
+                ['Северный ветер', 'Приключение в заснеженной деревне.', 'ivan', 349, 'Приключение', 4.0],
+                ['Ржавые шестерни', 'Рогалик в стимпанк-городе.', 'gears', 499, 'Рогалик', 4.8],
+                ['Бумажный дом', 'Визуальная новелла о семейной тайне.', 'paper', 149, 'Визуальная новелла', 4.2],
+                ['Аркада 1997', 'Ретро-аркада с пиксельной графикой.', 'retro', 0, 'Аркада', 3.9],
+            ];
+            $stmt = $pdo->prepare("INSERT INTO games (title, description, developer, price, genre, rating) VALUES (?, ?, ?, ?, ?, ?)");
+            foreach ($demoGames as $g) {
+                $stmt->execute($g);
+            }
         }
 
-        if (AUTO_MIGRATE) {
-            runMigrations($pdo);
-        }
-    }
-
-    return $pdo;
-}
-
-function runMigrations(PDO $pdo): void {
-    // Users
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS users (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          username VARCHAR(64) NOT NULL UNIQUE,
-          email VARCHAR(255) NOT NULL UNIQUE,
-          password_hash VARCHAR(255) NOT NULL,
-          display_name VARCHAR(128) DEFAULT NULL,
-          avatar_url VARCHAR(512) DEFAULT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB
-    ");
-
-    // Games
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS games (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          title VARCHAR(255) NOT NULL,
-          slug VARCHAR(255) NOT NULL UNIQUE,
-          short_description VARCHAR(512) DEFAULT NULL,
-          description TEXT,
-          cover_url VARCHAR(512) DEFAULT NULL,
-          price DECIMAL(10,2) DEFAULT 0.00,
-          developer_name VARCHAR(128) DEFAULT NULL,
-          tags VARCHAR(512) DEFAULT NULL,
-          download_count INT UNSIGNED DEFAULT 0,
-          is_published TINYINT(1) DEFAULT 1,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          INDEX idx_published (is_published),
-          INDEX idx_price (price)
-        ) ENGINE=InnoDB
-    ");
-
-    // Library
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS library (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          user_id INT UNSIGNED NOT NULL,
-          game_id INT UNSIGNED NOT NULL,
-          acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE KEY unique_user_game (user_id, game_id),
-          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-          FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB
-    ");
-
-    // Builds
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS game_builds (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          game_id INT UNSIGNED NOT NULL,
-          platform ENUM('windows','linux','mac','web') DEFAULT 'windows',
-          version VARCHAR(32) DEFAULT '1.0',
-          file_url VARCHAR(512) NOT NULL,
-          file_size_bytes BIGINT UNSIGNED DEFAULT 0,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB
-    ");
-
-    // Seed demo data if empty
-    $count = (int)$pdo->query("SELECT COUNT(*) FROM games")->fetchColumn();
-    if ($count === 0) {
-        $pdo->exec("
-            INSERT INTO games (title, slug, short_description, description, cover_url, price, developer_name, tags) VALUES
-            ('Celeste Classic', 'celeste-classic', 'A challenging precision platformer', 'Climb a mountain and face your inner demons in this tight platformer.', '', 0.00, 'Maddy Makes Games', 'platformer,indie,pixel'),
-            ('Stardew Valley', 'stardew-valley', 'Relaxing farming RPG', 'Build the farm of your dreams and become part of the local community.', '', 14.99, 'ConcernedApe', 'farming,rpg,simulation'),
-            ('Hollow Knight', 'hollow-knight', 'Epic action-adventure', 'Explore a vast interconnected world of insects and heroes.', '', 14.99, 'Team Cherry', 'metroidvania,action,indie'),
-            ('A Short Hike', 'a-short-hike', 'Peaceful exploration', 'Hike, climb, and fly around a lovely mountain in this charming adventure.', '', 7.99, 'adamgryu', 'exploration,relaxing,indie'),
-            ('Undertale', 'undertale', 'The RPG where you don\\'t have to kill anyone', 'A unique RPG with a heart.', '', 9.99, 'tobyfox', 'rpg,indie,story'),
-            ('Balatro', 'balatro', 'Poker roguelike', 'Combine poker hands with wild jokers in this addictive deckbuilder.', '', 14.99, 'LocalThunk', 'roguelike,poker,indie')
-        ");
+        return $pdo;
+    } catch (PDOException $e) {
+        die(json_encode(['error' => 'DB connection failed: ' . $e->getMessage()]));
     }
 }
