@@ -1,4 +1,6 @@
 // CATio - Frameless launcher with custom icons
+// Поток: старт -> (сервер лежит? 404 на весь экран : не авторизован? логин на весь экран)
+//       -> всплывашка "Авторизация успешна" -> основной интерфейс
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -7,6 +9,7 @@
 #include <winhttp.h>
 #include <dwmapi.h>
 #include <wincodec.h>
+#include <shlobj.h>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -38,27 +41,28 @@ const char* COMMUNITY_URL = "http://localhost/itch-steam-like/?view=community&cl
 const char* PROFILE_URL   = "http://localhost/itch-steam-like/?view=profile&client=1";
 const char* AUTH_URL      = "http://localhost/itch-steam-like/?view=auth&client=1";
 
-// Страница «сервер недоступен».
-// ВАЖНО: в data: URL нельзя использовать символ # — он обрезает URL,
-// поэтому все цвета пишем через rgb(). Страница сама перезагрузится через 15 сек.
-const char* ERROR_HTML = R"(data:text/html,<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta http-equiv="refresh" content="15;url=http://localhost/itch-steam-like/?client=1">
+// Страница «сервер недоступен». Показывается через set_html() (NavigateToString) —
+// без сети, поэтому нативный экран ошибки WebView2 невозможен в принципе.
+// Перезагрузка НЕ делается из HTML (никакого meta refresh) — кот тихо проверяет
+// сервер из C++ по таймеру (IDT_RETRY) и кнопкой через мост catioRetry().
+const char* ERROR_HTML = R"(<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-body{margin:0;background:rgb(18,17,14);color:rgb(199,192,184);font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center}
+body{margin:0;background:#12110e;color:#c7c0b8;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center}
 .box{max-width:460px;padding:40px}
-.logo{width:84px;height:84px;margin:0 auto 24px;border-radius:20px;background:rgb(239,91,44);color:rgb(18,17,14);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:2.4rem}
-h1{color:rgb(255,255,255);font-size:1.7rem;margin-bottom:10px;letter-spacing:-0.02em}
-.fun{color:rgb(239,91,44);font-weight:600;margin-bottom:14px}
-p{color:rgb(138,131,124);line-height:1.6;margin-bottom:8px}
-a{display:inline-block;margin-top:18px;padding:10px 26px;border-radius:999px;background:rgb(239,91,44);color:rgb(18,17,14);font-weight:600;text-decoration:none}
+.logo{width:84px;height:84px;margin:0 auto 24px;border-radius:20px;background:#ef5b2c;color:#12110e;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:2.4rem}
+h1{color:#ffffff;font-size:1.7rem;margin-bottom:10px;letter-spacing:-0.02em}
+.fun{color:#ef5b2c;font-weight:600;margin-bottom:14px}
+p{color:#8a837c;line-height:1.6;margin-bottom:8px}
+a{display:inline-block;margin-top:18px;padding:10px 26px;border-radius:999px;background:#ef5b2c;color:#12110e;font-weight:600;text-decoration:none;cursor:pointer}
+a:hover{filter:brightness(1.1)}
 .hint{font-size:0.85rem;opacity:0.7;margin-top:14px}
 </style></head><body><div class="box">
 <div class="logo">C</div>
 <h1>404 — полка пуста</h1>
 <p class="fun">Кот ушёл в запой и не отвечает на звонки.</p>
 <p>Сервер CATio временно недоступен.<br>Проверь, что Apache и MySQL запущены в XAMPP.</p>
-<a href="http://localhost/itch-steam-like/?client=1">Попробовать снова</a>
-<p class="hint">Страница сама обновится через 15 секунд</p>
+<a onclick="catioRetry()">Попробовать снова</a>
+<p class="hint">Кот сам проверит сервер каждые 15 секунд</p>
 </div></body></html>)";
 
 const int TOP_HEIGHT = 118;
@@ -67,7 +71,7 @@ const int ICON_SIZE_ARROW = 22;
 const int ICON_SIZE_REFRESH = 14;
 
 const COLORREF COL_BG       = RGB(18, 17, 14);
-const COLORREF COL_TABROW   = RGB(26, 24, 20);  // фон строки табов = фон кнопок разделов
+const COLORREF COL_TABROW   = RGB(26, 24, 20);
 const COLORREF COL_CARD     = RGB(34, 31, 26);
 const COLORREF COL_HOVER    = RGB(46, 42, 36);
 const COLORREF COL_BORDER   = RGB(46, 42, 36);
@@ -81,13 +85,22 @@ const COLORREF COL_DISABLED = RGB(80, 75, 70);
 
 #define WM_CATIO_CHECK_DONE (WM_APP + 1)
 
+// Таймеры: тихий автоповтор проверки сервера и показ всплывашки авторизации
+#define IDT_RETRY 1001
+#define IDT_TOAST 1002
+
 HWND g_hWnd = nullptr;
 HICON g_hLogo = nullptr;
 webview::webview* g_webview = nullptr;
+HWND g_toast = nullptr;
 std::string g_currentUrl = STORE_URL;
 std::string g_balance = "";
 std::string g_username = u8"Гость";
 bool g_guest = true;
+
+// Режим «на весь экран без табов»: либо логин, либо офлайн-404
+bool g_coverMode = false;
+bool g_authMode  = false;   // ждём авторизацию на полном экране
 
 enum class Section { Store, Library, Community, Profile };
 Section g_currentSection = Section::Store;
@@ -366,6 +379,43 @@ std::string formatBalance(long v) {
     return out;
 }
 
+// ========== Session (запоминаем авторизацию между запусками) ==========
+std::wstring sessionPath() {
+    wchar_t app[MAX_PATH] = {};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, app)) && app[0]) {
+        std::wstring dir = std::wstring(app) + L"\\CATio";
+        CreateDirectoryW(dir.c_str(), nullptr);
+        return dir + L"\\session";
+    }
+    wchar_t p[MAX_PATH];
+    GetModuleFileNameW(nullptr, p, MAX_PATH);
+    wchar_t* s = wcsrchr(p, L'\\');
+    if (s) *(s + 1) = 0;
+    return std::wstring(p) + L"session.dat";
+}
+
+bool loadSession() {
+    HANDLE f = CreateFileW(sessionPath().c_str(), GENERIC_READ, FILE_SHARE_READ,
+        nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    CloseHandle(f);
+    return true;
+}
+
+void saveSession() {
+    HANDLE f = CreateFileW(sessionPath().c_str(), GENERIC_WRITE, 0, nullptr,
+        CREATE_ALWAYS, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD w = 0;
+        WriteFile(f, "1", 1, &w, nullptr);
+        CloseHandle(f);
+    }
+}
+
+void clearSession() {
+    DeleteFileW(sessionPath().c_str());
+}
+
 // Грубый разбор JSON-строки из bind-callback (catioSync)
 std::string jsonExtractStr(const std::string& req, const char* key) {
     std::string pat = std::string("\"") + key + "\":\"";
@@ -421,10 +471,27 @@ void checkServerAsync(const std::string& urlOnOk) {
     }).detach();
 }
 
+void layoutWebview() {
+    if (!g_hWnd || !g_webview) return;
+    RECT rc; GetClientRect(g_hWnd, &rc);
+    int top = g_coverMode ? 0 : TOP_HEIGHT;   // в режиме логина/404 — вебвью на весь экран
+    HWND child = FindWindowExW(g_hWnd, nullptr, nullptr, nullptr);
+    while (child) {
+        SetWindowPos(child, nullptr, 0, top,
+            rc.right, (std::max)(50L, rc.bottom - top), SWP_NOZORDER);
+        child = FindWindowExW(g_hWnd, child, nullptr, nullptr);
+    }
+}
+
+// Показывает кастомную 404 на весь экран. Навигации в сеть нет — нативной
+// ошибки WebView2 не будет ни при автоповторе, ни по кнопке.
 void showOfflinePage() {
     if (!g_webview) return;
-    g_webview->navigate(ERROR_HTML);
+    g_coverMode = true;
+    layoutWebview();
+    g_webview->set_html(ERROR_HTML);
     g_currentUrl = u8"Сервер недоступен";
+    SetTimer(g_hWnd, IDT_RETRY, 15000, nullptr); // кот тихо проверяет сервер раз в 15 сек
     InvalidateRect(g_hWnd, nullptr, FALSE);
 }
 
@@ -435,6 +502,11 @@ void navigateTo(const std::string& url, bool addHist = true) {
             g_history.resize(g_historyIndex + 1);
         g_history.push_back(url);
         g_historyIndex = (int)g_history.size() - 1;
+    }
+    KillTimer(g_hWnd, IDT_RETRY);               // сервер ответил — автоповтор не нужен
+    if (!g_authMode) {                          // логин остаётся на весь экран до конца
+        g_coverMode = false;
+        layoutWebview();
     }
     g_currentUrl = url;
     g_webview->navigate(url);
@@ -475,17 +547,6 @@ void switchSection(Section s) {
     g_currentSection = s;
     InvalidateRect(g_hWnd, nullptr, TRUE);
     checkServerAsync(sectionUrl(s));
-}
-
-void layoutWebview() {
-    if (!g_hWnd || !g_webview) return;
-    RECT rc; GetClientRect(g_hWnd, &rc);
-    HWND child = FindWindowExW(g_hWnd, nullptr, nullptr, nullptr);
-    while (child) {
-        SetWindowPos(child, nullptr, 0, TOP_HEIGHT,
-            rc.right, (std::max)(50L, rc.bottom - TOP_HEIGHT), SWP_NOZORDER);
-        child = FindWindowExW(g_hWnd, child, nullptr, nullptr);
-    }
 }
 
 void toggleMaximize() {
@@ -529,6 +590,76 @@ void loadLogo() {
     }
 }
 
+// ========== Всплывашка «Успешная авторизация» ==========
+// Layered-окно: рисуем битмап в памяти (иконка + текст) и показываем через
+// UpdateLayeredWindow. Держится ~1.8 сек, потом WM_TIMER пускает в интерфейс.
+void showAuthToast() {
+    const int W = 340, H = 96;
+    RECT rc; GetWindowRect(g_hWnd, &rc);
+    int x = rc.left + ((rc.right - rc.left) - W) / 2;
+    int y = rc.top  + ((rc.bottom - rc.top) - H) / 2;
+
+    g_toast = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        L"CATioToast", nullptr, WS_POPUP,
+        x, y, W, H, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!g_toast) { // запасной вариант — без всплывашки сразу в интерфейс
+        g_authMode = false;
+        navigateTo(STORE_URL);
+        return;
+    }
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = W;
+    bmi.bmiHeader.biHeight = -H;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HDC screen = GetDC(nullptr);
+    HBITMAP bmp = CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    HDC mem = CreateCompatibleDC(screen);
+    HGDIOBJ old = SelectObject(mem, bmp);
+
+    HBRUSH bg = CreateSolidBrush(RGB(26, 24, 20));
+    RECT r{0, 0, W, H};
+    FillRect(mem, &r, bg);
+    DeleteObject(bg);
+
+    if (g_hLogo) {
+        DrawIconEx(mem, 18, (H - 40) / 2, g_hLogo, 40, 40, 0, nullptr, DI_NORMAL);
+    }
+
+    drawText(mem, RECT{70, 12, W - 16, 48}, L"Авторизация успешна", COL_TEXT_BRT, 16, true, DT_LEFT);
+    std::wstring sub = L"Добро пожаловать, " + toWide(g_username);
+    drawText(mem, RECT{70, 46, W - 16, 80}, sub.c_str(), COL_BODY, 13, false, DT_LEFT);
+
+    // GDI-заливка не пишет альфу (остаётся 0), UpdateLayeredWindow требует
+    // premultiplied alpha — чиним: прозрачные-судя-по-GDI пиксели делаем opaque.
+    BYTE* p = (BYTE*)bits;
+    for (int i = 0; i < W * H; i++, p += 4) {
+        BYTE a = p[3] ? p[3] : 255;
+        p[0] = (BYTE)(p[0] * a / 255);
+        p[1] = (BYTE)(p[1] * a / 255);
+        p[2] = (BYTE)(p[2] * a / 255);
+        p[3] = a;
+    }
+
+    POINT dst{x, y}, src{0, 0};
+    SIZE sz{W, H};
+    BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(g_toast, screen, &dst, &sz, mem, &src, 0, &bf, ULW_ALPHA);
+
+    SelectObject(mem, old);
+    DeleteDC(mem);
+    DeleteObject(bmp);
+    ReleaseDC(nullptr, screen);
+
+    ShowWindow(g_toast, SW_SHOWNA);
+    SetTimer(g_hWnd, IDT_TOAST, 1800, nullptr);
+}
+
 // ========== Window Proc ==========
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static int hoverId = 0;
@@ -545,8 +676,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_CATIO_CHECK_DONE:
         // Проверка сервера завершилась в фоне: переходим или показываем «кот в запое»
-        if (wParam) navigateTo(g_pendingUrl);
-        else showOfflinePage();
+        if (wParam) {
+            if (g_authMode) {
+                // логин-страница остаётся на весь экран (cover не снимаем)
+                KillTimer(hWnd, IDT_RETRY);
+                g_webview->navigate(g_pendingUrl);
+                g_currentUrl = g_pendingUrl;
+            } else {
+                navigateTo(g_pendingUrl);
+            }
+        } else {
+            showOfflinePage();
+        }
+        break;
+
+    case WM_TIMER:
+        if (wParam == IDT_RETRY) {
+            // Тихая проверка: если сервер поднялся — navigateTo сам уберёт 404.
+            // Навигации на мёртвый URL не происходит никогда -> нативной ошибки нет.
+            checkServerAsync(g_pendingUrl);
+        } else if (wParam == IDT_TOAST) {
+            KillTimer(hWnd, IDT_TOAST);
+            if (g_toast) { DestroyWindow(g_toast); g_toast = nullptr; }
+            g_authMode = false;
+            navigateTo(STORE_URL); // всплывашка отработала — пускаем к интерфейсу
+        }
         break;
 
     case WM_KEYDOWN:
@@ -557,6 +711,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         break;
 
     case WM_PAINT: {
+        if (g_coverMode) { // вебвью на весь экран — панель рисовать не нужно
+            PAINTSTRUCT ps;
+            BeginPaint(hWnd, &ps);
+            EndPaint(hWnd, &ps);
+            break;
+        }
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
         RECT rc; GetClientRect(hWnd, &rc);
@@ -812,11 +972,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (mi.id == 1) {
                         g_menuOpen = false;
                         InvalidateRect(hWnd, nullptr, FALSE);
-                        MessageBoxW(hWnd, u8"Настройки скоро появятся. Кот ещё их пакует.", L"CATio", MB_OK | MB_ICONINFORMATION);
+                        MessageBoxW(hWnd, L"Настройки скоро появятся. Кот ещё их пакует.", L"CATio", MB_OK | MB_ICONINFORMATION);
                     } else if (mi.id == 2) {
                         g_menuOpen = false;
                         InvalidateRect(hWnd, nullptr, FALSE);
-                        // Выход через JS страницы (разлогинит и перекинет в каталог)
+                        clearSession();
+                        // Разлогин на странице; catioSync с authorized:false сам
+                        // перекинет на логин на весь экран
                         if (g_webview) g_webview->eval("try{logout()}catch(e){}");
                     }
                     break;
@@ -905,6 +1067,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_ERASEBKGND: return 1;
 
     case WM_DESTROY:
+        KillTimer(hWnd, IDT_RETRY);
+        KillTimer(hWnd, IDT_TOAST);
+        if (g_toast) { DestroyWindow(g_toast); g_toast = nullptr; }
         if (g_hLogo) { DestroyIcon(g_hLogo); g_hLogo = nullptr; }
         FreeAllIcons();
         PostQuitMessage(0);
@@ -919,6 +1084,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
     INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES };
     InitCommonControlsEx(&icc);
+
+    // Класс для всплывашки авторизации (layered-окно, рисуем через UpdateLayeredWindow)
+    WNDCLASSEXW twc = {};
+    twc.cbSize = sizeof(twc);
+    twc.lpfnWndProc = DefWindowProcW;
+    twc.hInstance = hInst;
+    twc.lpszClassName = L"CATioToast";
+    RegisterClassExW(&twc);
 
     loadLogo();
     LoadAllIcons();
@@ -961,17 +1134,46 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
         g_webview->bind("catioSync", [](const std::string& req) -> std::string {
             bool auth = req.find("\"authorized\":true") != std::string::npos
                      || req.find("\"authorized\": true") != std::string::npos;
+            bool becameAuthed = auth && g_guest;
+            bool becameGuest   = !auth && !g_guest;
             g_guest = !auth;
             std::string name = jsonExtractStr(req, "username");
             if (name.empty()) name = u8"Гость";
             g_username = name;
             g_balance = auth ? formatBalance(jsonExtractInt(req, "balance")) : "";
+
+            if (becameAuthed) {
+                saveSession();
+                if (g_authMode) showAuthToast(); // лого + «успешно», потом WM_TIMER -> интерфейс
+            }
+            if (becameGuest) {
+                // сессия протухла или вышли — обратно на логин на весь экран
+                clearSession();
+                g_authMode = true;
+                g_coverMode = true;
+                layoutWebview();
+                checkServerAsync(AUTH_URL);
+            }
+
             if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
             return "";
         });
 
-        // Проверка сервера в фоне — окно не виснет на старте
-        checkServerAsync(STORE_URL);
+        // Кнопка «Попробовать снова» на 404 — проверяем сервер из C++,
+        // вебвью на мёртвый URL не уходит, нативной ошибки нет.
+        g_webview->bind("catioRetry", [](const std::string&) -> std::string {
+            KillTimer(g_hWnd, IDT_RETRY);
+            checkServerAsync(g_pendingUrl);
+            return "";
+        });
+
+        // Поток запуска: сервер лежит -> 404 на весь экран (таймер сам дождётся
+        // сервер); не авторизован -> логин на весь экран; иначе -> каталог.
+        bool authed = loadSession();
+        g_authMode  = !authed;
+        g_coverMode = true;
+        layoutWebview();
+        checkServerAsync(authed ? STORE_URL : AUTH_URL);
     } catch (const std::exception& e) {
         showError(L"CATio", L"Ошибка WebView2:\n" + toWide(e.what()));
         return 1;
