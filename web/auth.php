@@ -113,7 +113,7 @@ function getCurrentUser() {
 
     $db = getDB();
     $stmt = $db->prepare("
-        SELECT u.id, u.username, u.email, u.role, u.balance, u.avatar, u.created_at
+        SELECT u.id, u.username, u.email, u.role, u.balance, u.avatar, u.avatar_color, u.created_at
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.id = ? AND s.expires_at > NOW()
@@ -205,6 +205,8 @@ function getAuthState() {
             'role' => $user['role'],
             'balance' => (int)$user['balance'],
             'avatar' => $user['avatar'],
+            'avatar_color' => $user['avatar_color'] ?? '#ef5b2c',
+            'created_at' => $user['created_at'],
         ] : null,
         'csrf_token' => generateCsrfToken(),
     ];

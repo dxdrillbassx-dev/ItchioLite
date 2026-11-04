@@ -1,5 +1,7 @@
 -- Auto-created schema for local XAMPP / phpMyAdmin
 -- Database: itch_steam_local
+-- На практике схему создаёт и мигрирует web/db.php — этот файл для справки
+-- и ручного развёртывания через phpMyAdmin.
 
 CREATE DATABASE IF NOT EXISTS itch_steam_local
   CHARACTER SET utf8mb4
@@ -16,11 +18,12 @@ CREATE TABLE IF NOT EXISTS users (
   role ENUM('admin','developer','user') NOT NULL DEFAULT 'user',
   balance INT NOT NULL DEFAULT 0,
   avatar VARCHAR(10) NOT NULL DEFAULT '',
+  avatar_color VARCHAR(7) NOT NULL DEFAULT '#ef5b2c',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- Sessions (авторизация по куке catio_session)
+-- Sessions (авторизация по куке catio_sid)
 CREATE TABLE IF NOT EXISTS sessions (
   id VARCHAR(64) PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL,
@@ -33,37 +36,47 @@ CREATE TABLE IF NOT EXISTS sessions (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- Games (like itch.io games)
+-- Games & asset packs (category: game | asset)
 CREATE TABLE IF NOT EXISTS games (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
-  slug VARCHAR(255) NOT NULL UNIQUE,
+  slug VARCHAR(255) NOT NULL DEFAULT '',
   short_description VARCHAR(512) DEFAULT NULL,
   description TEXT,
-  cover_url VARCHAR(512) DEFAULT NULL,
-  price DECIMAL(10,2) DEFAULT 0.00,          -- 0 = free
+  developer VARCHAR(255) NOT NULL DEFAULT '',
   developer_name VARCHAR(128) DEFAULT NULL,
+  price DECIMAL(10,2) DEFAULT 0.00,          -- 0 = free
+  category ENUM('game','asset') NOT NULL DEFAULT 'game',
+  genre VARCHAR(100) NOT NULL DEFAULT '',
   tags VARCHAR(512) DEFAULT NULL,            -- comma-separated
+  cover VARCHAR(255) NOT NULL DEFAULT '',
+  cover_url VARCHAR(512) DEFAULT NULL,
+  cover_emoji VARCHAR(8) NOT NULL DEFAULT '🎮',
+  cover_color VARCHAR(7) NOT NULL DEFAULT '#ef5b2c',
+  rating DECIMAL(3,1) NOT NULL DEFAULT 0.0,
   download_count INT UNSIGNED DEFAULT 0,
   is_published TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_genre (genre),
+  INDEX idx_category (category),
   INDEX idx_published (is_published),
   INDEX idx_price (price)
 ) ENGINE=InnoDB;
 
--- User library (owned / claimed games)
+-- User library (owned / claimed games and assets)
 CREATE TABLE IF NOT EXISTS library (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL,
   game_id INT UNSIGNED NOT NULL,
-  acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY unique_user_game (user_id, game_id),
+  added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_played TIMESTAMP NULL DEFAULT NULL,
+  UNIQUE KEY uniq_user_game (user_id, game_id),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- Simple download links / builds
+-- Download links / builds
 CREATE TABLE IF NOT EXISTS game_builds (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   game_id INT UNSIGNED NOT NULL,
@@ -75,11 +88,49 @@ CREATE TABLE IF NOT EXISTS game_builds (
   FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- Seed some demo games (itch.io style)
-INSERT IGNORE INTO games (title, slug, short_description, description, cover_url, price, developer_name, tags) VALUES
-('Celeste Classic', 'celeste-classic', 'A challenging precision platformer', 'Climb a mountain and face your inner demons in this tight platformer.', 'https://img.itch.zone/aW1nLzM5NzU2MzEucG5n/original/placeholder.png', 0.00, 'Maddy Makes Games', 'platformer,indie,pixel'),
-('Stardew Valley', 'stardew-valley', 'Relaxing farming RPG', 'Build the farm of your dreams and become part of the local community.', 'https://img.itch.zone/aW1nLzM5NzU2MzEucG5n/original/placeholder.png', 14.99, 'ConcernedApe', 'farming,rpg,simulation'),
-('Hollow Knight', 'hollow-knight', 'Epic action-adventure', 'Explore a vast interconnected world of insects and heroes.', 'https://img.itch.zone/aW1nLzM5NzU2MzEucG5n/original/placeholder.png', 14.99, 'Team Cherry', 'metroidvania,action,indie'),
-('A Short Hike', 'a-short-hike', 'Peaceful exploration', 'Hike, climb, and fly around a lovely mountain in this charming adventure.', 'https://img.itch.zone/aW1nLzM5NzU2MzEucG5n/original/placeholder.png', 7.99, 'adamgryu', 'exploration,relaxing,indie'),
-('Undertale', 'undertale', 'The RPG where you don\'t have to kill anyone', 'A unique RPG with a heart.', 'https://img.itch.zone/aW1nLzM5NzU2MzEucG5n/original/placeholder.png', 9.99, 'tobyfox', 'rpg,indie,story'),
-('Balatro', 'balatro', 'Poker roguelike', 'Combine poker hands with wild jokers in this addictive deckbuilder.', 'https://img.itch.zone/aW1nLzM5NzU2MzEucG5n/original/placeholder.png', 14.99, 'LocalThunk', 'roguelike,poker,indie');
+-- Screenshots for game pages (itch.io style)
+CREATE TABLE IF NOT EXISTS game_screenshots (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  game_id INT UNSIGNED NOT NULL,
+  image_url VARCHAR(512) NOT NULL,
+  sort INT NOT NULL DEFAULT 0,
+  INDEX idx_game (game_id),
+  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Comments on game pages
+CREATE TABLE IF NOT EXISTS comments (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  game_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_game (game_id),
+  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Ratings (1-5, one per user per game)
+CREATE TABLE IF NOT EXISTS ratings (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  game_id INT UNSIGNED NOT NULL,
+  value TINYINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_user_game (user_id, game_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Purchase history
+CREATE TABLE IF NOT EXISTS purchases (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  game_id INT UNSIGNED NOT NULL,
+  price_paid DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user (user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

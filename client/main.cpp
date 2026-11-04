@@ -67,12 +67,12 @@ a:hover{filter:brightness(1.1)}
 <p class="hint">Кот сам проверит сервер каждые 15 секунд</p>
 </div></body></html>)HTML";
 
-const int TOP_HEIGHT = 128;       // верхний отступ = LOGO_MARGIN
+const int TOP_HEIGHT = 108;       // вся шапка (табы + URL-строка) стала тоньше на 20px
 const int ICON_SIZE_WIN = 8;      // кнопки окна — в 2 раза меньше
 const int ICON_SIZE_ARROW = 18;
 const int ICON_SIZE_REFRESH = 12;
 const int LOGO_SIZE = 36;         // logo.ico и аватар одного размера
-const int LOGO_MARGIN = 52;       // отступ лого слева и сверху от края окна
+const int LOGO_MARGIN = 32;       // отступ лого слева и сверху от края окна
 const int MENU_W = 230;           // как .user-menu width в веб
 const int MENU_RADIUS = 8;        // var(--radius)
 const int MENU_HH = 52;           // шапка: имя + почта
@@ -1133,7 +1133,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // Меню рисуется в отдельном popup-окне (openAvatarMenu), не здесь.
 
         // ===== ROW 2: стрелки + refresh + url =====
-        int y2 = 100;
+        int y2 = 80;
         int h2 = 22;
 
         int ax = 53;
