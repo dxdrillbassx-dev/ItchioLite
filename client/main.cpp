@@ -67,16 +67,25 @@ a:hover{filter:brightness(1.1)}
 <p class="hint">Кот сам проверит сервер каждые 15 секунд</p>
 </div></body></html>)HTML";
 
-const int TOP_HEIGHT = 118;
-const int ICON_SIZE_WIN = 16;
-const int ICON_SIZE_ARROW = 22;
-const int ICON_SIZE_REFRESH = 14;
+const int TOP_HEIGHT = 128;       // верхний отступ = LOGO_MARGIN
+const int ICON_SIZE_WIN = 8;      // кнопки окна — в 2 раза меньше
+const int ICON_SIZE_ARROW = 18;
+const int ICON_SIZE_REFRESH = 12;
+const int LOGO_SIZE = 36;         // logo.ico и аватар одного размера
+const int LOGO_MARGIN = 52;       // отступ лого слева и сверху от края окна
+const int MENU_W = 230;           // как .user-menu width в веб
+const int MENU_RADIUS = 8;        // var(--radius)
+const int MENU_HH = 52;           // шапка: имя + почта
+const int MENU_BH = 40;           // строка баланса
+const int MENU_IH = 44;           // пункты
+const int MENU_H = MENU_HH + MENU_BH + MENU_IH * 2;
+const int MENU_GAP = 10;          // top: calc(100% + 10px)
 
 const COLORREF COL_BG       = RGB(18, 17, 14);
 const COLORREF COL_TABROW   = RGB(26, 24, 20);
-const COLORREF COL_CARD     = RGB(34, 31, 26);
+const COLORREF COL_CARD     = RGB(34, 31, 26);   // --bg-card #221f1a
 const COLORREF COL_HOVER    = RGB(46, 42, 36);
-const COLORREF COL_BORDER   = RGB(46, 42, 36);
+const COLORREF COL_BORDER   = RGB(46, 42, 36);   // --border #2e2a24 ~
 const COLORREF COL_ACCENT   = RGB(239, 91, 44);
 const COLORREF COL_TEXT     = RGB(160, 150, 140);
 const COLORREF COL_TEXT_BRT = RGB(255, 255, 255);
@@ -126,9 +135,10 @@ RECT g_restoreRect = {};
 std::atomic<bool> g_checkBusy{ false };
 std::string g_pendingUrl;
 
-// Меню под аватаркой
+// Меню под аватаркой — отдельное popup-окно поверх webview
 bool g_menuOpen = false;
 int g_menuHover = -1;
+HWND g_menuWnd = nullptr;
 RECT g_avatarRect = {};
 RECT g_menuRect = {};
 
@@ -486,7 +496,7 @@ void checkServerAsync(const std::string& urlOnOk) {
 void layoutWebview() {
     if (!g_hWnd || !g_webview) return;
     RECT rc; GetClientRect(g_hWnd, &rc);
-    int top = g_coverMode ? 0 : TOP_HEIGHT;   // в режиме логина/404 — вебвью на весь экран
+    int top = g_coverMode ? 0 : TOP_HEIGHT;
     HWND child = FindWindowExW(g_hWnd, nullptr, nullptr, nullptr);
     while (child) {
         SetWindowPos(child, nullptr, 0, top,
@@ -494,6 +504,11 @@ void layoutWebview() {
         child = FindWindowExW(g_hWnd, child, nullptr, nullptr);
     }
 }
+
+// Вперёд-объявления меню (реализация ниже, рядом с WndProc)
+void closeAvatarMenu();
+void openAvatarMenu();
+void paintAvatarMenu(HDC hdc, int w, int h);
 
 // Показывает кастомную 404 на весь экран. Навигации в сеть нет — нативной
 // ошибки WebView2 не будет ни при автоповторе, ни по кнопке.
@@ -659,6 +674,7 @@ void showAuthToast() {
         x, y, W, H, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!g_toast) { // запасной вариант — без всплывашки сразу в интерфейс
         g_authMode = false;
+        g_currentSection = Section::Store;
         navigateTo(STORE_URL);
         return;
     }
@@ -715,6 +731,173 @@ void showAuthToast() {
     SetTimer(g_hWnd, IDT_TOAST, 1800, nullptr);
 }
 
+// ========== Меню аватара (popup поверх webview, без сдвига) ==========
+void closeAvatarMenu() {
+    if (g_menuWnd) {
+        DestroyWindow(g_menuWnd);
+        g_menuWnd = nullptr;
+    }
+    g_menuOpen = false;
+    g_menuHover = -1;
+    g_menuItems.clear();
+    if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
+}
+
+void paintAvatarMenu(HDC hdc, int w, int h) {
+    // Фон + скругление как .user-menu { border-radius: 8px }
+    HBRUSH mbg = CreateSolidBrush(COL_CARD);
+    HPEN borderPen = CreatePen(PS_SOLID, 1, COL_BORDER);
+    HGDIOBJ oldBr = SelectObject(hdc, mbg);
+    HGDIOBJ oldPn = SelectObject(hdc, borderPen);
+    RoundRect(hdc, 0, 0, w, h, MENU_RADIUS * 2, MENU_RADIUS * 2);
+    SelectObject(hdc, oldBr);
+    SelectObject(hdc, oldPn);
+    DeleteObject(mbg);
+    DeleteObject(borderPen);
+
+    g_menuItems.clear();
+
+    // .user-menu-head — имя + почта
+    RECT hR = { 16, 0, w - 16, MENU_HH };
+    g_menuItems.push_back({ hR, 0 });
+    RECT rName = { hR.left, 12, hR.right, 32 };
+    drawText(hdc, rName, toWide(g_username).c_str(), COL_TEXT_BRT, 15, true, DT_LEFT);
+    RECT rMail = { hR.left, 30, hR.right, 48 };
+    drawText(hdc, rMail, toWide(g_email).c_str(), COL_MUTED, 12, false, DT_LEFT);
+
+    // разделитель под шапкой
+    HPEN sep = CreatePen(PS_SOLID, 1, COL_BORDER);
+    HPEN os = (HPEN)SelectObject(hdc, sep);
+    MoveToEx(hdc, 0, MENU_HH, nullptr);
+    LineTo(hdc, w, MENU_HH);
+
+    // .user-menu-balance
+    RECT bR = { 16, MENU_HH, w - 16, MENU_HH + MENU_BH };
+    g_menuItems.push_back({ bR, 0 });
+    drawText(hdc, bR, L"Баланс", COL_MUTED, 13, false, DT_LEFT);
+    std::wstring bal = toWide(g_balance.empty() ? "0 \xE2\x82\xBD" : g_balance);
+    drawText(hdc, bR, bal.c_str(), COL_ACCENT, 15, true, DT_RIGHT);
+
+    MoveToEx(hdc, 0, MENU_HH + MENU_BH, nullptr);
+    LineTo(hdc, w, MENU_HH + MENU_BH);
+    SelectObject(hdc, os);
+    DeleteObject(sep);
+
+    // .user-menu-item / .user-menu-item.danger
+    struct Item { const wchar_t* txt; int id; bool danger; };
+    Item items[] = { { L"⚙  Настройки", 1, false }, { L"↪  Выйти", 2, true } };
+    int iy = MENU_HH + MENU_BH;
+    for (auto& it : items) {
+        RECT r = { 0, iy, w, iy + MENU_IH };
+        g_menuItems.push_back({ r, it.id });
+        if (g_menuHover == it.id) {
+            HBRUSH hb = CreateSolidBrush(COL_HOVER);
+            FillRect(hdc, &r, hb);
+            DeleteObject(hb);
+        }
+        RECT tr = { 16, r.top, w - 16, r.bottom };
+        COLORREF col = COL_BODY;
+        if (g_menuHover == it.id)
+            col = it.danger ? COL_ACCENT : COL_TEXT_BRT;
+        drawText(hdc, tr, it.txt, col, 14, false, DT_LEFT);
+        iy += MENU_IH;
+    }
+}
+
+LRESULT CALLBACK MenuWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+        RECT rc; GetClientRect(hWnd, &rc);
+        paintAvatarMenu(hdc, rc.right, rc.bottom);
+        EndPaint(hWnd, &ps);
+        return 0;
+    }
+    case WM_MOUSEMOVE: {
+        int mx = GET_X_LPARAM(lParam);
+        int my = GET_Y_LPARAM(lParam);
+        int old = g_menuHover;
+        g_menuHover = -1;
+        for (const auto& mi : g_menuItems) {
+            if (mi.id != 0 && mx >= mi.rc.left && mx <= mi.rc.right &&
+                my >= mi.rc.top && my <= mi.rc.bottom) {
+                g_menuHover = mi.id;
+                break;
+            }
+        }
+        if (g_menuHover != old) InvalidateRect(hWnd, nullptr, FALSE);
+        return 0;
+    }
+    case WM_LBUTTONDOWN: {
+        int mx = GET_X_LPARAM(lParam);
+        int my = GET_Y_LPARAM(lParam);
+        for (const auto& mi : g_menuItems) {
+            if (mx >= mi.rc.left && mx <= mi.rc.right &&
+                my >= mi.rc.top && my <= mi.rc.bottom) {
+                if (mi.id == 1) {
+                    closeAvatarMenu();
+                    MessageBoxW(g_hWnd, L"Настройки скоро появятся. Кот ещё их пакует.", L"CATio", MB_OK | MB_ICONINFORMATION);
+                } else if (mi.id == 2) {
+                    closeAvatarMenu();
+                    clearSession();
+                    if (g_webview) g_webview->eval("try{logout()}catch(e){}");
+                }
+                return 0;
+            }
+        }
+        return 0;
+    }
+    case WM_ACTIVATE:
+        // Клик мимо — Windows шлёт WA_INACTIVE, закрываем меню
+        if (LOWORD(wParam) == WA_INACTIVE) {
+            // Отложенно, чтобы клик по аве мог переключить (toggle)
+            PostMessageW(g_hWnd, WM_APP + 50, 0, 0);
+        }
+        return 0;
+    case WM_DESTROY:
+        g_menuWnd = nullptr;
+        g_menuOpen = false;
+        return 0;
+    }
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+static bool g_ignoreMenuClose = false;
+
+void openAvatarMenu() {
+    if (g_guest) return;
+    // Toggle: если уже открыто — закрыть и не открывать снова в этом клике
+    if (g_menuWnd || g_menuOpen) {
+        g_ignoreMenuClose = true;
+        closeAvatarMenu();
+        return;
+    }
+
+    // Позиция: под аватаром, выровнено по правому краю авы (screen coords)
+    POINT pt = { g_avatarRect.right - MENU_W, g_avatarRect.bottom + MENU_GAP };
+    ClientToScreen(g_hWnd, &pt);
+    if (pt.x < 8) pt.x = 8;
+
+    g_menuWnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        L"CATioMenu", nullptr,
+        WS_POPUP | WS_VISIBLE,
+        pt.x, pt.y, MENU_W, MENU_H,
+        g_hWnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!g_menuWnd) return;
+
+    // Скругление окна как border-radius: 8px в веб-версии
+    HRGN rgn = CreateRoundRectRgn(0, 0, MENU_W + 1, MENU_H + 1, MENU_RADIUS * 2, MENU_RADIUS * 2);
+    SetWindowRgn(g_menuWnd, rgn, TRUE); // система владеет rgn после SetWindowRgn
+
+    g_menuOpen = true;
+    g_menuHover = -1;
+    SetWindowPos(g_menuWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    SetForegroundWindow(g_menuWnd);
+    InvalidateRect(g_menuWnd, nullptr, FALSE);
+}
+
 // ========== Window Proc ==========
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static int hoverId = 0;
@@ -754,7 +937,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             KillTimer(hWnd, IDT_TOAST);
             if (g_toast) { DestroyWindow(g_toast); g_toast = nullptr; }
             g_authMode = false;
-            navigateTo(STORE_URL); // всплывашка отработала — пускаем к интерфейсу
+            g_currentSection = Section::Store; // после входа всегда каталог, а не старый профиль
+            navigateTo(STORE_URL);
         }
         break;
 
@@ -787,9 +971,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_KEYDOWN:
         if (wParam == VK_ESCAPE && g_menuOpen) {
-            g_menuOpen = false;
-            InvalidateRect(hWnd, nullptr, FALSE);
+            closeAvatarMenu();
         }
+        break;
+
+    case WM_APP + 50: // отложенное закрытие меню после WA_INACTIVE
+        if (g_ignoreMenuClose) { g_ignoreMenuClose = false; break; }
+        closeAvatarMenu();
         break;
 
     case WM_PAINT: {
@@ -816,43 +1004,45 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         g_buttons.clear();
 
-        // ===== ROW 1 =====
-        int y1 = 18;
-        int h1 = 48;
-
-        // Фон строки табов — теперь весь цвета кнопок разделов (#1a1814)
+        // Весь верхний блок (табы + URL) одним цветом
         {
             HBRUSH rowBg = CreateSolidBrush(COL_TABROW);
-            RECT rowR = { 0, 0, rc.right, y1 + h1 };
+            RECT rowR = { 0, 0, rc.right, TOP_HEIGHT };
             FillRect(hdc, &rowR, rowBg);
             DeleteObject(rowBg);
         }
 
-        // Logo + CATio
-        int logoX = 62;
+        // ===== ROW 1: лого + вкладки + аватар =====
+        // сверху такой же отступ, как слева у лого
+        int logoTop = LOGO_MARGIN;
+        int y1 = logoTop;
+        int h1 = LOGO_SIZE;
+
+        // Logo + CATio (отступ слева = LOGO_MARGIN)
+        int logoX = LOGO_MARGIN;
         if (g_hLogo) {
-            DrawIconEx(hdc, logoX, y1 + 4, g_hLogo, 40, 40, 0, nullptr, DI_NORMAL);
-            logoX += 52;
+            DrawIconEx(hdc, logoX, logoTop, g_hLogo, LOGO_SIZE, LOGO_SIZE, 0, nullptr, DI_NORMAL);
+            logoX += LOGO_SIZE + 10;
         } else {
             HBRUSH br = CreateSolidBrush(COL_ACCENT);
-            RECT box = { logoX, y1 + 4, logoX + 40, y1 + 44 };
+            RECT box = { logoX, logoTop, logoX + LOGO_SIZE, logoTop + LOGO_SIZE };
             FillRect(hdc, &box, br);
             DeleteObject(br);
-            drawText(hdc, box, L"C", COL_BG, 20, true, DT_CENTER);
-            logoX += 52;
+            drawText(hdc, box, L"C", COL_BG, 18, true, DT_CENTER);
+            logoX += LOGO_SIZE + 10;
         }
         {
-            RECT r = { logoX, y1, logoX + 120, y1 + h1 };
-            drawText(hdc, r, L"CATio", COL_ACCENT, 30, true, DT_LEFT);
+            RECT r = { logoX, y1, logoX + 100, y1 + h1 };
+            drawText(hdc, r, L"CATio", COL_ACCENT, 26, true, DT_LEFT);
         }
 
         // Tabs
-        int x = 192;
+        int x = 170;
         auto addTab = [&](const wchar_t* label, int id, bool active, int w) {
             RECT r = { x, y1, x + w, y1 + h1 };
             g_buttons.push_back({ r, id });
             COLORREF col = active ? COL_ACCENT : (hoverId == id ? COL_TEXT_BRT : COL_TEXT);
-            drawText(hdc, r, label, col, 20, true, DT_CENTER);
+            drawText(hdc, r, label, col, 17, true, DT_CENTER);
             if (active) {
                 HPEN p2 = CreatePen(PS_SOLID, 3, COL_ACCENT);
                 HPEN o2 = (HPEN)SelectObject(hdc, p2);
@@ -863,19 +1053,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             x += w + 2;
         };
-        addTab(L"КАТАЛОГ",    ID_STORE,     g_currentSection == Section::Store,     120);
-        addTab(L"БИБЛИОТЕКА", ID_LIBRARY,   g_currentSection == Section::Library,   135);
-        addTab(L"МАСТЕРСКАЯ", ID_COMMUNITY, g_currentSection == Section::Community, 135);
+        addTab(L"КАТАЛОГ",    ID_STORE,     g_currentSection == Section::Store,     110);
+        addTab(L"БИБЛИОТЕКА", ID_LIBRARY,   g_currentSection == Section::Library,   125);
+        addTab(L"МАСТЕРСКАЯ", ID_COMMUNITY, g_currentSection == Section::Community, 125);
 
         {
-            // У гостя вместо ника — кнопка ВОЙТИ
-            std::wstring nickUp = g_guest ? L"ВОЙТИ" : toUpperW(g_username);
+            // У гостя — ВОЙТИ, у авторизованного — ник ВЕРХНИМ РЕГИСТРОМ
+            std::wstring tabLabel = g_guest ? L"ВОЙТИ" : toUpperW(g_username);
+            // ширина под текст ника
             int w = 100;
+            {
+                HDC tmp = GetDC(hWnd);
+                HFONT f = CreateFontW(17, 0, 0, 0, FW_BOLD, 0, 0, 0,
+                    DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+                HFONT old = (HFONT)SelectObject(tmp, f);
+                SIZE sz = {};
+                GetTextExtentPoint32W(tmp, tabLabel.c_str(), (int)tabLabel.size(), &sz);
+                SelectObject(tmp, old);
+                DeleteObject(f);
+                ReleaseDC(hWnd, tmp);
+                w = (std::max)(80, (int)sz.cx + 24);
+            }
             RECT r = { x, y1, x + w, y1 + h1 };
             g_buttons.push_back({ r, ID_PROFILE });
             bool active = g_currentSection == Section::Profile && !g_guest;
             COLORREF col = active ? COL_ACCENT : (hoverId == ID_PROFILE ? COL_TEXT_BRT : COL_TEXT);
-            drawText(hdc, r, nickUp.c_str(), col, 20, true, DT_CENTER);
+            drawText(hdc, r, tabLabel.c_str(), col, 17, true, DT_CENTER);
             if (active) {
                 HPEN p2 = CreatePen(PS_SOLID, 3, COL_ACCENT);
                 HPEN o2 = (HPEN)SelectObject(hdc, p2);
@@ -886,22 +1089,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
         }
 
-        // Right side: window buttons
-        int rx = rc.right - 12;
+        // ===== Кнопки окна — отдельный блок у верхнего правого угла =====
+        const int winBtnSize = 22;
+        const int winBtnGap  = 2;
+        int winY = 8;
+        int rx = rc.right - 6;
         auto addWinBtn = [&](const IconSet& ico, int id) {
-            RECT r = { rx - 36, y1, rx, y1 + h1 };
+            RECT r = { rx - winBtnSize, winY, rx, winY + winBtnSize };
             g_buttons.push_back({ r, id });
             DrawIconCentered(hdc, ico, r, ICON_SIZE_WIN, hoverId == id);
-            rx -= 40;
+            rx -= (winBtnSize + winBtnGap);
         };
         addWinBtn(g_icoClose, ID_CLOSE);
         addWinBtn(g_maximized ? g_icoRestore : g_icoMaximize, ID_MAX);
         addWinBtn(g_icoMinimiz, ID_MIN);
 
-        // Avatar (кликабельная — открывает меню)
-        int av = 32;
-        int avX = rx - av - 6;
-        int avY = y1 + (h1 - av) / 2;
+        // Avatar левее кнопок окна, верх = как у лого (LOGO_MARGIN от края)
+        int av = LOGO_SIZE;
+        int avX = rx - 12 - av;   // сдвиг влево от кнопок
+        int avY = logoTop;
         HBRUSH abr = CreateSolidBrush(COL_ACCENT);
         HPEN apn = CreatePen(PS_SOLID, 1, COL_ACCENT);
         HGDIOBJ ob = SelectObject(hdc, abr);
@@ -922,105 +1128,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             DeleteObject(ring);
         }
         std::wstring avLetter = g_guest ? L"?" : toUpperW(g_username.substr(0, 1));
-        drawText(hdc, rAv, avLetter.c_str(), COL_BG, 14, true, DT_CENTER);
-        rx = avX - 10;
+        drawText(hdc, rAv, avLetter.c_str(), COL_BG, 16, true, DT_CENTER);
 
-        // Username (баланс из шапки убран — он живёт в меню под аватаркой)
-        if (!g_guest) {
-            std::wstring nick = toWide(g_username);
-            RECT r = { rx - 80, y1, rx, y1 + h1 };
-            drawText(hdc, r, nick.c_str(), COL_TEXT_BRT, 16, false, DT_RIGHT);
-        }
+        // Меню рисуется в отдельном popup-окне (openAvatarMenu), не здесь.
 
-        // ===== МЕНЮ ПОД АВАТАРКОЙ (как на сайте) =====
-        if (g_menuOpen && !g_guest) {
-            const int mw = 250;
-            const int hh = 52;   // шапка: имя + почта
-            const int bh = 34;   // строка баланса
-            const int ih = 40;   // пункты меню
-            int mx = g_avatarRect.right - mw;
-            if (mx < 8) mx = 8;
-            int my = g_avatarRect.bottom + 8;
-            RECT m = { mx, my, mx + mw, my + hh + bh + 1 + ih * 2 };
-            g_menuRect = m;
+        // ===== ROW 2: стрелки + refresh + url =====
+        int y2 = 100;
+        int h2 = 22;
 
-            HBRUSH mbg = CreateSolidBrush(COL_CARD);
-            FillRect(hdc, &m, mbg);
-            DeleteObject(mbg);
-            HBRUSH bbr = CreateSolidBrush(COL_BORDER);
-            FrameRect(hdc, &m, bbr);
-            DeleteObject(bbr);
-
-            g_menuItems.clear();
-
-            // Шапка: имя + почта
-            RECT hR = { mx + 14, my, mx + mw - 14, my + hh };
-            g_menuItems.push_back({ hR, 0 });
-            RECT rName = { hR.left, hR.top + 8, hR.right, hR.top + 30 };
-            drawText(hdc, rName, toWide(g_username).c_str(), COL_TEXT_BRT, 15, true, DT_LEFT);
-            RECT rMail = { hR.left, hR.top + 28, hR.right, hR.top + 50 };
-            drawText(hdc, rMail, toWide(g_email).c_str(), COL_MUTED, 12, false, DT_LEFT);
-
-            // Баланс: подпись слева, сумма справа
-            RECT bR = { mx + 14, my + hh, mx + mw - 14, my + hh + bh };
-            g_menuItems.push_back({ bR, 0 });
-            drawText(hdc, bR, L"Баланс", COL_MUTED, 13, false, DT_LEFT);
-            std::wstring bal = toWide(g_balance.empty() ? "0 \xE2\x82\xBD" : g_balance);
-            drawText(hdc, bR, bal.c_str(), COL_ACCENT, 15, true, DT_RIGHT);
-
-            HPEN sep = CreatePen(PS_SOLID, 1, COL_BORDER);
-            HPEN os = (HPEN)SelectObject(hdc, sep);
-            MoveToEx(hdc, mx, my + hh + bh, nullptr);
-            LineTo(hdc, mx + mw, my + hh + bh);
-            SelectObject(hdc, os);
-            DeleteObject(sep);
-
-            struct Item { const wchar_t* txt; int id; bool danger; };
-            Item items[] = { { L"⚙  Настройки", 1, false }, { L"↪  Выйти", 2, true } };
-            int iy = my + hh + bh + 1;
-            for (auto& it : items) {
-                RECT r = { mx, iy, mx + mw, iy + ih };
-                g_menuItems.push_back({ r, it.id });
-                if (g_menuHover == it.id) {
-                    HBRUSH hb = CreateSolidBrush(COL_HOVER);
-                    FillRect(hdc, &r, hb);
-                    DeleteObject(hb);
-                }
-                RECT tr = { r.left + 14, r.top, r.right - 14, r.bottom };
-                COLORREF col = (g_menuHover == it.id && it.danger) ? COL_ACCENT : COL_BODY;
-                drawText(hdc, tr, it.txt, col, 14, false, DT_LEFT);
-                iy += ih;
-            }
-        }
-
-        // ===== ROW 2: arrows under logo + refresh + url =====
-        int y2 = 78;
-        int h2 = 28;
-
-        int ax = 57;
+        int ax = 53;
         bool canBack    = g_historyIndex > 0;
         bool canForward = g_historyIndex + 1 < (int)g_history.size();
 
         {
-            RECT r = { ax, y2, ax + 26, y2 + h2 };
+            RECT r = { ax, y2, ax + 22, y2 + h2 };
             g_buttons.push_back({ r, ID_BACK });
             DrawIconCentered(hdc, g_icoBack, r, ICON_SIZE_ARROW, hoverId == ID_BACK && canBack, canBack);
-            ax += 26;
+            ax += 22;
         }
         {
-            RECT r = { ax, y2, ax + 26, y2 + h2 };
+            RECT r = { ax, y2, ax + 22, y2 + h2 };
             g_buttons.push_back({ r, ID_FORWARD });
             DrawIconCentered(hdc, g_icoForward, r, ICON_SIZE_ARROW, hoverId == ID_FORWARD && canForward, canForward);
-            ax += 30;
+            ax += 24;
         }
         {
-            RECT r = { ax, y2, ax + 24, y2 + h2 };
+            RECT r = { ax, y2, ax + 20, y2 + h2 };
             g_buttons.push_back({ r, ID_REFRESH });
             DrawIconCentered(hdc, g_icoRefresh, r, ICON_SIZE_REFRESH, hoverId == ID_REFRESH, true);
-            ax += 28;
+            ax += 24;
         }
 
-        x = ax + 8;
+        x = ax + 6;
 
         std::wstring urlW = toWide(g_currentUrl);
         size_t p = urlW.find(L"?client=1");
@@ -1028,7 +1167,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         p = urlW.find(L"&client=1");
         if (p != std::wstring::npos) urlW = urlW.substr(0, p);
 
-        HFONT fUrl = CreateFontW(13, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
+        HFONT fUrl = CreateFontW(12, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
             DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
         HFONT oldF = (HFONT)SelectObject(hdc, fUrl);
         SIZE sz = {};
@@ -1039,7 +1178,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int urlWpx = sz.cx + 4;
         RECT rUrl = { x, y2, x + urlWpx, y2 + h2 };
         g_buttons.push_back({ rUrl, ID_URL });
-        drawText(hdc, rUrl, urlW.c_str(), hoverId == ID_URL ? COL_ACCENT : COL_URL, 13, false, DT_LEFT);
+        drawText(hdc, rUrl, urlW.c_str(), hoverId == ID_URL ? COL_ACCENT : COL_URL, 12, false, DT_LEFT);
 
         EndPaint(hWnd, &ps);
         break;
@@ -1048,34 +1187,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_LBUTTONDOWN: {
         int mx = GET_X_LPARAM(lParam);
         int my = GET_Y_LPARAM(lParam);
-
-        // Меню открыто — клики обрабатывает оно
-        if (g_menuOpen) {
-            bool inside = false;
-            for (const auto& mi : g_menuItems) {
-                if (mx >= mi.rc.left && mx <= mi.rc.right && my >= mi.rc.top && my <= mi.rc.bottom) {
-                    inside = true;
-                    if (mi.id == 1) {
-                        g_menuOpen = false;
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        MessageBoxW(hWnd, L"Настройки скоро появятся. Кот ещё их пакует.", L"CATio", MB_OK | MB_ICONINFORMATION);
-                    } else if (mi.id == 2) {
-                        g_menuOpen = false;
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        clearSession();
-                        // Разлогин на странице; catioSync с authorized:false сам
-                        // перекинет на логин на весь экран
-                        if (g_webview) g_webview->eval("try{logout()}catch(e){}");
-                    }
-                    break;
-                }
-            }
-            if (!inside) {
-                g_menuOpen = false;
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            return 0;
-        }
 
         for (const auto& b : g_buttons) {
             if (mx >= b.rc.left && mx <= b.rc.right && my >= b.rc.top && my <= b.rc.bottom) {
@@ -1088,11 +1199,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     case ID_COMMUNITY: switchSection(Section::Community); break;
                     case ID_PROFILE:   switchSection(Section::Profile); break;
                     case ID_AVATAR:
-                        if (!g_guest) {
-                            g_menuOpen = !g_menuOpen;
-                            g_menuHover = -1;
-                            InvalidateRect(hWnd, nullptr, FALSE);
-                        }
+                        if (!g_guest) openAvatarMenu(); // toggle: повторный клик закроет
                         break;
                     case ID_URL: {
                         std::string clean = g_currentUrl;
@@ -1153,6 +1260,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_ERASEBKGND: return 1;
 
     case WM_DESTROY:
+        closeAvatarMenu();
         trayRemove(); // иначе в трее останется «мёртвая» иконка
         KillTimer(hWnd, IDT_RETRY);
         KillTimer(hWnd, IDT_TOAST);
@@ -1179,6 +1287,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
     twc.hInstance = hInst;
     twc.lpszClassName = L"CATioToast";
     RegisterClassExW(&twc);
+
+    // Класс меню аватара (popup поверх webview)
+    WNDCLASSEXW mwc = {};
+    mwc.cbSize = sizeof(mwc);
+    mwc.lpfnWndProc = MenuWndProc;
+    mwc.hInstance = hInst;
+    mwc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    mwc.hbrBackground = CreateSolidBrush(COL_CARD);
+    mwc.lpszClassName = L"CATioMenu";
+    RegisterClassExW(&mwc);
 
     loadLogo();
     LoadAllIcons();
