@@ -45,7 +45,8 @@ const char* AUTH_URL      = "http://localhost/itch-steam-like/?view=auth&client=
 // без сети, поэтому нативный экран ошибки WebView2 невозможен в принципе.
 // Перезагрузка НЕ делается из HTML (никакого meta refresh) — кот тихо проверяет
 // сервер из C++ по таймеру (IDT_RETRY) и кнопкой через мост catioRetry().
-const char* ERROR_HTML = R"(<!DOCTYPE html><html><head><meta charset="utf-8">
+// Raw-строка с уникальным разделителем HTML: внутренние кавычки не ломают литерал.
+const char* ERROR_HTML = R"HTML(<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 body{margin:0;background:#12110e;color:#c7c0b8;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center}
 .box{max-width:460px;padding:40px}
@@ -63,7 +64,7 @@ a:hover{filter:brightness(1.1)}
 <p>Сервер CATio временно недоступен.<br>Проверь, что Apache и MySQL запущены в XAMPP.</p>
 <a onclick="catioRetry()">Попробовать снова</a>
 <p class="hint">Кот сам проверит сервер каждые 15 секунд</p>
-</div></body></html>)";
+</div></body></html>)HTML";
 
 const int TOP_HEIGHT = 118;
 const int ICON_SIZE_WIN = 16;
