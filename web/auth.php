@@ -113,7 +113,7 @@ function getCurrentUser() {
 
     $db = getDB();
     $stmt = $db->prepare("
-        SELECT u.id, u.username, u.email, u.role, u.balance, u.avatar, u.avatar_color, u.created_at
+        SELECT u.id, u.username, u.email, u.role, u.balance, u.avatar, u.avatar_color, u.avatar_url, u.banner_url, u.banner_pos, u.banner_zoom, u.karma, u.last_seen, u.is_online, u.lang, u.profile_visibility, u.media_visibility, u.allow_friend_requests, u.notif_prefs, u.created_at
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.id = ? AND s.expires_at > NOW()
@@ -206,6 +206,16 @@ function getAuthState() {
             'balance' => (int)$user['balance'],
             'avatar' => $user['avatar'],
             'avatar_color' => $user['avatar_color'] ?? '#ef5b2c',
+            'avatar_url' => $user['avatar_url'] ?? '',
+            'banner_url' => $user['banner_url'] ?? '',
+            'banner_pos' => $user['banner_pos'] ?? '50% 50%',
+            'banner_zoom' => (float)($user['banner_zoom'] ?? 1),
+            'karma' => (int)($user['karma'] ?? 0),
+            'lang' => $user['lang'] ?? 'ru',
+            'profile_visibility' => $user['profile_visibility'] ?? 'public',
+            'media_visibility' => $user['media_visibility'] ?? 'public',
+            'allow_friend_requests' => (int)($user['allow_friend_requests'] ?? 1),
+            'notif_prefs' => $user['notif_prefs'] ?? null,
             'created_at' => $user['created_at'],
         ] : null,
         'csrf_token' => generateCsrfToken(),

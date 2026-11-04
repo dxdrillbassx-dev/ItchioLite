@@ -1,0 +1,347 @@
+<?php
+// CATio — загрузка игр пользователями + модерация админом
+require_once __DIR__ . '/../auth.php';
+header('Content-Type: application/json; charset=utf-8');
+
+set_exception_handler(function ($e) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    exit;
+});
+
+$pdo = getDB();
+$method = $_SERVER['REQUEST_METHOD'];
+$action = $_GET['action'] ?? '';
+
+function jsonBodyS(): array {
+    $b = json_decode(file_get_contents('php://input'), true);
+    return is_array($b) ? $b : $_POST;
+}
+function requireUserS(): array {
+    $u = getCurrentUser();
+    if (!$u) {
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'error' => 'Нужно войти'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    return $u;
+}
+function requireAdminS(): array {
+    $u = requireUserS();
+    if (($u['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'Только для админов'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    return $u;
+}
+function slugify(string $s): string {
+    $s = mb_strtolower($s);
+    $s = preg_replace('/[^a-z0-9а-яё]+/ui', '-', $s);
+    $s = trim($s, '-');
+    return $s !== '' ? $s : ('game-' . time());
+}
+function saveUpload(string $field, string $dir, array $allowed, int $maxMb = 8): ?string {
+    if (empty($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
+    $f = $_FILES[$field];
+    if ($f['size'] > $maxMb * 1024 * 1024) throw new RuntimeException("Файл $field больше {$maxMb} МБ");
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($f['tmp_name']);
+    if (!isset($allowed[$mime])) throw new RuntimeException("Недопустимый тип $field");
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    $name = uniqid('g_', true) . '.' . $allowed[$mime];
+    if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $name)) throw new RuntimeException('Не удалось сохранить файл');
+    return 'uploads/games/' . basename($dir) . '/' . $name;
+}
+
+$imgAllowed = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif'];
+
+try {
+    switch ($action) {
+
+        // ===== ОТПРАВИТЬ НА МОДЕРАЦИЮ =====
+        case 'submit':
+            if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false]); break; }
+            $user = requireUserS();
+            if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+                http_response_code(403);
+                echo json_encode(['ok'=>false,'error'=>'CSRF'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $title = trim($_POST['title'] ?? '');
+            $desc = trim($_POST['description'] ?? '');
+            $short = trim($_POST['short_description'] ?? '');
+            $genre = trim($_POST['genre'] ?? '');
+            $video = trim($_POST['video_url'] ?? '');
+            $sysMin = trim($_POST['sys_req_min'] ?? '');
+            $sysRec = trim($_POST['sys_req_rec'] ?? '');
+            $controllers = trim($_POST['controllers'] ?? ''); // comma: xbox,playstation
+            $languages = trim($_POST['languages'] ?? '');
+            $price = (float)($_POST['price'] ?? 0);
+            $isAdult = !empty($_POST['is_adult']) ? 1 : 0;
+
+            if ($title === '' || mb_strlen($title) > 120) {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Название: 1–120 символов'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            if ($desc === '') {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Нужно описание'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            if ($genre === '') {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Укажите жанр'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
+            $base = dirname(__DIR__) . '/uploads/games';
+            $coverDir = $base . '/covers';
+            $bannerDir = $base . '/banners';
+            $shotDir = $base . '/shots';
+
+            $coverUrl = null;
+            try { $coverUrl = saveUpload('cover', $coverDir, $imgAllowed, 5); } catch (Throwable $e) {}
+            if (!$coverUrl) {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Нужна обложка'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $bannerUrl = null;
+            try { $bannerUrl = saveUpload('banner', $bannerDir, $imgAllowed, 8); } catch (Throwable $e) {}
+
+            $slug = slugify($title) . '-' . substr(uniqid(), -4);
+            $stmt = $pdo->prepare("
+                INSERT INTO games
+                  (title, slug, short_description, description, developer, developer_name, price, genre,
+                   cover_url, banner_url, video_url, sys_req_min, sys_req_rec, controllers, languages,
+                   status, is_published, submitted_by, is_adult)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',0,?,?)
+            ");
+            $stmt->execute([
+                $title, $slug, $short ?: mb_substr($desc, 0, 200), $desc,
+                $user['username'], $user['username'], $price, $genre,
+                $coverUrl, $bannerUrl, $video, $sysMin, $sysRec, $controllers, $languages,
+                (int)$user['id'], $isAdult,
+            ]);
+            $gameId = (int)$pdo->lastInsertId();
+
+            // screenshots[]
+            if (!empty($_FILES['screenshots'])) {
+                $files = $_FILES['screenshots'];
+                $count = is_array($files['name']) ? count($files['name']) : 0;
+                $order = 0;
+                for ($i = 0; $i < $count && $order < 10; $i++) {
+                    if ($files['error'][$i] !== UPLOAD_ERR_OK) continue;
+                    $tmp = [
+                        'name' => $files['name'][$i],
+                        'type' => $files['type'][$i],
+                        'tmp_name' => $files['tmp_name'][$i],
+                        'error' => $files['error'][$i],
+                        'size' => $files['size'][$i],
+                    ];
+                    // reuse save via temp $_FILES
+                    $_FILES['_shot'] = $tmp;
+                    try {
+                        $url = saveUpload('_shot', $shotDir, $imgAllowed, 6);
+                        if ($url) {
+                            $pdo->prepare("INSERT INTO game_media (game_id, kind, url, sort_order) VALUES (?,?,?,?)")
+                                ->execute([$gameId, 'screenshot', $url, $order++]);
+                        }
+                    } catch (Throwable $e) {}
+                }
+            }
+
+            // notify admins
+            try {
+                $admins = $pdo->query("SELECT id FROM users WHERE role = 'admin'")->fetchAll();
+                foreach ($admins as $a) {
+                    $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)")
+                        ->execute([
+                            (int)$a['id'], 'game_review',
+                            'Новая игра на модерации',
+                            $user['username'] . ' отправил «' . $title . '»',
+                            json_encode(['game_id' => $gameId], JSON_UNESCAPED_UNICODE),
+                        ]);
+                }
+            } catch (Throwable $e) {}
+
+            echo json_encode(['ok' => true, 'game_id' => $gameId], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ===== СПИСОК НА МОДЕРАЦИИ (admin) =====
+        case 'pending':
+            $user = requireAdminS();
+            $st = $pdo->query("
+                SELECT g.*, u.username AS submitter
+                FROM games g
+                LEFT JOIN users u ON u.id = g.submitted_by
+                WHERE g.status = 'pending'
+                ORDER BY g.created_at ASC
+            ");
+            $rows = $st->fetchAll();
+            foreach ($rows as &$r) {
+                $r['id'] = (int)$r['id'];
+                $media = $pdo->prepare("SELECT id, kind, url, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order");
+                $media->execute([$r['id']]);
+                $r['media'] = $media->fetchAll();
+            }
+            unset($r);
+            echo json_encode(['ok' => true, 'games' => $rows], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ===== ПОЛУЧИТЬ ОДНУ (admin) =====
+        case 'get':
+            $user = requireAdminS();
+            $id = (int)($_GET['id'] ?? 0);
+            $st = $pdo->prepare("SELECT g.*, u.username AS submitter FROM games g LEFT JOIN users u ON u.id = g.submitted_by WHERE g.id = ?");
+            $st->execute([$id]);
+            $g = $st->fetch();
+            if (!$g) {
+                http_response_code(404);
+                echo json_encode(['ok'=>false,'error'=>'Не найдено'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $media = $pdo->prepare("SELECT id, kind, url, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order");
+            $media->execute([$id]);
+            $g['media'] = $media->fetchAll();
+            echo json_encode(['ok' => true, 'game' => $g], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ===== АДМИН: СОХРАНИТЬ ПРАВКИ =====
+        case 'admin_save':
+            if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false]); break; }
+            $user = requireAdminS();
+            if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+                http_response_code(403);
+                echo json_encode(['ok'=>false,'error'=>'CSRF'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $id = (int)($_POST['id'] ?? 0);
+            $st = $pdo->prepare("SELECT id FROM games WHERE id = ?");
+            $st->execute([$id]);
+            if (!$st->fetch()) {
+                http_response_code(404);
+                echo json_encode(['ok'=>false,'error'=>'Не найдено'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
+            $fields = [
+                'title' => trim($_POST['title'] ?? ''),
+                'short_description' => trim($_POST['short_description'] ?? ''),
+                'description' => trim($_POST['description'] ?? ''),
+                'genre' => trim($_POST['genre'] ?? ''),
+                'video_url' => trim($_POST['video_url'] ?? ''),
+                'sys_req_min' => trim($_POST['sys_req_min'] ?? ''),
+                'sys_req_rec' => trim($_POST['sys_req_rec'] ?? ''),
+                'controllers' => trim($_POST['controllers'] ?? ''),
+                'languages' => trim($_POST['languages'] ?? ''),
+                'price' => (float)($_POST['price'] ?? 0),
+                'review_note' => trim($_POST['review_note'] ?? ''),
+                'is_adult' => !empty($_POST['is_adult']) ? 1 : 0,
+            ];
+            $pdo->prepare("
+                UPDATE games SET title=?, short_description=?, description=?, genre=?, video_url=?,
+                  sys_req_min=?, sys_req_rec=?, controllers=?, languages=?, price=?, review_note=?, is_adult=?
+                WHERE id=?
+            ")->execute([
+                $fields['title'], $fields['short_description'], $fields['description'], $fields['genre'],
+                $fields['video_url'], $fields['sys_req_min'], $fields['sys_req_rec'], $fields['controllers'],
+                $fields['languages'], $fields['price'], $fields['review_note'], $fields['is_adult'], $id,
+            ]);
+
+            $base = dirname(__DIR__) . '/uploads/games';
+            if (!empty($_FILES['cover']['tmp_name'])) {
+                try {
+                    $url = saveUpload('cover', $base.'/covers', $imgAllowed, 5);
+                    if ($url) $pdo->prepare("UPDATE games SET cover_url=? WHERE id=?")->execute([$url, $id]);
+                } catch (Throwable $e) {}
+            }
+            if (!empty($_FILES['banner']['tmp_name'])) {
+                try {
+                    $url = saveUpload('banner', $base.'/banners', $imgAllowed, 8);
+                    if ($url) $pdo->prepare("UPDATE games SET banner_url=? WHERE id=?")->execute([$url, $id]);
+                } catch (Throwable $e) {}
+            }
+            // new screenshots
+            if (!empty($_FILES['screenshots'])) {
+                $files = $_FILES['screenshots'];
+                $count = is_array($files['name']) ? count($files['name']) : 0;
+                $maxOrder = (int)$pdo->query("SELECT COALESCE(MAX(sort_order),0) FROM game_media WHERE game_id=$id")->fetchColumn();
+                for ($i = 0; $i < $count; $i++) {
+                    if ($files['error'][$i] !== UPLOAD_ERR_OK) continue;
+                    $_FILES['_shot'] = [
+                        'name'=>$files['name'][$i],'type'=>$files['type'][$i],
+                        'tmp_name'=>$files['tmp_name'][$i],'error'=>$files['error'][$i],'size'=>$files['size'][$i],
+                    ];
+                    try {
+                        $url = saveUpload('_shot', $base.'/shots', $imgAllowed, 6);
+                        if ($url) {
+                            $maxOrder++;
+                            $pdo->prepare("INSERT INTO game_media (game_id, kind, url, sort_order) VALUES (?,?,?,?)")
+                                ->execute([$id, 'screenshot', $url, $maxOrder]);
+                        }
+                    } catch (Throwable $e) {}
+                }
+            }
+            // delete media ids
+            $del = $_POST['delete_media'] ?? '';
+            if ($del !== '') {
+                $ids = array_filter(array_map('intval', explode(',', $del)));
+                if ($ids) {
+                    $in = implode(',', $ids);
+                    $pdo->exec("DELETE FROM game_media WHERE game_id = $id AND id IN ($in)");
+                }
+            }
+
+            echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ===== ПУБЛИКОВАТЬ / ОТКЛОНИТЬ =====
+        case 'publish':
+        case 'reject':
+            if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false]); break; }
+            $user = requireAdminS();
+            $body = jsonBodyS();
+            if (!verifyCsrfToken($body['csrf_token'] ?? '')) {
+                http_response_code(403);
+                echo json_encode(['ok'=>false,'error'=>'CSRF'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $id = (int)($body['id'] ?? 0);
+            $st = $pdo->prepare("SELECT id, title, submitted_by FROM games WHERE id = ?");
+            $st->execute([$id]);
+            $g = $st->fetch();
+            if (!$g) {
+                http_response_code(404);
+                echo json_encode(['ok'=>false,'error'=>'Не найдено'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            if ($action === 'publish') {
+                $pdo->prepare("UPDATE games SET status='published', is_published=1, category=IF(category='' OR category IS NULL,'game',category) WHERE id=?")->execute([$id]);
+                $note = 'Игра «' . $g['title'] . '» опубликована';
+                $type = 'game_published';
+            } else {
+                $pdo->prepare("UPDATE games SET status='rejected', is_published=0, review_note=? WHERE id=?")
+                    ->execute([trim($body['note'] ?? ''), $id]);
+                $note = 'Игра «' . $g['title'] . '» отклонена';
+                $type = 'game_rejected';
+            }
+            if ($g['submitted_by']) {
+                try {
+                    $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)")
+                        ->execute([(int)$g['submitted_by'], $type, $note, $body['note'] ?? '', json_encode(['game_id'=>$id])]);
+                } catch (Throwable $e) {}
+            }
+            echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+            break;
+
+        default:
+            http_response_code(400);
+            echo json_encode(['ok'=>false,'error'=>'Unknown action'], JSON_UNESCAPED_UNICODE);
+    }
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['ok'=>false,'error'=>$e->getMessage()], JSON_UNESCAPED_UNICODE);
+}

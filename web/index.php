@@ -25,12 +25,20 @@ if (!$isClient && $currentView === 'library') {
     $currentView = 'home';
 }
 
-// Как выглядит аватар пользователя (эмодзи из настроек или первая буква имени)
+// Аватар: фото если загружено, иначе инициал на цветном фоне
 $avatarText = '';
 $avatarColor = '#ef5b2c';
+$avatarUrl = '';
 if ($isAuthorized) {
-    $avatarText = $user['avatar'] !== '' ? $user['avatar'] : mb_strtoupper(mb_substr($user['username'], 0, 1));
+    $avatarUrl = $user['avatar_url'] ?? '';
+    $avatarText = mb_strtoupper(mb_substr($user['username'], 0, 1));
     $avatarColor = $user['avatar_color'] ?? '#ef5b2c';
+}
+function avatarStyleAttr($url, $color) {
+    if ($url) {
+        return 'background-image:url(\'' . htmlspecialchars($url, ENT_QUOTES) . '\');background-size:cover;background-position:center;';
+    }
+    return 'background:' . htmlspecialchars($color) . ';';
 }
 
 // «В CATio с <месяц> <год>» по-русски
@@ -61,7 +69,7 @@ if ($isAuthorized) {
     <aside class="sidebar">
       <div class="side-user avatar-wrap">
         <button type="button" class="side-user-btn" id="avatar-btn" aria-haspopup="true" aria-expanded="false">
-          <span class="side-avatar" id="side-avatar" style="background:<?php echo htmlspecialchars($avatarColor); ?>"><?php echo htmlspecialchars($avatarText); ?></span>
+          <span class="side-avatar" id="side-avatar" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></span>
           <span class="side-user-name"><?php echo htmlspecialchars($user['username']); ?></span>
           <span class="side-user-arrow">▾</span>
         </button>
@@ -74,29 +82,38 @@ if ($isAuthorized) {
             <span>Баланс</span>
             <b id="user-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
           </div>
-          <button type="button" class="user-menu-item" id="menu-profile">&#128100;&nbsp; Профиль</button>
-          <button type="button" class="user-menu-item" id="menu-downloads">&#8681;&nbsp; Загрузки</button>
-          <button type="button" class="user-menu-item" id="menu-settings">&#9881;&nbsp; Настройки</button>
-          <button type="button" class="user-menu-item danger" id="menu-logout">&#8618;&nbsp; Выйти</button>
+          
+          <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
+          <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
+          <button type="button" class="user-menu-item" id="menu-downloads"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Загрузки</button>
+          <button type="button" class="user-menu-item" id="menu-settings"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Настройки</button>
+          <button type="button" class="user-menu-item danger" id="menu-logout"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
         </div>
       </div>
 
       <nav class="side-nav">
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'home' ? 'active' : ''; ?>" data-view="home"><span class="side-ico">⌂</span>Главная</button>
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'store' ? 'active' : ''; ?>" data-view="store"><span class="side-ico">▦</span>Каталог</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'home' ? 'active' : ''; ?>" data-view="home"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>Главная</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'store' ? 'active' : ''; ?>" data-view="store"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>Каталог</button>
         <?php if ($isClient): ?>
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'library' ? 'active' : ''; ?>" data-view="library"><span class="side-ico">📖</span>Библиотека</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'library' ? 'active' : ''; ?>" data-view="library"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>Библиотека</button>
         <?php endif; ?>
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'downloads' ? 'active' : ''; ?>" data-view="downloads"><span class="side-ico">⬇</span>Загрузки<span class="nav-badge hidden" id="downloads-badge">0</span></button>
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'settings' ? 'active' : ''; ?>" data-view="settings"><span class="side-ico">⚙</span>Настройки</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'downloads' ? 'active' : ''; ?>" data-view="downloads"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>Загрузки<span class="nav-badge hidden" id="downloads-badge">0</span></button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'settings' ? 'active' : ''; ?>" data-view="settings"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>Настройки</button>
+        <?php if ($isAuthorized && ($user['role'] ?? '') === 'admin'): ?>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'admin' ? 'active' : ''; ?>" data-view="admin"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>Админка</button>
+        <?php endif; ?>
       </nav>
 
       <div class="side-lib">
         <div class="side-lib-title">МОЯ БИБЛИОТЕКА</div>
         <div class="side-lib-controls">
           <input type="text" id="side-lib-search" class="side-lib-search" placeholder="Поиск" aria-label="Поиск в библиотеке" />
-          <button type="button" class="side-lib-tool" id="side-lib-installed" title="Показывать только установленные">✓</button>
-          <button type="button" class="side-lib-tool" id="side-lib-filters" title="Фильтры">🎚</button>
+          <button type="button" class="side-lib-tool" id="side-lib-installed" title="Только установленные">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
+          <button type="button" class="side-lib-tool" id="side-lib-filters" title="Фильтры">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          </button>
         </div>
         <div class="side-lib-modal hidden" id="side-lib-modal">
           <div class="side-lib-modal-section">Платформы</div>
@@ -135,7 +152,7 @@ if ($isAuthorized) {
       <div class="user-area">
         <?php if ($isAuthorized): ?>
         <div class="avatar-wrap">
-          <button type="button" class="avatar" id="avatar-btn" aria-haspopup="true" aria-expanded="false" style="background:<?php echo htmlspecialchars($avatarColor); ?>"><?php echo htmlspecialchars($avatarText); ?></button>
+          <button type="button" class="avatar" id="avatar-btn" aria-haspopup="true" aria-expanded="false" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></button>
           <div class="user-menu hidden" id="user-menu" role="menu">
             <div class="user-menu-head">
               <div class="user-menu-name"><?php echo htmlspecialchars($user['username']); ?></div>
@@ -145,10 +162,11 @@ if ($isAuthorized) {
               <span>Баланс</span>
               <b id="user-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
             </div>
-            <button type="button" class="user-menu-item" id="menu-profile">&#128100;&nbsp; Профиль</button>
-            <button type="button" class="user-menu-item" id="menu-downloads">&#8681;&nbsp; Загрузки</button>
-            <button type="button" class="user-menu-item" id="menu-settings">&#9881;&nbsp; Настройки</button>
-            <button type="button" class="user-menu-item danger" id="menu-logout">&#8618;&nbsp; Выйти</button>
+            <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
+          <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
+            <button type="button" class="user-menu-item" id="menu-downloads"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Загрузки</button>
+            <button type="button" class="user-menu-item" id="menu-settings"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Настройки</button>
+            <button type="button" class="user-menu-item danger" id="menu-logout"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
           </div>
         </div>
         <?php else: ?>
@@ -166,6 +184,9 @@ if ($isAuthorized) {
         <h1 class="head-title" id="head-title">Главная</h1>
         <div class="head-search" id="head-search">
           <input type="text" id="head-search-input" placeholder="Поиск" aria-label="Поиск по вкладке" />
+          <button type="button" class="head-add-game" id="btn-add-game" title="Добавить игру">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
         </div>
       </header>
       <?php endif; ?>
@@ -298,85 +319,359 @@ if ($isAuthorized) {
 
       <?php if ($isAuthorized): ?>
       <!-- ===== ПРОФИЛЬ (как в Hydra) ===== -->
-      <section id="view-profile" class="view <?php echo $currentView === 'profile' ? 'active' : ''; ?>">
-        <div class="profile-page">
-          <div class="profile-banner" style="background:linear-gradient(120deg, <?php echo htmlspecialchars($avatarColor); ?>33, transparent 60%)">
-            <div class="profile-header">
-              <div class="profile-avatar" style="background:<?php echo htmlspecialchars($avatarColor); ?>"><?php echo htmlspecialchars($avatarText); ?></div>
-              <div class="profile-info">
-                <h1 class="profile-name"><?php echo htmlspecialchars($user['username']); ?></h1>
-                <p class="profile-meta">
-                  В CATio с <?php echo $memberSince; ?>
-                  <?php if ($user['role'] === 'admin'): ?>
-                  · <span class="role-badge">Администратор</span>
-                  <?php endif; ?>
-                </p>
-              </div>
-            </div>
-          </div>
+            <section id="view-profile" class="view <?php echo $currentView === 'profile' ? 'active' : ''; ?>">
+        <div class="profile-page hydra-profile">
+          <!-- Баннер + toolbar (общий фон) -->
+          <div class="hp-hero" id="hp-hero">
+            <div class="hp-hero-bg<?php echo !empty($user['banner_url']) ? ' has-image' : ''; ?>" id="hp-banner-bg"
+              <?php if (!empty($user['banner_url'])):
+                $bpos = htmlspecialchars($user['banner_pos'] ?? '50% 50%', ENT_QUOTES);
+                $bzoom = max(1, min(3, (float)($user['banner_zoom'] ?? 1)));
+                $bsize = ($bzoom <= 1.01) ? 'cover' : (round($bzoom * 100) . '%');
+              ?>style="background-image:url('<?php echo htmlspecialchars($user['banner_url'], ENT_QUOTES); ?>');background-position:<?php echo $bpos; ?>;background-size:<?php echo $bsize; ?>;"<?php endif; ?>></div>
 
-          <div class="profile-actions">
-            <button type="button" class="btn-ghost" id="btn-settings-open">✎ Редактировать Профиль</button>
-            <button type="button" class="btn-logout" onclick="logout()">↪ Выйти</button>
-          </div>
-
-          <div class="profile-body">
-            <div class="profile-main">
-              <div class="section-header"><h2>Библиотека <span class="filter-count" id="profile-games-count"></span></h2></div>
-              <div id="profile-games" class="profile-games-grid"><div class="loading">Загрузка...</div></div>
-            </div>
-            <aside class="profile-side">
-              <div class="side-card">
-                <div class="side-card-head">Статистика</div>
-                <div class="side-card-body">
-                  <div class="pstat"><span>Игр в библиотеке</span><b id="stat-games">0</b></div>
-                  <div class="pstat"><span>Комментариев</span><b id="stat-comments">0</b></div>
-                  <div class="pstat"><span>Оценок</span><b id="stat-ratings">0</b></div>
-                  <div class="pstat"><span>Потрачено</span><b id="stat-spent">0 ₽</b></div>
-                  <div class="pstat"><span>Уровень</span><b id="profile-level">0</b></div>
-                  <div class="pstat"><span>Баланс</span><span><b id="profile-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b> <button type="button" class="btn-link" id="btn-topup-open">Пополнить</button></span></div>
+            <div class="hp-banner" id="hp-banner">
+              <button type="button" class="hp-banner-upload" id="hp-banner-upload" title="Загрузить баннер">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Загрузить баннер
+              </button>
+              <input type="file" id="hp-banner-file" accept="image/png,image/jpeg,image/webp" hidden />
+              <div class="hp-user">
+                <div class="hp-avatar" id="hp-avatar" style="<?php
+                  if (!empty($user['avatar_url'])) {
+                    echo 'background-image:url(\'' . htmlspecialchars($user['avatar_url'], ENT_QUOTES) . '\');background-size:cover;background-position:center;';
+                  } else {
+                    echo 'background:' . htmlspecialchars($avatarColor) . ';';
+                  }
+                ?>"><?php echo empty($user['avatar_url']) ? htmlspecialchars($avatarText) : ''; ?></div>
+                <div class="hp-user-info">
+                  <h1 class="hp-username" id="hp-username"><?php echo htmlspecialchars($user['username']); ?></h1>
                 </div>
               </div>
-              <div class="side-card">
-                <div class="side-card-head">Недавняя активность</div>
-                <div class="side-card-body" id="profile-activity"><div class="loading">Загрузка...</div></div>
+            </div>
+
+            <!-- Кнопки под баннером (blur поверх того же фона) -->
+            <div class="hp-toolbar">
+              <div class="hp-toolbar-spacer"></div>
+              <button type="button" class="hp-btn-edit" id="btn-edit-profile">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Редактировать Профиль
+              </button>
+              <button type="button" class="hp-btn-logout" onclick="logout()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Выйти
+              </button>
+            </div>
+          </div>
+
+          <!-- Основной контент профиля -->
+          <div class="hp-body">
+            <div class="hp-main">
+              <div class="hp-tabs">
+                <button type="button" class="hp-tab active" data-ptab="library">Библиотека</button>
+                <button type="button" class="hp-tab" data-ptab="reviews">Отзывы</button>
+                <button type="button" class="hp-tab" data-ptab="souvenirs">Сувениры</button>
+                <button type="button" class="hp-tab" data-ptab="screenshots">Скриншоты</button>
+              </div>
+
+              <div class="hp-filters" id="hp-filters">
+                <div class="hp-filter">
+                  <label>Платформы</label>
+                  <select id="hp-platform" class="hp-select">
+                    <option value="all">Все</option>
+                    <option value="windows">Windows</option>
+                    <option value="linux">Linux</option>
+                    <option value="mac">Mac</option>
+                  </select>
+                </div>
+                <div class="hp-filter">
+                  <label>Сортировать по</label>
+                  <select id="hp-sort" class="hp-select">
+                    <option value="recent">Недавно сыгранные</option>
+                    <option value="name">По названию</option>
+                    <option value="playtime">По времени игры</option>
+                    <option value="added">По дате добавления</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="hp-section" id="hp-pinned-section">
+                <div class="hp-section-head">
+                  <h3>Закреплённые <span class="hp-count" id="hp-pinned-count">0</span></h3>
+                </div>
+                <div class="hp-games-row" id="hp-pinned-games">
+                  <div class="loading">Загрузка...</div>
+                </div>
+              </div>
+
+              <div class="hp-section" id="hp-library-section">
+                <div class="hp-section-head">
+                  <h3>Библиотека <span class="hp-count" id="hp-library-count">0</span></h3>
+                </div>
+                <div class="hp-games-grid" id="hp-library-games">
+                  <div class="loading">Загрузка...</div>
+                </div>
+              </div>
+
+              <div class="hp-tab-pane hidden" id="hp-pane-reviews">
+                <div class="hp-empty">Пока нет отзывов</div>
+              </div>
+              <div class="hp-tab-pane hidden" id="hp-pane-souvenirs">
+                <div class="hp-empty">Сувениры появятся позже</div>
+              </div>
+              <div class="hp-tab-pane hidden" id="hp-pane-screenshots">
+                <div class="hp-empty">Скриншотов пока нет</div>
+              </div>
+            </div>
+
+            <aside class="hp-side">
+              <div class="hp-side-card">
+                <div class="hp-side-head">
+                  <span>Статистика</span>
+                  <button type="button" class="hp-side-toggle" aria-label="Свернуть">▴</button>
+                </div>
+                <div class="hp-side-body">
+                  <div class="hp-stat">
+                    <div class="hp-stat-label">Достижения разблокированы</div>
+                    <div class="hp-stat-value muted" id="hp-stat-achievements">Покажите свои достижения в профиле</div>
+                  </div>
+                  <div class="hp-stat">
+                    <div class="hp-stat-label">Заработано очков</div>
+                    <div class="hp-stat-value muted" id="hp-stat-points">Показывать заработанные очки в своём профиле</div>
+                  </div>
+                  <div class="hp-stat">
+                    <div class="hp-stat-label">Всего сыграно</div>
+                    <div class="hp-stat-row">
+                      <span class="hp-stat-value" id="hp-stat-playtime">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        0 часов
+                      </span>
+                      <span class="hp-stat-badge" id="hp-stat-top">—</span>
+                    </div>
+                  </div>
+                  <div class="hp-stat">
+                    <div class="hp-stat-label">Карма</div>
+                    <div class="hp-stat-value" id="hp-stat-karma">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
+                      0 карма
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hp-side-card">
+                <div class="hp-side-head">
+                  <span>Недавняя активность</span>
+                  <button type="button" class="hp-side-toggle" aria-label="Свернуть">▴</button>
+                </div>
+                <div class="hp-side-body" id="hp-activity">
+                  <div class="loading">Загрузка...</div>
+                </div>
+              </div>
+
+              <div class="hp-side-card" id="hp-friends-card">
+                <div class="hp-side-head">
+                  <span>Друзья <span class="hp-count" id="hp-friends-count">0</span></span>
+                  <button type="button" class="hp-side-toggle" aria-label="Свернуть">▴</button>
+                </div>
+                <div class="hp-side-body" id="hp-friends-list">
+                  <div class="loading">Загрузка...</div>
+                </div>
               </div>
             </aside>
           </div>
         </div>
+
+        <!-- Модалка редактирования профиля (как в Hydra) -->
+        <div class="hp-modal hidden" id="hp-edit-modal">
+          <div class="hp-modal-backdrop" id="hp-edit-backdrop"></div>
+          <div class="hp-modal-box">
+            <div class="hp-modal-head">
+              <h2>Редактировать Профиль</h2>
+              <button type="button" class="hp-modal-close" id="hp-edit-close" aria-label="Закрыть">×</button>
+            </div>
+            <div class="hp-modal-body">
+              <div class="hp-edit-avatar-wrap">
+                <div class="hp-edit-avatar" id="hp-edit-avatar" style="<?php
+                  if (!empty($user['avatar_url'])) {
+                    echo 'background-image:url(\'' . htmlspecialchars($user['avatar_url'], ENT_QUOTES) . '\');background-size:cover;background-position:center;';
+                  } else {
+                    echo 'background:' . htmlspecialchars($avatarColor) . ';';
+                  }
+                ?>"><?php echo empty($user['avatar_url']) ? htmlspecialchars($avatarText) : ''; ?></div>
+                <button type="button" class="hp-edit-avatar-btn" id="hp-avatar-upload" title="Сменить аватар">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </button>
+                <input type="file" id="hp-avatar-file" accept="image/png,image/jpeg,image/webp" hidden />
+              </div>
+              <label class="hp-edit-label">
+                <span>Отображаемое имя</span>
+                <input type="text" id="hp-edit-displayname" class="hp-edit-input" maxlength="32"
+                       value="<?php echo htmlspecialchars($user['username']); ?>" />
+              </label>
+              <p class="hp-edit-hint">Чтобы указать, кто может это видеть, перейдите в Настройки.</p>
+              <button type="button" class="hp-edit-save" id="hp-edit-save">Сохранить</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Модалка настройки баннера -->
+        <div class="hp-modal hidden" id="hp-banner-modal">
+          <div class="hp-modal-backdrop" id="hp-banner-backdrop"></div>
+          <div class="hp-modal-box hp-banner-modal-box">
+            <div class="hp-modal-head">
+              <h2>Настройка баннера</h2>
+              <button type="button" class="hp-modal-close" id="hp-banner-close" aria-label="Закрыть">×</button>
+            </div>
+            <div class="hp-modal-body hp-banner-modal-body">
+              <div class="hp-banner-preview-wrap">
+                <div class="hp-banner-preview" id="hp-banner-preview">
+                  <div class="hp-banner-preview-img" id="hp-banner-preview-img"></div>
+                </div>
+                <p class="hp-edit-hint">Перетаскивайте изображение, чтобы выбрать область</p>
+              </div>
+              <label class="hp-edit-label">
+                <span>Масштаб</span>
+                <div class="hp-zoom-row">
+                  <input type="range" id="hp-banner-zoom" class="hp-zoom-slider" min="100" max="250" value="100" step="1" />
+                  <span class="hp-zoom-val" id="hp-banner-zoom-val">100%</span>
+                </div>
+              </label>
+              <div class="hp-banner-modal-actions">
+                <button type="button" class="hp-btn-edit" id="hp-banner-pick">Выбрать файл</button>
+                <button type="button" class="hp-edit-save" id="hp-banner-save">Сохранить</button>
+              </div>
+              <input type="file" id="hp-banner-file-modal" accept="image/png,image/jpeg,image/webp" hidden />
+            </div>
+          </div>
+        </div>
+
       </section>
 
-      <!-- ===== НАСТРОЙКИ (вкладка, как в Hydra) ===== -->
-      <section id="view-settings" class="view <?php echo $currentView === 'settings' ? 'active' : ''; ?>">
+<!-- ===== НАСТРОЙКИ (вкладка, как в Hydra) ===== -->
+            <section id="view-settings" class="view <?php echo $currentView === 'settings' ? 'active' : ''; ?>">
         <div class="settings-layout">
           <aside class="settings-nav" id="settings-nav">
-            <button type="button" class="settings-nav-btn active" data-stab="general">⚙ Основные</button>
-            <button type="button" class="settings-nav-btn" data-stab="balance">↓ Баланс</button>
+            <button type="button" class="settings-nav-btn active" data-stab="general">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+              Основные
+            </button>
+            <button type="button" class="settings-nav-btn" data-stab="notifications">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              Уведомления
+            </button>
+            <button type="button" class="settings-nav-btn" data-stab="privacy">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Аккаунт и конфиденциальность
+            </button>
+            <button type="button" class="settings-nav-btn" data-stab="balance">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              Баланс
+            </button>
           </aside>
           <div class="settings-main">
+            <!-- ОСНОВНЫЕ -->
             <div class="settings-pane" id="settings-pane-general">
-              <h2 class="settings-title">ОСНОВНЫЕ</h2>
-              <p class="settings-sub">Основные настройки профиля</p>
+              <h2 class="settings-title">Основные</h2>
+              <p class="settings-sub">Профиль, язык и внешний вид</p>
 
-              <div class="settings-avatar-preview" id="settings-avatar-preview"><?php echo htmlspecialchars($avatarText); ?></div>
+              <div class="settings-avatar-block">
+                <div class="settings-avatar-preview" id="settings-avatar-preview" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></div>
+                <div class="settings-avatar-actions">
+                  <button type="button" class="hp-btn-edit" id="settings-avatar-upload">Загрузить аватар</button>
+                </div>
+                <input type="file" id="settings-avatar-file" accept="image/png,image/jpeg,image/webp" hidden />
+              </div>
 
               <label class="settings-label">
-                <span>Эмодзи аватара (до 4 символов)</span>
-                <input type="text" id="settings-avatar-input" class="auth-input" maxlength="4" value="<?php echo htmlspecialchars($user['avatar']); ?>" placeholder="🐱" />
+                <span>Отображаемое имя</span>
+                <input type="text" id="settings-username" class="auth-input" maxlength="32" value="<?php echo htmlspecialchars($user['username'] ?? ''); ?>" />
               </label>
 
               <label class="settings-label">
-                <span>Цвет аватара</span>
-                <input type="color" id="settings-color-input" class="settings-color" value="<?php echo htmlspecialchars($avatarColor); ?>" />
+                <span>Баннер профиля</span>
+                <div class="settings-banner-row">
+                  <div class="settings-banner-preview" id="settings-banner-preview" <?php if (!empty($user['banner_url'])): ?>style="background-image:url('<?php echo htmlspecialchars($user['banner_url'], ENT_QUOTES); ?>')"<?php endif; ?>></div>
+                  <button type="button" class="hp-btn-edit" id="settings-banner-upload">Загрузить баннер</button>
+                  <input type="file" id="settings-banner-file" accept="image/png,image/jpeg,image/webp" hidden />
+                </div>
+              </label>
+
+              <label class="settings-label">
+                <span>Язык</span>
+                <select id="settings-lang" class="settings-select">
+                  <option value="ru" selected>Русский</option>
+                </select>
               </label>
 
               <p id="settings-error" class="auth-error hidden"></p>
-              <button type="button" class="auth-submit" id="settings-save">Сохранить</button>
+              <button type="button" class="auth-submit" id="settings-save-general">Сохранить</button>
             </div>
+
+            <!-- УВЕДОМЛЕНИЯ -->
+            <div class="settings-pane hidden" id="settings-pane-notifications">
+              <h2 class="settings-title">Уведомления</h2>
+              <p class="settings-sub">Выберите, о чём вас оповещать</p>
+
+              <div class="settings-group">
+                <h3 class="settings-group-title">Уведомления библиотеки</h3>
+                <label class="settings-check"><input type="checkbox" data-np="dl_complete" checked /> По завершении загрузки</label>
+                <label class="settings-check"><input type="checkbox" data-np="new_repack" /> При добавлении нового репака</label>
+                <label class="settings-check"><input type="checkbox" data-np="friend_request" checked /> При получении запроса в друзья</label>
+                <label class="settings-check"><input type="checkbox" data-np="friend_playing" checked /> Когда друг начинает играть</label>
+                <label class="settings-check"><input type="checkbox" data-np="friend_message" checked /> Когда друг отправляет сообщение</label>
+              </div>
+
+              <div class="settings-group">
+                <h3 class="settings-group-title">Уведомления о достижениях</h3>
+                <label class="settings-check"><input type="checkbox" data-np="ach_unlock" checked /> Когда достижение разблокировано</label>
+                <label class="settings-check"><input type="checkbox" data-np="ach_enable" checked /> Включить уведомления о достижениях</label>
+              </div>
+              <button type="button" class="auth-submit" id="settings-save-notif">Сохранить</button>
+            </div>
+
+            <!-- ПРИВАТНОСТЬ -->
+            <div class="settings-pane hidden" id="settings-pane-privacy">
+              <h2 class="settings-title">Аккаунт и конфиденциальность</h2>
+              <p class="settings-sub">Кто видит ваш профиль и как с вами связываться</p>
+
+              <label class="settings-label">
+                <span>Видимость профиля</span>
+                <select id="settings-profile-vis" class="settings-select">
+                  <option value="public">Публичный</option>
+                  <option value="friends">Только для друзей</option>
+                  <option value="hidden">Скрытый</option>
+                </select>
+              </label>
+
+              <label class="settings-label">
+                <span>Видимость сувениров и скриншотов</span>
+                <select id="settings-media-vis" class="settings-select">
+                  <option value="public">Публичный</option>
+                  <option value="friends">Только для друзей</option>
+                  <option value="hidden">Скрытый</option>
+                </select>
+              </label>
+
+              <label class="settings-check" style="margin:16px 0">
+                <input type="checkbox" id="settings-allow-friends" checked />
+                Разрешить заявки в друзья
+              </label>
+
+              <label class="settings-label">
+                <span>Текущий email</span>
+                <input type="email" id="settings-email" class="auth-input" value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" />
+              </label>
+
+              <p id="settings-privacy-error" class="auth-error hidden"></p>
+              <button type="button" class="auth-submit" id="settings-save-privacy">Сохранить</button>
+            </div>
+
+            <!-- БАЛАНС -->
             <div class="settings-pane hidden" id="settings-pane-balance">
-              <h2 class="settings-title">БАЛАНС</h2>
+              <h2 class="settings-title">Баланс</h2>
               <p class="settings-sub">Учебные рубли — ими можно покупать игры в каталоге</p>
-              <p class="settings-balance-line">Текущий баланс: <b id="settings-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b></p>
+              <p class="settings-balance-line">Текущий баланс: <b id="settings-balance"><?php echo number_format($user['balance'] ?? 0, 0, ',', ' '); ?> ₽</b></p>
               <div class="settings-topup-row">
                 <button type="button" class="btn-topup" data-amount="100">+100 ₽</button>
                 <button type="button" class="btn-topup" data-amount="500">+500 ₽</button>
@@ -386,6 +681,79 @@ if ($isAuthorized) {
           </div>
         </div>
       </section>
+      <?php if ($isAuthorized && ($user['role'] ?? '') === 'admin'): ?>
+      <section id="view-admin" class="view <?php echo $currentView === 'admin' ? 'active' : ''; ?>">
+        <div class="admin-layout">
+          <div class="admin-list-panel">
+            <h2 class="settings-title">На модерации</h2>
+            <div id="admin-pending-list" class="admin-pending-list">
+              <div class="loading">Загрузка...</div>
+            </div>
+          </div>
+          <div class="admin-edit-panel" id="admin-edit-panel">
+            <div class="admin-placeholder" id="admin-empty">
+              <p class="chat-empty-sub">Выберите игру слева для просмотра и публикации</p>
+            </div>
+            <form class="submit-form hidden" id="admin-game-form">
+              <input type="hidden" id="admin-game-id" value="" />
+              <div class="submit-grid">
+                <label class="settings-label"><span>Название</span><input class="auth-input" id="admin-title" required /></label>
+                <label class="settings-label"><span>Жанр</span><input class="auth-input" id="admin-genre" /></label>
+                <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="admin-price" type="number" min="0" step="1" value="0" /></label>
+                <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="admin-short" /></label>
+                <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="admin-desc" rows="5"></textarea></label>
+                <div class="settings-label full">
+                  <span>Системные требования — минимальные</span>
+                  <div class="sysreq-fields" id="admin-sys-min-fields">
+                    <input class="auth-input" data-k="os" placeholder="ОС" />
+                    <input class="auth-input" data-k="cpu" placeholder="Процессор" />
+                    <input class="auth-input" data-k="ram" placeholder="ОЗУ" />
+                    <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
+                    <input class="auth-input" data-k="directx" placeholder="DirectX" />
+                    <input class="auth-input" data-k="storage" placeholder="Место на диске" />
+                    <input class="auth-input" data-k="sound" placeholder="Звук" />
+                    <input class="auth-input" data-k="other" placeholder="Дополнительно" />
+                  </div>
+                </div>
+                <div class="settings-label full">
+                  <span>Системные требования — рекомендуемые</span>
+                  <div class="sysreq-fields" id="admin-sys-rec-fields">
+                    <input class="auth-input" data-k="os" placeholder="ОС" />
+                    <input class="auth-input" data-k="cpu" placeholder="Процессор" />
+                    <input class="auth-input" data-k="ram" placeholder="ОЗУ" />
+                    <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
+                    <input class="auth-input" data-k="directx" placeholder="DirectX" />
+                    <input class="auth-input" data-k="storage" placeholder="Место на диске" />
+                    <input class="auth-input" data-k="sound" placeholder="Звук" />
+                    <input class="auth-input" data-k="other" placeholder="Дополнительно" />
+                  </div>
+                </div>
+                <label class="settings-label"><span>Контроллеры</span><input class="auth-input" id="admin-controllers" placeholder="xbox,playstation" /></label>
+                <div class="settings-label full">
+                  <span>Языки</span>
+                  <div class="lang-table" id="admin-lang-table">
+                    <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
+                  </div>
+                </div>
+                <label class="settings-label full"><span>Видео (YouTube URL)</span><input class="auth-input" id="admin-video" /></label>
+                <label class="settings-label"><span>Новая обложка</span><input type="file" id="admin-cover" accept="image/*" /></label>
+                <label class="settings-label"><span>Новый баннер</span><input type="file" id="admin-banner" accept="image/*" /></label>
+                <label class="settings-label full"><span>Добавить скриншоты</span><input type="file" id="admin-shots" accept="image/*" multiple /></label>
+                <div class="full" id="admin-media-list"></div>
+                <label class="settings-check full"><input type="checkbox" id="admin-adult" /> Контент 18+</label>
+                <label class="settings-label full"><span>Заметка модератора</span><input class="auth-input" id="admin-note" /></label>
+              </div>
+              <div class="admin-actions">
+                <button type="button" class="auth-submit" id="admin-save">Сохранить правки</button>
+                <button type="button" class="auth-submit" id="admin-publish" style="background:#2a8f4a">Опубликовать</button>
+                <button type="button" class="hp-btn-logout" id="admin-reject">Отклонить</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+      <?php endif; ?>
+
       <?php endif; ?>
 
       <?php if (!$isAuthorized): ?>
@@ -595,5 +963,286 @@ function socialAuth(provider) {
 })();
 </script>
   <script src="js/app.js"></script>
+
+  <!-- ===== МОДАЛКА ДРУЗЕЙ ===== -->
+  <div class="friends-modal hidden" id="friends-modal">
+    <div class="friends-modal-backdrop" id="friends-backdrop"></div>
+    <div class="friends-modal-box">
+      <div class="friends-modal-head">
+        <div class="friends-tabs">
+          <button type="button" class="friends-tab active" data-ftab="friends">Друзья</button>
+          <button type="button" class="friends-tab" data-ftab="notifications">Уведомления <span class="friends-tab-badge hidden" id="notif-tab-badge">0</span></button>
+        </div>
+        <button type="button" class="friends-modal-close" id="friends-close" aria-label="Закрыть">×</button>
+      </div>
+      <div class="friends-modal-body">
+        <div class="friends-pane" id="friends-pane-friends">
+        <div class="friends-me" id="friends-me"></div>
+
+        <div class="friends-search-row">
+          <div class="friends-search-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="friends-search" class="friends-search" placeholder="Поиск друзей" autocomplete="off" />
+          </div>
+          <button type="button" class="friends-add-btn" id="friends-add-btn" title="Добавить друга">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          </button>
+        </div>
+
+        <div class="friends-search-results hidden" id="friends-search-results"></div>
+
+        <div class="friends-section" id="friends-incoming-section" style="display:none">
+          <button type="button" class="friends-section-toggle open" data-sec="incoming">
+            <span class="friends-chevron">▾</span> ЗАЯВКИ <span class="friends-sec-count" id="friends-incoming-count">0</span>
+          </button>
+          <div class="friends-section-list" id="friends-incoming"></div>
+        </div>
+
+        <div class="friends-section">
+          <button type="button" class="friends-section-toggle open" data-sec="online">
+            <span class="friends-chevron">▾</span> В СЕТИ <span class="friends-sec-count online" id="friends-online-count">0</span>
+          </button>
+          <div class="friends-section-list" id="friends-online"></div>
+        </div>
+
+        <div class="friends-section">
+          <button type="button" class="friends-section-toggle open" data-sec="offline">
+            <span class="friends-chevron">▾</span> НЕ В СЕТИ <span class="friends-sec-count" id="friends-offline-count">0</span>
+          </button>
+          <div class="friends-section-list" id="friends-offline"></div>
+        </div>
+        </div><!-- /friends-pane-friends -->
+
+        <div class="friends-pane hidden" id="friends-pane-notifications">
+          <div class="notif-toolbar">
+            <div class="notif-filters">
+              <button type="button" class="notif-filter active" data-nfilter="all">Все</button>
+              <button type="button" class="notif-filter" data-nfilter="unread">Непрочитанные</button>
+            </div>
+            <div class="notif-actions">
+              <button type="button" class="notif-btn" id="notif-read-all">Отметить все</button>
+              <button type="button" class="notif-btn danger" id="notif-clear-all">Очистить</button>
+            </div>
+          </div>
+          <div class="notif-list" id="notif-list">
+            <div class="friends-empty">Загрузка...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===== МОДАЛКА ПЕРЕПИСКИ ===== -->
+  <div class="chat-modal hidden" id="chat-modal">
+    <div class="chat-modal-backdrop" id="chat-backdrop"></div>
+    <div class="chat-modal-box">
+      <div class="chat-modal-head">
+        <div class="chat-peer" id="chat-peer">
+          <div class="chat-peer-avatar" id="chat-peer-avatar"></div>
+          <div class="chat-peer-info">
+            <div class="chat-peer-name" id="chat-peer-name"></div>
+            <div class="chat-peer-status" id="chat-peer-status"></div>
+          </div>
+        </div>
+        <button type="button" class="chat-modal-close" id="chat-close" aria-label="Закрыть">×</button>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-empty" id="chat-empty">
+          <div class="chat-empty-icon">💬</div>
+          <div class="chat-empty-title">Пока нет сообщений</div>
+          <div class="chat-empty-sub">Напишите первыми</div>
+        </div>
+      </div>
+      <div class="chat-compose">
+        <div class="chat-tools">
+          <button type="button" class="chat-tool-btn" id="chat-plus" title="Вложение">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button type="button" class="chat-tool-btn" id="chat-emoji" title="Смайлики">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          </button>
+        </div>
+        <input type="text" id="chat-input" class="chat-input" placeholder="Написать сообщение..." maxlength="2000" autocomplete="off" />
+        <button type="button" class="chat-send" id="chat-send" title="Отправить">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+      <div class="chat-emoji-panel hidden" id="chat-emoji-panel"></div>
+      <div class="chat-plus-menu hidden" id="chat-plus-menu">
+        <button type="button" data-plus="image">📷 Фото / GIF</button>
+        <button type="button" data-plus="draw">✏️ Рисунок</button>
+        <button type="button" data-plus="game">🎮 Поделиться игрой</button>
+      </div>
+      <input type="file" id="chat-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+
+      <!-- Draw modal -->
+      <div class="chat-draw-overlay hidden" id="chat-draw-overlay">
+        <div class="chat-draw-box">
+          <div class="chat-draw-head">
+            <span>Рисунок</span>
+            <button type="button" id="chat-draw-close">×</button>
+          </div>
+          <canvas id="chat-draw-canvas" width="360" height="240"></canvas>
+          <div class="chat-draw-tools">
+            <input type="color" id="chat-draw-color" value="#ef5b2c" />
+            <button type="button" id="chat-draw-clear">Очистить</button>
+            <button type="button" id="chat-draw-send">Отправить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Share game picker -->
+      <div class="chat-game-picker hidden" id="chat-game-picker">
+        <div class="chat-game-picker-head">Выберите игру</div>
+        <div class="chat-game-picker-list" id="chat-game-picker-list"></div>
+      </div>
+      <div class="chat-offline-hint hidden" id="chat-offline-hint">Пользователь не в сети — увидит сообщения позже</div>
+    </div>
+  </div>
+
+
+  <!-- ===== МОДАЛКА ПРАВИЛ ПУБЛИКАЦИИ ===== -->
+  <div class="submit-modal hidden" id="submit-rules-modal">
+    <div class="submit-modal-backdrop" data-close="rules"></div>
+    <div class="submit-modal-box">
+      <div class="submit-modal-head">
+        <h2>Правила публикации</h2>
+        <button type="button" class="friends-modal-close" data-close="rules">×</button>
+      </div>
+      <div class="submit-modal-body">
+        <ul class="submit-rules">
+          <li>Загружайте только игры, на которые у вас есть права.</li>
+          <li>Запрещены вредоносные файлы, кражи контента и NSFW без пометки.</li>
+          <li>Обложка и описание должны соответствовать игре.</li>
+          <li>После отправки игра проходит модерацию администратором.</li>
+          <li>Админ может править материалы перед публикацией или отклонить заявку.</li>
+        </ul>
+        <label class="settings-check">
+          <input type="checkbox" id="submit-agree" />
+          Я согласен(на) с правилами публикации
+        </label>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close="rules">Отмена</button>
+        <button type="button" class="auth-submit" id="submit-rules-next" disabled>Дальше</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== МОДАЛКА АНКЕТЫ ИГРЫ ===== -->
+  <div class="submit-modal hidden" id="submit-form-modal">
+    <div class="submit-modal-backdrop" data-close="form"></div>
+    <div class="submit-modal-box submit-modal-wide">
+      <div class="submit-modal-head">
+        <h2>Добавить игру</h2>
+        <button type="button" class="friends-modal-close" data-close="form">×</button>
+      </div>
+      <div class="submit-modal-body">
+        <form id="submit-game-form" class="submit-form">
+          <div class="submit-grid">
+            <label class="settings-label"><span>Название *</span><input class="auth-input" name="title" id="sg-title" required maxlength="120" /></label>
+            <label class="settings-label"><span>Жанр *</span>
+              <select class="settings-select" name="genre" id="sg-genre" required>
+                <option value="">Выберите</option>
+                <option>Экшен</option><option>Приключения</option><option>RPG</option>
+                <option>Стратегия</option><option>Симулятор</option><option>Инди</option>
+                <option>Хоррор</option><option>Гонки</option><option>Спорт</option><option>Другое</option>
+              </select>
+            </label>
+            <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" name="price" id="sg-price" type="number" min="0" value="0" /></label>
+            <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" name="short_description" id="sg-short" maxlength="200" /></label>
+            <label class="settings-label full"><span>Описание *</span><textarea class="auth-input settings-textarea" name="description" id="sg-desc" rows="5" required></textarea></label>
+            <label class="settings-label"><span>Обложка *</span><input type="file" name="cover" id="sg-cover" accept="image/*" required /></label>
+            <label class="settings-label"><span>Шапка / баннер</span><input type="file" name="banner" id="sg-banner" accept="image/*" /></label>
+            <label class="settings-label full"><span>Скриншоты</span><input type="file" name="screenshots[]" id="sg-shots" accept="image/*" multiple /></label>
+            <label class="settings-label full"><span>Видео (YouTube URL)</span><input class="auth-input" name="video_url" id="sg-video" placeholder="https://youtube.com/..." /></label>
+            <div class="settings-label full">
+              <span>Системные требования — минимальные</span>
+              <div class="sysreq-fields" id="sg-sys-min-fields">
+                <input class="auth-input" data-k="os" placeholder="ОС *" />
+                <input class="auth-input" data-k="cpu" placeholder="Процессор" />
+                <input class="auth-input" data-k="ram" placeholder="Оперативная память" />
+                <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
+                <input class="auth-input" data-k="directx" placeholder="DirectX" />
+                <input class="auth-input" data-k="storage" placeholder="Место на диске" />
+                <input class="auth-input" data-k="sound" placeholder="Звуковая карта" />
+                <input class="auth-input" data-k="other" placeholder="Дополнительно" />
+              </div>
+            </div>
+            <div class="settings-label full">
+              <span>Системные требования — рекомендуемые</span>
+              <div class="sysreq-fields" id="sg-sys-rec-fields">
+                <input class="auth-input" data-k="os" placeholder="ОС *" />
+                <input class="auth-input" data-k="cpu" placeholder="Процессор" />
+                <input class="auth-input" data-k="ram" placeholder="Оперативная память" />
+                <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
+                <input class="auth-input" data-k="directx" placeholder="DirectX" />
+                <input class="auth-input" data-k="storage" placeholder="Место на диске" />
+                <input class="auth-input" data-k="sound" placeholder="Звуковая карта" />
+                <input class="auth-input" data-k="other" placeholder="Дополнительно" />
+              </div>
+            </div>
+            <div class="settings-label full">
+              <span>Поддержка контроллеров</span>
+              <div class="submit-checks">
+                <label class="settings-check"><input type="checkbox" value="xbox" class="sg-ctrl" /> Xbox</label>
+                <label class="settings-check"><input type="checkbox" value="playstation" class="sg-ctrl" /> PlayStation</label>
+              </div>
+            </div>
+            <div class="settings-label full">
+              <span>Языки</span>
+              <div class="lang-table" id="sg-lang-table">
+                <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
+              </div>
+            </div>
+            <label class="settings-check full" style="margin-top:4px">
+              <input type="checkbox" id="sg-adult" />
+              Игра содержит контент 18+
+            </label>
+          </div>
+        </form>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close="form">Отмена</button>
+        <button type="button" class="auth-submit" id="submit-game-send">Отправить на модерацию</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== УСПЕХ ===== -->
+  <div class="submit-modal hidden" id="submit-done-modal">
+    <div class="submit-modal-backdrop" data-close="done"></div>
+    <div class="submit-modal-box">
+      <div class="submit-modal-body" style="text-align:center;padding:32px 20px">
+        <div class="chat-empty-icon" style="margin:0 auto 12px">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <h2 class="chat-empty-title">Игра отправлена на рассмотрение</h2>
+        <p class="chat-empty-sub">Спасибо! Администраторы проверят материалы и опубликуют игру или свяжутся с вами.</p>
+        <button type="button" class="auth-submit" data-close="done" style="margin-top:16px">Отлично</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===== 18+ GATE ===== -->
+  <div class="adult-gate hidden" id="adult-gate-modal">
+    <div class="adult-gate-backdrop"></div>
+    <div class="adult-gate-box" role="dialog" aria-modal="true">
+      <div class="adult-gate-head">
+        <h2>Эта игра содержит неприемлемый контент</h2>
+        <button type="button" class="friends-modal-close" id="adult-gate-x" aria-label="Закрыть">×</button>
+      </div>
+      <div class="adult-gate-body">
+        <p><strong id="adult-gate-title">Игра</strong> содержит контент, который может не подходить для всех возрастов. Вы уверены, что хотите продолжить?</p>
+      </div>
+      <div class="adult-gate-foot">
+        <button type="button" class="adult-gate-back" id="adult-gate-back">Назад</button>
+        <button type="button" class="adult-gate-continue" id="adult-gate-continue">Продолжить</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

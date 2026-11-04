@@ -74,7 +74,7 @@ try {
     // ===== КАТАЛОГ =====
     if ($method === 'GET' && $action === 'list') {
         $category = $_GET['category'] ?? 'all';
-        $where = "g.is_published = 1";
+        $where = "g.is_published = 1 AND COALESCE(g.status, 'published') NOT IN ('pending','rejected','draft')";
         $params = [];
         if (in_array($category, ['game', 'asset'], true)) {
             $where .= " AND g.category = ?";
@@ -84,7 +84,7 @@ try {
             SELECT g.id, g.title, g.slug, g.short_description, g.description,
                    g.price, g.category, g.genre, g.tags, g.rating,
                    g.cover_url, g.cover_emoji, g.cover_color,
-                   g.developer_name, g.download_count, g.created_at,
+                   g.developer_name, g.download_count, g.created_at, g.is_adult,
                    (SELECT COUNT(*) FROM comments c WHERE c.game_id = g.id) AS comments_count,
                    (SELECT COUNT(*) FROM ratings r WHERE r.game_id = g.id) AS ratings_count
             FROM games g
@@ -102,7 +102,7 @@ try {
         }
         foreach ($games as &$g) {
             $g['owned'] = in_array((int)$g['id'], $ownedIds, true);
-            $g['cover_src'] = 'media.php?type=cover&id=' . $g['id'];
+            $g['cover_src'] = !empty($g['cover_url']) ? $g['cover_url'] : ('media.php?type=cover&id=' . $g['id']);
         }
         unset($g);
 
@@ -113,7 +113,7 @@ try {
     // ===== СТРАНИЦА ИГРЫ (как на itch.io) =====
     if ($method === 'GET' && $action === 'get' && isset($_GET['id'])) {
         $id = (int)$_GET['id'];
-        $stmt = $pdo->prepare("SELECT * FROM games WHERE id = ? AND is_published = 1");
+        $stmt = $pdo->prepare("SELECT * FROM games WHERE id = ? AND is_published = 1 AND COALESCE(status, 'published') NOT IN ('pending','rejected','draft')");
         $stmt->execute([$id]);
         $game = $stmt->fetch();
         if (!$game) {
@@ -121,11 +121,32 @@ try {
             echo json_encode(['ok' => false, 'error' => 'Игра не найдена'], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        $game['cover_src'] = 'media.php?type=cover&id=' . $game['id'];
+        $game['cover_src'] = !empty($game['cover_url']) ? $game['cover_url'] : ('media.php?type=cover&id=' . $game['id']);
+        // скрины из game_media
+        try {
+            $ms = $pdo->prepare("SELECT url FROM game_media WHERE game_id = ? AND kind = 'screenshot' ORDER BY sort_order, id");
+            $ms->execute([$id]);
+            $mediaUrls = array_column($ms->fetchAll(), 'url');
+            if ($mediaUrls) {
+                // merge with legacy screenshots below
+                $GLOBALS['_game_media_shots'] = $mediaUrls;
+            }
+        } catch (Throwable $e) {}
 
-        $stmt = $pdo->prepare("SELECT image_url FROM game_screenshots WHERE game_id = ? ORDER BY sort, id");
-        $stmt->execute([$id]);
-        $screenshots = array_column($stmt->fetchAll(), 'image_url');
+
+        $screenshots = [];
+        try {
+            $stmt = $pdo->prepare("SELECT image_url FROM game_screenshots WHERE game_id = ? ORDER BY sort, id");
+            $stmt->execute([$id]);
+            $screenshots = array_column($stmt->fetchAll(), 'image_url');
+        } catch (Throwable $e) {}
+        if (!empty($GLOBALS['_game_media_shots'])) {
+            $screenshots = array_values(array_unique(array_merge($GLOBALS['_game_media_shots'], $screenshots)));
+            unset($GLOBALS['_game_media_shots']);
+        }
+        if (!$screenshots && !empty($game['cover_url'])) {
+            $screenshots = [$game['cover_url']];
+        }
 
         $stmt = $pdo->prepare("SELECT id, platform, version, file_size_bytes, created_at
             FROM game_builds WHERE game_id = ? ORDER BY platform, created_at");
@@ -170,19 +191,21 @@ try {
             SELECT g.id, g.title, g.slug, g.short_description, g.description,
                    g.price, g.category, g.genre, g.tags, g.rating,
                    g.cover_emoji, g.cover_color, g.developer_name, g.download_count,
-                   l.added_at, l.last_played,
+                   l.added_at, l.last_played, l.playtime_minutes, l.is_pinned, l.pinned_order,
                    (SELECT COUNT(*) FROM game_builds b WHERE b.game_id = g.id) AS builds_count,
                    (SELECT GROUP_CONCAT(DISTINCT b.platform) FROM game_builds b WHERE b.game_id = g.id) AS platforms
             FROM library l
             JOIN games g ON g.id = l.game_id
             WHERE l.user_id = ?
-            ORDER BY COALESCE(l.last_played, l.added_at) DESC
+            ORDER BY l.is_pinned DESC, l.pinned_order DESC, COALESCE(l.last_played, l.added_at) DESC
         ");
         $stmt->execute([(int)$user['id']]);
         $games = $stmt->fetchAll();
         foreach ($games as &$g) {
             $g['owned'] = true;
-            $g['cover_src'] = 'media.php?type=cover&id=' . $g['id'];
+            $g['cover_src'] = !empty($g['cover_url']) ? $g['cover_url'] : ('media.php?type=cover&id=' . $g['id']);
+            $g['playtime_minutes'] = (int)($g['playtime_minutes'] ?? 0);
+            $g['is_pinned'] = (int)($g['is_pinned'] ?? 0);
         }
         unset($g);
         echo json_encode(['ok' => true, 'library' => $games], JSON_UNESCAPED_UNICODE);
@@ -196,7 +219,7 @@ try {
         checkCsrf($body);
         $gameId = (int)($body['game_id'] ?? 0);
 
-        $stmt = $pdo->prepare("SELECT id, title, price FROM games WHERE id = ? AND is_published = 1");
+        $stmt = $pdo->prepare("SELECT id, title, price FROM games WHERE id = ? AND is_published = 1 AND COALESCE(status, 'published') NOT IN ('pending','rejected','draft')");
         $stmt->execute([$gameId]);
         $game = $stmt->fetch();
         if (!$game) {
@@ -258,7 +281,7 @@ try {
             echo json_encode(['ok' => false, 'error' => 'Оценка от 1 до 5'], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        $stmt = $pdo->prepare("SELECT id FROM games WHERE id = ? AND is_published = 1");
+        $stmt = $pdo->prepare("SELECT id FROM games WHERE id = ? AND is_published = 1 AND COALESCE(status, 'published') NOT IN ('pending','rejected','draft')");
         $stmt->execute([$gameId]);
         if (!$stmt->fetch()) {
             http_response_code(404);
@@ -283,23 +306,30 @@ try {
         checkCsrf($body);
         $gameId = (int)($body['game_id'] ?? 0);
         $text = trim((string)($body['body'] ?? ''));
+        $parentId = isset($body['parent_id']) ? (int)$body['parent_id'] : null;
+        if ($parentId <= 0) $parentId = null;
         if (mb_strlen($text) < 2 || mb_strlen($text) > 1000) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Комментарий от 2 до 1000 символов'], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        $stmt = $pdo->prepare("SELECT id FROM games WHERE id = ? AND is_published = 1");
+        $stmt = $pdo->prepare("SELECT id FROM games WHERE id = ? AND is_published = 1 AND COALESCE(status, 'published') NOT IN ('pending','rejected','draft')");
         $stmt->execute([$gameId]);
         if (!$stmt->fetch()) {
             http_response_code(404);
             echo json_encode(['ok' => false, 'error' => 'Игра не найдена'], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        $pdo->prepare("INSERT INTO comments (game_id, user_id, body) VALUES (?, ?, ?)")
-            ->execute([$gameId, (int)$user['id'], $text]);
+        if ($parentId) {
+            $chk = $pdo->prepare("SELECT id FROM comments WHERE id = ? AND game_id = ?");
+            $chk->execute([$parentId, $gameId]);
+            if (!$chk->fetch()) $parentId = null;
+        }
+        $pdo->prepare("INSERT INTO comments (game_id, user_id, body, parent_id) VALUES (?, ?, ?, ?)")
+            ->execute([$gameId, (int)$user['id'], $text, $parentId]);
         $id = (int)$pdo->lastInsertId();
 
-        $stmt = $pdo->prepare("SELECT c.id, c.body, c.created_at, u.username, u.avatar, u.avatar_color, u.id AS user_id
+        $stmt = $pdo->prepare("SELECT c.id, c.body, c.created_at, c.parent_id, c.likes, u.username, u.avatar, u.avatar_color, u.avatar_url, u.id AS user_id
             FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?");
         $stmt->execute([$id]);
         echo json_encode(['ok' => true, 'comment' => $stmt->fetch()], JSON_UNESCAPED_UNICODE);

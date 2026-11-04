@@ -47,11 +47,20 @@ function getDB() {
             balance INT NOT NULL DEFAULT 0,
             avatar VARCHAR(10) NOT NULL DEFAULT '',
             avatar_color VARCHAR(7) NOT NULL DEFAULT '#ef5b2c',
+            banner_url VARCHAR(512) NOT NULL DEFAULT '',
+            karma INT NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_email (email),
             INDEX idx_username (username)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Авто-миграция новых полей профиля
+        ensureColumn($pdo, 'users', 'banner_url', "VARCHAR(512) NOT NULL DEFAULT ''");
+        ensureColumn($pdo, 'users', 'karma', "INT NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'users', 'avatar_url', "VARCHAR(512) NOT NULL DEFAULT ''");
+        ensureColumn($pdo, 'users', 'banner_pos', "VARCHAR(32) NOT NULL DEFAULT '50% 50%'");
+        ensureColumn($pdo, 'users', 'banner_zoom', "DECIMAL(4,2) NOT NULL DEFAULT 1.00");
 
         // Сессии
         // ВАЖНО: expires_at — TIMESTAMP NULL. Явный NOT NULL без DEFAULT даёт
@@ -141,12 +150,39 @@ function getDB() {
             game_id INT UNSIGNED NOT NULL,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_played TIMESTAMP NULL DEFAULT NULL,
+            playtime_minutes INT UNSIGNED NOT NULL DEFAULT 0,
+            is_pinned TINYINT(1) NOT NULL DEFAULT 0,
+            pinned_order INT NOT NULL DEFAULT 0,
             UNIQUE KEY uniq_user_game (user_id, game_id),
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         ensureColumn($pdo, 'library', 'last_played', "TIMESTAMP NULL DEFAULT NULL");
+        ensureColumn($pdo, 'library', 'playtime_minutes', "INT UNSIGNED NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'library', 'is_pinned', "TINYINT(1) NOT NULL DEFAULT 0");
+        
+        ensureColumn($pdo, 'library', 'pinned_order', "INT NOT NULL DEFAULT 0");
+
+        // Демо: если у всех игр playtime = 0 — раздаём случайное время для красоты профиля
+        try {
+            $zero = (int)$pdo->query("SELECT COUNT(*) FROM library WHERE playtime_minutes > 0")->fetchColumn();
+            $total = (int)$pdo->query("SELECT COUNT(*) FROM library")->fetchColumn();
+            if ($total > 0 && $zero === 0) {
+                $rows = $pdo->query("SELECT id FROM library")->fetchAll();
+                $upd = $pdo->prepare("UPDATE library SET playtime_minutes = ?, last_played = DATE_SUB(NOW(), INTERVAL FLOOR(RAND()*14) DAY) WHERE id = ?");
+                foreach ($rows as $r) {
+                    $mins = rand(5, 6000);
+                    $upd->execute([$mins, $r['id']]);
+                }
+                // Закрепим первую игру
+                $first = $pdo->query("SELECT id FROM library ORDER BY id ASC LIMIT 1")->fetchColumn();
+                if ($first) {
+                    $pdo->prepare("UPDATE library SET is_pinned = 1, pinned_order = 1 WHERE id = ?")->execute([$first]);
+                }
+            }
+        } catch (Throwable $e) { /* ignore */ }
+
 
         // Сборки игр (файлы для скачивания)
         $pdo->exec("CREATE TABLE IF NOT EXISTS game_builds (
@@ -211,6 +247,90 @@ function getDB() {
         // === ДЕМО-ДАННЫЕ ===
         seedDemoData($pdo);
 
+
+        // Друзья
+        $pdo->exec("CREATE TABLE IF NOT EXISTS friendships (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            friend_id INT UNSIGNED NOT NULL,
+            status ENUM('pending','accepted','blocked') NOT NULL DEFAULT 'pending',
+            requested_by INT UNSIGNED NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_pair (user_id, friend_id),
+            INDEX idx_friend (friend_id),
+            INDEX idx_status (status),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        ensureColumn($pdo, 'users', 'last_seen', "TIMESTAMP NULL DEFAULT NULL");
+        ensureColumn($pdo, 'users', 'is_online', "TINYINT(1) NOT NULL DEFAULT 0");
+
+
+        // Личные сообщения (только между друзьями)
+        $pdo->exec("CREATE TABLE IF NOT EXISTS messages (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            sender_id INT UNSIGNED NOT NULL,
+            receiver_id INT UNSIGNED NOT NULL,
+            body TEXT NOT NULL,
+            is_read TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_pair (sender_id, receiver_id),
+            INDEX idx_receiver (receiver_id, is_read),
+            INDEX idx_created (created_at),
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+
+        // Уведомления
+        $pdo->exec("CREATE TABLE IF NOT EXISTS notifications (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            type VARCHAR(32) NOT NULL,
+            title VARCHAR(255) NOT NULL DEFAULT '',
+            body VARCHAR(512) NOT NULL DEFAULT '',
+            meta_json TEXT NULL,
+            is_read TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user_read (user_id, is_read),
+            INDEX idx_created (created_at),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        ensureColumn($pdo, 'users', 'lang', "VARCHAR(8) NOT NULL DEFAULT 'ru'");
+        ensureColumn($pdo, 'users', 'profile_visibility', "ENUM('public','friends','hidden') NOT NULL DEFAULT 'public'");
+        ensureColumn($pdo, 'users', 'media_visibility', "ENUM('public','friends','hidden') NOT NULL DEFAULT 'public'");
+        ensureColumn($pdo, 'users', 'allow_friend_requests', "TINYINT(1) NOT NULL DEFAULT 1");
+        ensureColumn($pdo, 'users', 'notif_prefs', "TEXT NULL");
+
+
+        // Модерация и расширенные поля игры
+        ensureColumn($pdo, 'games', 'status', "ENUM('draft','pending','published','rejected') NOT NULL DEFAULT 'published'");
+        ensureColumn($pdo, 'games', 'submitted_by', "INT UNSIGNED NULL DEFAULT NULL");
+        ensureColumn($pdo, 'games', 'banner_url', "VARCHAR(512) DEFAULT NULL");
+        ensureColumn($pdo, 'games', 'video_url', "VARCHAR(512) DEFAULT NULL");
+        ensureColumn($pdo, 'games', 'sys_req_min', "TEXT NULL");
+        ensureColumn($pdo, 'games', 'sys_req_rec', "TEXT NULL");
+        ensureColumn($pdo, 'games', 'controllers', "VARCHAR(64) NOT NULL DEFAULT ''");
+        ensureColumn($pdo, 'games', 'languages', "VARCHAR(255) NOT NULL DEFAULT ''");
+        ensureColumn($pdo, 'games', 'review_note', "VARCHAR(512) DEFAULT NULL");
+        ensureColumn($pdo, 'games', 'is_adult', "TINYINT(1) NOT NULL DEFAULT 0");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS game_media (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            game_id INT UNSIGNED NOT NULL,
+            kind ENUM('screenshot','video') NOT NULL DEFAULT 'screenshot',
+            url VARCHAR(512) NOT NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_game (game_id),
+            FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        ensureColumn($pdo, 'comments', 'parent_id', "INT UNSIGNED NULL DEFAULT NULL");
+        ensureColumn($pdo, 'comments', 'likes', "INT UNSIGNED NOT NULL DEFAULT 0");
         return $pdo;
     } catch (PDOException $e) {
         die(json_encode(['error' => 'DB connection failed: ' . $e->getMessage()]));
