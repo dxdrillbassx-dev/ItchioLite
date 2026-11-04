@@ -45,9 +45,21 @@ if (!$isAuthorized && $currentView === 'profile') {
       </nav>
       <div class="user-area">
         <?php if ($isAuthorized): ?>
-        <span class="balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</span>
-        <span class="username"><?php echo htmlspecialchars($user['username']); ?></span>
-        <div class="avatar"><?php echo htmlspecialchars(mb_strtoupper(mb_substr($user['username'], 0, 1))); ?></div>
+        <div class="avatar-wrap">
+          <button type="button" class="avatar" id="avatar-btn" aria-haspopup="true" aria-expanded="false"><?php echo htmlspecialchars(mb_strtoupper(mb_substr($user['username'], 0, 1))); ?></button>
+          <div class="user-menu hidden" id="user-menu" role="menu">
+            <div class="user-menu-head">
+              <div class="user-menu-name"><?php echo htmlspecialchars($user['username']); ?></div>
+              <div class="user-menu-mail"><?php echo htmlspecialchars($user['email']); ?></div>
+            </div>
+            <div class="user-menu-balance">
+              <span>Баланс</span>
+              <b><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
+            </div>
+            <button type="button" class="user-menu-item" id="menu-settings">&#9881;&nbsp; Настройки</button>
+            <button type="button" class="user-menu-item danger" id="menu-logout">&#8618;&nbsp; Выйти</button>
+          </div>
+        </div>
         <?php else: ?>
         <a href="?view=auth" class="btn-auth">Войти</a>
         <?php endif; ?>
@@ -340,6 +352,22 @@ async function logout() {
 function socialAuth(provider) {
   showAuthError('Вход через ' + provider + ' скоро будет доступен');
 }
+</script>
+  <script>
+// Синхронизация авторизации с нативным клиентом (имя, баланс, гость/не гость)
+(function () {
+  if (!window.IS_CLIENT) return;
+  function push() {
+    try {
+      if (window.chrome && window.chrome.webview && window.chrome.webview.hostObjects && window.chrome.webview.hostObjects.catioSync) {
+        window.chrome.webview.hostObjects.catioSync(JSON.stringify(window.AUTH_STATE));
+      }
+    } catch (e) { /* не критично */ }
+  }
+  push();
+  setTimeout(push, 500);
+  setTimeout(push, 2000);
+})();
 </script>
   <script src="js/app.js"></script>
 </body>

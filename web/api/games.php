@@ -17,7 +17,7 @@ $action = $_GET['action'] ?? 'list';
 try {
     if ($method === 'GET' && $action === 'list') {
         $stmt = $pdo->query("
-            SELECT id, title, slug, short_description, description, cover_url, 
+            SELECT id, title, slug, short_description, description, cover_url,
                    price, developer_name, tags, download_count, created_at
             FROM games
             WHERE is_published = 1
@@ -52,6 +52,57 @@ try {
         ");
         $games = $stmt->fetchAll();
         echo json_encode(['ok' => true, 'library' => $games]);
+        exit;
+    }
+
+    // ===== СБОРКИ ИГРЫ (файлы для скачивания) =====
+    if ($method === 'GET' && $action === 'builds' && isset($_GET['game_id'])) {
+        $gid = (int)$_GET['game_id'];
+        $stmt = $pdo->prepare("
+            SELECT id, platform, version, file_url, file_size_bytes, created_at
+            FROM game_builds
+            WHERE game_id = ?
+            ORDER BY created_at DESC
+        ");
+        $stmt->execute([$gid]);
+        echo json_encode(['ok' => true, 'builds' => $stmt->fetchAll()]);
+        exit;
+    }
+
+    // ===== СКАЧИВАНИЕ СБОРКИ =====
+    if ($method === 'GET' && $action === 'download' && isset($_GET['build_id'])) {
+        $bid = (int)$_GET['build_id'];
+        $stmt = $pdo->prepare("
+            SELECT b.*, g.title, g.slug
+            FROM game_builds b
+            JOIN games g ON g.id = b.game_id
+            WHERE b.id = ?
+        ");
+        $stmt->execute([$bid]);
+        $build = $stmt->fetch();
+        if (!$build) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Сборка не найдена']);
+            exit;
+        }
+
+        $path = __DIR__ . '/../' . ltrim(str_replace('..', '', $build['file_url']), '/');
+        if (!is_file($path)) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Файл сборки ещё не загружен на сервер']);
+            exit;
+        }
+
+        // Считаем скачивание
+        $pdo->prepare("UPDATE games SET download_count = download_count + 1 WHERE id = ?")
+            ->execute([$build['game_id']]);
+
+        $filename = $build['slug'] . '-' . $build['version'] . '-' . $build['platform'] . '.zip';
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . filesize($path));
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
         exit;
     }
 

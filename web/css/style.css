@@ -220,12 +220,12 @@ html, body {
   overflow-x: auto;
   padding-bottom: 4px;
   margin-bottom: 28px;
-  scrollbar-width: none;          /* Firefox */
-  -ms-overflow-style: none;       /* IE/Edge */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .chiprow::-webkit-scrollbar {
-  display: none;                  /* Chrome/Safari */
+  display: none;
 }
 
 .chip {
@@ -738,7 +738,6 @@ html, body {
   padding: 20px;
 }
 
-/* Переключатель вкладок */
 .auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -772,7 +771,6 @@ html, body {
   color: var(--text-bright);
 }
 
-/* Ошибка */
 .auth-error {
   padding: 10px 14px;
   border-radius: var(--radius);
@@ -784,7 +782,6 @@ html, body {
 
 .auth-error.hidden { display: none; }
 
-/* Форма */
 .auth-form {
   display: grid;
   gap: 14px;
@@ -819,7 +816,6 @@ html, body {
 .auth-input::placeholder { color: var(--text-muted); }
 .auth-input:focus { border-color: var(--accent); }
 
-/* Кнопка отправки */
 .auth-submit {
   height: 44px;
   border-radius: 999px;
@@ -837,7 +833,6 @@ html, body {
 .auth-submit:hover { background: var(--accent-hover); }
 .auth-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* Соцсети */
 .auth-social {
   display: grid;
   gap: 8px;
@@ -864,7 +859,6 @@ html, body {
   color: var(--text-bright);
 }
 
-/* Бейдж роли */
 .role-badge {
   display: inline-block;
   padding: 4px 12px;
@@ -876,7 +870,6 @@ html, body {
   margin-top: 8px;
 }
 
-/* Кнопка выхода */
 .btn-logout {
   margin-top: 24px;
   padding: 10px 24px;
@@ -894,4 +887,230 @@ html, body {
 .btn-logout:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* ============================================================
+   ДОБАВЛЕНО: меню под аватаркой, оффлайн-блок, сборки
+   ============================================================ */
+
+/* ===== АВАТАР + ВЫПАДАЮЩЕЕ МЕНЮ ===== */
+.avatar-wrap {
+  position: relative;
+}
+
+button.avatar {
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+button.avatar:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px rgba(239, 91, 44, 0.25);
+}
+
+.user-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 230px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  z-index: 300;
+  transform-origin: top right;
+  animation: menuIn 0.15s ease;
+}
+
+.user-menu.hidden { display: none; }
+
+@keyframes menuIn {
+  from { opacity: 0; transform: scale(0.96) translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.user-menu-head {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-menu-name {
+  color: var(--text-bright);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.user-menu-mail {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin-top: 2px;
+  word-break: break-all;
+}
+
+.user-menu-balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-menu-balance b {
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.user-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
+.user-menu-item.danger:hover {
+  color: var(--accent);
+}
+
+/* ===== ОФФЛАЙН-БЛОК «КОТ УШЁЛ В ЗАПОЙ» ===== */
+.offline-block {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 70px 20px;
+}
+
+.offline-logo {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 20px;
+  border-radius: 18px;
+  background: var(--accent);
+  color: #12110e;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 2rem;
+}
+
+.offline-title {
+  color: var(--text-bright);
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  letter-spacing: -0.02em;
+}
+
+.offline-text {
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.btn-retry {
+  background: var(--accent);
+  color: #12110e;
+  border: none;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 10px 24px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-retry:hover { background: var(--accent-hover); }
+
+/* ===== СБОРКИ В МОДАЛКЕ ===== */
+.modal-builds-area {
+  margin-bottom: 20px;
+}
+
+.modal-builds-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-bright);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.build-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+
+.build-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.build-platform {
+  font-weight: 600;
+  color: var(--text-bright);
+  font-size: 0.9rem;
+}
+
+.build-version {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.build-size {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  background: var(--bg-hover);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.btn-download {
+  background: var(--accent);
+  color: #12110e;
+  border: none;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.btn-download:hover { background: var(--accent-hover); }
+
+.modal-builds-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 8px 0;
 }

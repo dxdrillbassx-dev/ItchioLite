@@ -11,6 +11,9 @@
 #include <vector>
 #include <algorithm>
 #include <cctype>
+#include <thread>
+#include <atomic>
+#include <cstring>
 
 #include "webview/webview.h"
 
@@ -33,33 +36,58 @@ const char* STORE_URL     = "http://localhost/itch-steam-like/?client=1";
 const char* LIBRARY_URL   = "http://localhost/itch-steam-like/?view=library&client=1";
 const char* COMMUNITY_URL = "http://localhost/itch-steam-like/?view=community&client=1";
 const char* PROFILE_URL   = "http://localhost/itch-steam-like/?view=profile&client=1";
+const char* AUTH_URL      = "http://localhost/itch-steam-like/?view=auth&client=1";
 
-const char* ERROR_HTML = R"(data:text/html,<!DOCTYPE html><html><head><meta charset=utf-8>
-<style>body{margin:0;background:#12110e;color:#c7c0b8;font-family:Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center}
-.box{max-width:480px;padding:40px}h1{color:#fff;font-size:1.6rem}p{color:#8a837c;line-height:1.5}
-code{background:#221f1a;padding:2px 6px;border-radius:4px;color:#ef5b2c}</style></head><body><div class=box>
-<h1>Не удалось подключиться</h1>
-<p>Проверь Apache в XAMPP и папку<br><code>C:\xampp\htdocs\itch-steam-like\</code></p>
+// Страница «сервер недоступен».
+// ВАЖНО: в data: URL нельзя использовать символ # — он обрезает URL,
+// поэтому все цвета пишем через rgb(). Страница сама перезагрузится через 15 сек.
+const char* ERROR_HTML = R"(data:text/html,<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta http-equiv="refresh" content="15;url=http://localhost/itch-steam-like/?client=1">
+<style>
+body{margin:0;background:rgb(18,17,14);color:rgb(199,192,184);font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center}
+.box{max-width:460px;padding:40px}
+.logo{width:84px;height:84px;margin:0 auto 24px;border-radius:20px;background:rgb(239,91,44);color:rgb(18,17,14);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:2.4rem}
+h1{color:rgb(255,255,255);font-size:1.7rem;margin-bottom:10px;letter-spacing:-0.02em}
+.fun{color:rgb(239,91,44);font-weight:600;margin-bottom:14px}
+p{color:rgb(138,131,124);line-height:1.6;margin-bottom:8px}
+a{display:inline-block;margin-top:18px;padding:10px 26px;border-radius:999px;background:rgb(239,91,44);color:rgb(18,17,14);font-weight:600;text-decoration:none}
+.hint{font-size:0.85rem;opacity:0.7;margin-top:14px}
+</style></head><body><div class="box">
+<div class="logo">C</div>
+<h1>404 — полка пуста</h1>
+<p class="fun">Кот ушёл в запой и не отвечает на звонки.</p>
+<p>Сервер CATio временно недоступен.<br>Проверь, что Apache и MySQL запущены в XAMPP.</p>
+<a href="http://localhost/itch-steam-like/?client=1">Попробовать снова</a>
+<p class="hint">Страница сама обновится через 15 секунд</p>
 </div></body></html>)";
 
 const int TOP_HEIGHT = 118;
-const int ICON_SIZE_WIN = 16;   // иконки окна (рядом с авой)
-const int ICON_SIZE_ARROW = 22; // стрелки назад/вперёд
-const int ICON_SIZE_REFRESH = 14; // кнопка обновить
+const int ICON_SIZE_WIN = 16;
+const int ICON_SIZE_ARROW = 22;
+const int ICON_SIZE_REFRESH = 14;
 
 const COLORREF COL_BG       = RGB(18, 17, 14);
+const COLORREF COL_TABROW   = RGB(26, 24, 20);  // фон строки табов = фон кнопок разделов
+const COLORREF COL_CARD     = RGB(34, 31, 26);
+const COLORREF COL_HOVER    = RGB(46, 42, 36);
+const COLORREF COL_BORDER   = RGB(46, 42, 36);
 const COLORREF COL_ACCENT   = RGB(239, 91, 44);
 const COLORREF COL_TEXT     = RGB(160, 150, 140);
 const COLORREF COL_TEXT_BRT = RGB(255, 255, 255);
+const COLORREF COL_BODY     = RGB(199, 192, 184);
+const COLORREF COL_MUTED    = RGB(138, 131, 124);
 const COLORREF COL_URL      = RGB(120, 110, 100);
 const COLORREF COL_DISABLED = RGB(80, 75, 70);
+
+#define WM_CATIO_CHECK_DONE (WM_APP + 1)
 
 HWND g_hWnd = nullptr;
 HICON g_hLogo = nullptr;
 webview::webview* g_webview = nullptr;
 std::string g_currentUrl = STORE_URL;
-std::string g_balance = "7 501 ₽";
-std::string g_username = "admin";
+std::string g_balance = "";
+std::string g_username = u8"Гость";
+bool g_guest = true;
 
 enum class Section { Store, Library, Community, Profile };
 Section g_currentSection = Section::Store;
@@ -69,12 +97,24 @@ int g_historyIndex = -1;
 bool g_maximized = false;
 RECT g_restoreRect = {};
 
+// Асинхронная проверка сервера (чтобы UI не зависал)
+std::atomic<bool> g_checkBusy{ false };
+std::string g_pendingUrl;
+
+// Меню под аватаркой
+bool g_menuOpen = false;
+int g_menuHover = -1;
+RECT g_avatarRect = {};
+RECT g_menuRect = {};
+
 struct Btn { RECT rc; int id; };
 std::vector<Btn> g_buttons;
+std::vector<Btn> g_menuItems;
 
 enum {
     ID_BACK = 1, ID_FORWARD, ID_REFRESH,
     ID_STORE, ID_LIBRARY, ID_COMMUNITY, ID_PROFILE,
+    ID_AVATAR,
     ID_URL, ID_MIN, ID_MAX, ID_CLOSE
 };
 
@@ -228,7 +268,6 @@ void LoadIconSet(IconSet& set, const wchar_t* filename, int size) {
         src = resized;
     }
 
-    // Gray normal, white hover, darker disabled
     set.normal   = CreateTintedBitmap(src, COL_TEXT);
     set.hover    = CreateTintedBitmap(src, COL_TEXT_BRT);
     set.disabled = CreateTintedBitmap(src, COL_DISABLED);
@@ -237,11 +276,9 @@ void LoadIconSet(IconSet& set, const wchar_t* filename, int size) {
 
 void LoadAllIcons() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    // Навигация — меньше
     LoadIconSet(g_icoBack,     L"back.png",     ICON_SIZE_ARROW);
     LoadIconSet(g_icoForward,  L"forward.png",  ICON_SIZE_ARROW);
     LoadIconSet(g_icoRefresh,  L"refresh.png",  ICON_SIZE_REFRESH);
-    // Окно — чуть крупнее
     LoadIconSet(g_icoMinimiz,  L"minimiz.png",  ICON_SIZE_WIN);
     LoadIconSet(g_icoMaximize, L"maximize.png", ICON_SIZE_WIN);
     LoadIconSet(g_icoRestore,  L"minimize.png", ICON_SIZE_WIN);
@@ -317,6 +354,37 @@ void copyToClipboard(const std::string& text) {
     CloseClipboard();
 }
 
+std::string formatBalance(long v) {
+    std::string s = std::to_string(v);
+    std::string out;
+    int cnt = 0;
+    for (int i = (int)s.size() - 1; i >= 0; i--) {
+        out.insert(out.begin(), s[i]);
+        if (++cnt % 3 == 0 && i > 0) out.insert(out.begin(), ' ');
+    }
+    out += " \xE2\x82\xBD"; // знак рубля ₽
+    return out;
+}
+
+// Грубый разбор JSON-строки из bind-callback (catioSync)
+std::string jsonExtractStr(const std::string& req, const char* key) {
+    std::string pat = std::string("\"") + key + "\":\"";
+    size_t p = req.find(pat);
+    if (p == std::string::npos) return "";
+    p += pat.size();
+    size_t e = req.find('"', p);
+    if (e == std::string::npos) return "";
+    return req.substr(p, e - p);
+}
+
+long jsonExtractInt(const std::string& req, const char* key) {
+    std::string pat = std::string("\"") + key + "\":";
+    size_t p = req.find(pat);
+    if (p == std::string::npos) return 0;
+    p += pat.size();
+    return atol(req.c_str() + p);
+}
+
 bool checkServer() {
     HINTERNET s = WinHttpOpen(L"CATio/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
@@ -326,7 +394,7 @@ bool checkServer() {
     HINTERNET r = WinHttpOpenRequest(c, L"GET", L"/itch-steam-like/", nullptr,
         WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
     if (!r) { WinHttpCloseHandle(c); WinHttpCloseHandle(s); return false; }
-    DWORD t = 2000;
+    DWORD t = 1500; // суммарно до ~3 сек, но в фоновом потоке — окно не виснет
     WinHttpSetOption(r, WINHTTP_OPTION_CONNECT_TIMEOUT, &t, sizeof(t));
     WinHttpSetOption(r, WINHTTP_OPTION_RECEIVE_TIMEOUT, &t, sizeof(t));
     bool ok = false;
@@ -339,6 +407,25 @@ bool checkServer() {
     }
     WinHttpCloseHandle(r); WinHttpCloseHandle(c); WinHttpCloseHandle(s);
     return ok;
+}
+
+// Проверка сервера в фоновом потоке — результат придёт через WM_CATIO_CHECK_DONE.
+// UI поток не блокируется, вкладки переключаются мгновенно даже при лежачем сервере.
+void checkServerAsync(const std::string& urlOnOk) {
+    if (g_checkBusy.exchange(true)) return; // уже идёт проверка
+    g_pendingUrl = urlOnOk;
+    std::thread([]() {
+        bool ok = checkServer();
+        g_checkBusy.store(false);
+        if (g_hWnd) PostMessageW(g_hWnd, WM_CATIO_CHECK_DONE, ok ? 1 : 0, 0);
+    }).detach();
+}
+
+void showOfflinePage() {
+    if (!g_webview) return;
+    g_webview->navigate(ERROR_HTML);
+    g_currentUrl = u8"Сервер недоступен";
+    InvalidateRect(g_hWnd, nullptr, FALSE);
 }
 
 void navigateTo(const std::string& url, bool addHist = true) {
@@ -367,35 +454,27 @@ void goForward() {
     }
 }
 
+const char* sectionUrl(Section s) {
+    if (s == Section::Profile && g_guest) return AUTH_URL;
+    switch (s) {
+        case Section::Store:     return STORE_URL;
+        case Section::Library:   return LIBRARY_URL;
+        case Section::Community: return COMMUNITY_URL;
+        case Section::Profile:   return PROFILE_URL;
+    }
+    return STORE_URL;
+}
+
 void doRefresh() {
-    if (!checkServer()) {
-        g_webview->navigate(ERROR_HTML);
-        g_currentUrl = "Ошибка подключения";
-        InvalidateRect(g_hWnd, nullptr, FALSE);
-        return;
-    }
-    switch (g_currentSection) {
-        case Section::Store:     navigateTo(STORE_URL); break;
-        case Section::Library:   navigateTo(LIBRARY_URL); break;
-        case Section::Community: navigateTo(COMMUNITY_URL); break;
-        case Section::Profile:   navigateTo(PROFILE_URL); break;
-    }
+    // Визуально переключаемся сразу, проверка — в фоне
+    checkServerAsync(sectionUrl(g_currentSection));
+    InvalidateRect(g_hWnd, nullptr, FALSE);
 }
 
 void switchSection(Section s) {
     g_currentSection = s;
-    if (!checkServer()) {
-        g_webview->navigate(ERROR_HTML);
-        g_currentUrl = "Ошибка подключения";
-    } else {
-        switch (s) {
-            case Section::Store:     navigateTo(STORE_URL); break;
-            case Section::Library:   navigateTo(LIBRARY_URL); break;
-            case Section::Community: navigateTo(COMMUNITY_URL); break;
-            case Section::Profile:   navigateTo(PROFILE_URL); break;
-        }
-    }
     InvalidateRect(g_hWnd, nullptr, TRUE);
+    checkServerAsync(sectionUrl(s));
 }
 
 void layoutWebview() {
@@ -464,6 +543,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         InvalidateRect(hWnd, nullptr, FALSE);
         break;
 
+    case WM_CATIO_CHECK_DONE:
+        // Проверка сервера завершилась в фоне: переходим или показываем «кот в запое»
+        if (wParam) navigateTo(g_pendingUrl);
+        else showOfflinePage();
+        break;
+
+    case WM_KEYDOWN:
+        if (wParam == VK_ESCAPE && g_menuOpen) {
+            g_menuOpen = false;
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        break;
+
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
@@ -486,7 +578,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int y1 = 18;
         int h1 = 48;
 
-        // Logo + CATio (отдельно, можно двигать)
+        // Фон строки табов — теперь весь цвета кнопок разделов (#1a1814)
+        {
+            HBRUSH rowBg = CreateSolidBrush(COL_TABROW);
+            RECT rowR = { 0, 0, rc.right, y1 + h1 };
+            FillRect(hdc, &rowR, rowBg);
+            DeleteObject(rowBg);
+        }
+
+        // Logo + CATio
         int logoX = 62;
         if (g_hLogo) {
             DrawIconEx(hdc, logoX, y1 + 4, g_hLogo, 40, 40, 0, nullptr, DI_NORMAL);
@@ -504,15 +604,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             drawText(hdc, r, L"CATio", COL_ACCENT, 30, true, DT_LEFT);
         }
 
-        // Tabs — фиксированная позиция, не зависят от лого
+        // Tabs
         int x = 192;
         auto addTab = [&](const wchar_t* label, int id, bool active, int w) {
             RECT r = { x, y1, x + w, y1 + h1 };
             g_buttons.push_back({ r, id });
-            // Фон таба #1a1814 как в веб-версии
-            HBRUSH tabBg = CreateSolidBrush(RGB(26, 24, 20));
-            FillRect(hdc, &r, tabBg);
-            DeleteObject(tabBg);
             COLORREF col = active ? COL_ACCENT : (hoverId == id ? COL_TEXT_BRT : COL_TEXT);
             drawText(hdc, r, label, col, 20, true, DT_CENTER);
             if (active) {
@@ -530,11 +626,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         addTab(L"МАСТЕРСКАЯ", ID_COMMUNITY, g_currentSection == Section::Community, 135);
 
         {
-            std::wstring nickUp = toUpperW(g_username);
+            // У гостя вместо ника — кнопка ВОЙТИ
+            std::wstring nickUp = g_guest ? L"ВОЙТИ" : toUpperW(g_username);
             int w = 100;
             RECT r = { x, y1, x + w, y1 + h1 };
             g_buttons.push_back({ r, ID_PROFILE });
-            bool active = g_currentSection == Section::Profile;
+            bool active = g_currentSection == Section::Profile && !g_guest;
             COLORREF col = active ? COL_ACCENT : (hoverId == ID_PROFILE ? COL_TEXT_BRT : COL_TEXT);
             drawText(hdc, r, nickUp.c_str(), col, 20, true, DT_CENTER);
             if (active) {
@@ -547,7 +644,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
         }
 
-        // Right side: window buttons (меньше)
+        // Right side: window buttons
         int rx = rc.right - 12;
         auto addWinBtn = [&](const IconSet& ico, int id) {
             RECT r = { rx - 36, y1, rx, y1 + h1 };
@@ -559,7 +656,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         addWinBtn(g_maximized ? g_icoRestore : g_icoMaximize, ID_MAX);
         addWinBtn(g_icoMinimiz, ID_MIN);
 
-        // Avatar
+        // Avatar (кликабельная — открывает меню)
         int av = 32;
         int avX = rx - av - 6;
         int avY = y1 + (h1 - av) / 2;
@@ -573,48 +670,103 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         DeleteObject(abr);
         DeleteObject(apn);
         RECT rAv = { avX, avY, avX + av, avY + av };
-        std::wstring avLetter = toUpperW(g_username.substr(0, 1));
+        g_avatarRect = rAv;
+        g_buttons.push_back({ rAv, ID_AVATAR });
+        if (hoverId == ID_AVATAR && !g_guest) {
+            HPEN ring = CreatePen(PS_SOLID, 2, COL_TEXT_BRT);
+            HPEN oring = (HPEN)SelectObject(hdc, ring);
+            Ellipse(hdc, avX - 2, avY - 2, avX + av + 2, avY + av + 2);
+            SelectObject(hdc, oring);
+            DeleteObject(ring);
+        }
+        std::wstring avLetter = g_guest ? L"?" : toUpperW(g_username.substr(0, 1));
         drawText(hdc, rAv, avLetter.c_str(), COL_BG, 14, true, DT_CENTER);
         rx = avX - 10;
 
         // Username
-        {
+        if (!g_guest) {
             std::wstring nick = toWide(g_username);
             RECT r = { rx - 80, y1, rx, y1 + h1 };
             drawText(hdc, r, nick.c_str(), COL_TEXT_BRT, 16, false, DT_RIGHT);
             rx -= 90;
-        }
-        // Balance
-        {
             std::wstring bal = toWide(g_balance);
-            RECT r = { rx - 100, y1, rx, y1 + h1 };
-            drawText(hdc, r, bal.c_str(), COL_ACCENT, 16, true, DT_RIGHT);
+            RECT rb = { rx - 100, y1, rx, y1 + h1 };
+            drawText(hdc, rb, bal.c_str(), COL_ACCENT, 16, true, DT_RIGHT);
+        }
+
+        // ===== МЕНЮ ПОД АВАТАРКОЙ =====
+        if (g_menuOpen && !g_guest) {
+            const int mw = 230;
+            const int hh = 56, ih = 42;
+            int mx = g_avatarRect.right - mw;
+            if (mx < 8) mx = 8;
+            int my = g_avatarRect.bottom + 8;
+            RECT m = { mx, my, mx + mw, my + hh + 1 + ih * 2 };
+            g_menuRect = m;
+
+            HBRUSH mbg = CreateSolidBrush(COL_CARD);
+            FillRect(hdc, &m, mbg);
+            DeleteObject(mbg);
+            HBRUSH bbr = CreateSolidBrush(COL_BORDER);
+            FrameRect(hdc, &m, bbr);
+            DeleteObject(bbr);
+
+            g_menuItems.clear();
+
+            // Шапка: баланс
+            RECT hR = { mx + 14, my, mx + mw - 14, my + hh };
+            g_menuItems.push_back({ hR, 0 });
+            RECT l1 = { hR.left, hR.top + 6, hR.right, hR.top + 24 };
+            drawText(hdc, l1, L"Баланс", COL_MUTED, 12, false, DT_LEFT);
+            RECT l2 = { hR.left, hR.top + 22, hR.right, hR.top + 50 };
+            std::wstring bal = toWide(g_balance.empty() ? "0 \xE2\x82\xBD" : g_balance);
+            drawText(hdc, l2, bal.c_str(), COL_ACCENT, 16, true, DT_LEFT);
+
+            HPEN sep = CreatePen(PS_SOLID, 1, COL_BORDER);
+            HPEN os = (HPEN)SelectObject(hdc, sep);
+            MoveToEx(hdc, mx, my + hh, nullptr);
+            LineTo(hdc, mx + mw, my + hh);
+            SelectObject(hdc, os);
+            DeleteObject(sep);
+
+            struct Item { const wchar_t* txt; int id; bool danger; };
+            Item items[] = { { L"Настройки", 1, false }, { L"Выйти", 2, true } };
+            int iy = my + hh + 1;
+            for (auto& it : items) {
+                RECT r = { mx, iy, mx + mw, iy + ih };
+                g_menuItems.push_back({ r, it.id });
+                if (g_menuHover == it.id) {
+                    HBRUSH hb = CreateSolidBrush(COL_HOVER);
+                    FillRect(hdc, &r, hb);
+                    DeleteObject(hb);
+                }
+                RECT tr = { r.left + 14, r.top, r.right - 14, r.bottom };
+                COLORREF col = (g_menuHover == it.id && it.danger) ? COL_ACCENT : COL_BODY;
+                drawText(hdc, tr, it.txt, col, 14, false, DT_LEFT);
+                iy += ih;
+            }
         }
 
         // ===== ROW 2: arrows under logo + refresh + url =====
         int y2 = 78;
         int h2 = 28;
 
-        // стрелки под лого
         int ax = 57;
         bool canBack    = g_historyIndex > 0;
         bool canForward = g_historyIndex + 1 < (int)g_history.size();
 
-        // Back
         {
             RECT r = { ax, y2, ax + 26, y2 + h2 };
             g_buttons.push_back({ r, ID_BACK });
             DrawIconCentered(hdc, g_icoBack, r, ICON_SIZE_ARROW, hoverId == ID_BACK && canBack, canBack);
             ax += 26;
         }
-        // Forward
         {
             RECT r = { ax, y2, ax + 26, y2 + h2 };
             g_buttons.push_back({ r, ID_FORWARD });
             DrawIconCentered(hdc, g_icoForward, r, ICON_SIZE_ARROW, hoverId == ID_FORWARD && canForward, canForward);
             ax += 30;
         }
-        // Refresh (меньше)
         {
             RECT r = { ax, y2, ax + 24, y2 + h2 };
             g_buttons.push_back({ r, ID_REFRESH });
@@ -624,14 +776,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         x = ax + 8;
 
-        // clean URL for display (без client=1)
         std::wstring urlW = toWide(g_currentUrl);
         size_t p = urlW.find(L"?client=1");
         if (p != std::wstring::npos) urlW = urlW.substr(0, p);
         p = urlW.find(L"&client=1");
         if (p != std::wstring::npos) urlW = urlW.substr(0, p);
-        // также убираем ?view=... если хотим совсем чистый, но оставляем view
-        // меряем реальную ширину текста
+
         HFONT fUrl = CreateFontW(13, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
             DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
         HFONT oldF = (HFONT)SelectObject(hdc, fUrl);
@@ -652,6 +802,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_LBUTTONDOWN: {
         int mx = GET_X_LPARAM(lParam);
         int my = GET_Y_LPARAM(lParam);
+
+        // Меню открыто — клики обрабатывает оно
+        if (g_menuOpen) {
+            bool inside = false;
+            for (const auto& mi : g_menuItems) {
+                if (mx >= mi.rc.left && mx <= mi.rc.right && my >= mi.rc.top && my <= mi.rc.bottom) {
+                    inside = true;
+                    if (mi.id == 1) {
+                        g_menuOpen = false;
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        MessageBoxW(hWnd, u8"Настройки скоро появятся. Кот ещё их пакует.", L"CATio", MB_OK | MB_ICONINFORMATION);
+                    } else if (mi.id == 2) {
+                        g_menuOpen = false;
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        // Выход через JS страницы (разлогинит и перекинет в каталог)
+                        if (g_webview) g_webview->eval("try{logout()}catch(e){}");
+                    }
+                    break;
+                }
+            }
+            if (!inside) {
+                g_menuOpen = false;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            return 0;
+        }
+
         for (const auto& b : g_buttons) {
             if (mx >= b.rc.left && mx <= b.rc.right && my >= b.rc.top && my <= b.rc.bottom) {
                 switch (b.id) {
@@ -662,14 +839,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     case ID_LIBRARY:   switchSection(Section::Library); break;
                     case ID_COMMUNITY: switchSection(Section::Community); break;
                     case ID_PROFILE:   switchSection(Section::Profile); break;
+                    case ID_AVATAR:
+                        if (!g_guest) {
+                            g_menuOpen = !g_menuOpen;
+                            g_menuHover = -1;
+                            InvalidateRect(hWnd, nullptr, FALSE);
+                        }
+                        break;
                     case ID_URL: {
-                        // копируем чистый URL без client=1
                         std::string clean = g_currentUrl;
                         size_t pos = clean.find("?client=1");
                         if (pos != std::string::npos) clean = clean.substr(0, pos);
                         pos = clean.find("&client=1");
                         if (pos != std::string::npos) clean = clean.substr(0, pos);
-                        // если остался только ?view=... — ок, браузерная версия с табами
                         copyToClipboard(clean);
                         MessageBoxW(hWnd, L"Ссылка скопирована", L"CATio", MB_OK | MB_ICONINFORMATION);
                         break;
@@ -703,8 +885,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 break;
             }
         }
-        if (hoverId != old) {
-            RECT top = { 0, 0, 8000, TOP_HEIGHT };
+        int oldMenuHover = g_menuHover;
+        g_menuHover = -1;
+        if (g_menuOpen) {
+            for (const auto& mi : g_menuItems) {
+                if (mi.id != 0 && mx >= mi.rc.left && mx <= mi.rc.right && my >= mi.rc.top && my <= mi.rc.bottom) {
+                    g_menuHover = mi.id;
+                    break;
+                }
+            }
+        }
+        if (hoverId != old || g_menuHover != oldMenuHover) {
+            RECT top = { 0, 0, 8000, TOP_HEIGHT + 220 };
             InvalidateRect(hWnd, &top, FALSE);
         }
         break;
@@ -763,12 +955,23 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
     try {
         g_webview = new webview::webview(true, g_hWnd);
         layoutWebview();
-        if (checkServer()) navigateTo(STORE_URL);
-        else {
-            g_webview->navigate(ERROR_HTML);
-            g_currentUrl = "Ошибка подключения";
-            InvalidateRect(g_hWnd, nullptr, FALSE);
-        }
+
+        // Синхронизация с веб-страницей: имя, баланс, гость/не гость.
+        // Страница (index.php) шлёт AUTH_STATE через catioSync.
+        g_webview->bind("catioSync", [](const std::string& req) -> std::string {
+            bool auth = req.find("\"authorized\":true") != std::string::npos
+                     || req.find("\"authorized\": true") != std::string::npos;
+            g_guest = !auth;
+            std::string name = jsonExtractStr(req, "username");
+            if (name.empty()) name = u8"Гость";
+            g_username = name;
+            g_balance = auth ? formatBalance(jsonExtractInt(req, "balance")) : "";
+            if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
+            return "";
+        });
+
+        // Проверка сервера в фоне — окно не виснет на старте
+        checkServerAsync(STORE_URL);
     } catch (const std::exception& e) {
         showError(L"CATio", L"Ошибка WebView2:\n" + toWide(e.what()));
         return 1;
