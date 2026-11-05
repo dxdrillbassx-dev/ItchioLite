@@ -1375,10 +1375,11 @@ button.avatar:hover {
 /* Комментарии */
 .comments-count { color: var(--text-muted); font-weight: 500; font-size: .9em; }
 .comment-form {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  padding: 14px;
+  /* без карточного фона — как просил */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   margin-bottom: 18px;
 }
 .comment-input {
@@ -1969,8 +1970,12 @@ body.guest #app { display: block; }
 .side-user-btn:hover { background: var(--bg-card); }
 
 .side-avatar {
-  width: 38px;
-  height: 38px;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  max-width: 38px !important;
+  max-height: 38px !important;
   border-radius: 10px;
   display: grid;
   place-items: center;
@@ -1978,7 +1983,16 @@ body.guest #app { display: block; }
   font-size: 0.95rem;
   color: #12110e;
   background: var(--accent);
-  flex-shrink: 0;
+  flex-shrink: 0 !important;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.side-user-btn {
+  /* не даём кнопке красть размеры аватара */
+}
+.side-user-btn .side-avatar {
+  align-self: center;
 }
 
 .side-user-name {
@@ -2052,11 +2066,25 @@ body.guest #app { display: block; }
 /* ===== Библиотека в сайдбаре ===== */
 .side-lib {
   flex: 1;
-  overflow-y: auto;
-  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* шапка+поиск не скроллятся */
+  padding: 8px 12px 0;
   border-top: 1px solid var(--border);
   margin-top: 10px;
   min-height: 0;
+}
+#side-lib-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 12px;
+  margin-top: 4px;
+}
+.side-lib-title,
+.side-lib-controls,
+.side-lib-modal {
+  flex-shrink: 0;
 }
 
 .side-lib-title {
@@ -2747,6 +2775,175 @@ body.web .main {
 .filter-opt:hover { color: var(--text-bright); }
 .filter-opt input { accent-color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; }
 
+/* Каталог: тулбар (вид + сортировка) */
+.store-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.store-view-toggle {
+  display: inline-flex;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.store-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.store-view-btn:hover { color: var(--text-bright); background: var(--bg-hover); }
+.store-view-btn.active {
+  color: var(--accent);
+  background: var(--bg-card);
+}
+
+/* Фильтр по цене */
+.filter-price-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.price-pill {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all .12s;
+}
+.price-pill:hover { color: var(--text-bright); border-color: var(--text-muted); }
+.price-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #12110e;
+  font-weight: 600;
+}
+
+.filter-clear-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.filter-clear-btn:hover {
+  color: var(--text-bright);
+  border-color: var(--text-muted);
+}
+
+/* Каталог: сетка карточек (режим grid) */
+.store-list.store-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+.store-grid-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color .12s, transform .12s;
+  display: flex;
+  flex-direction: column;
+}
+.store-grid-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.store-grid-cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.store-grid-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .2s;
+}
+.store-grid-card:hover .store-grid-cover img { transform: scale(1.04); }
+.store-grid-cover .card-badge { position: absolute; left: 6px; top: 6px; z-index: 2; }
+.store-grid-overlay {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 2;
+}
+.store-grid-overlay .price {
+  background: rgba(18, 17, 14, 0.85);
+  backdrop-filter: blur(4px);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.store-grid-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.store-grid-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-bright);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.store-grid-meta {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.store-grid-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+.store-grid-rating { font-size: 0.72rem; }
+.btn-get-sm {
+  font-size: 0.72rem !important;
+  padding: 4px 10px !important;
+  min-height: 0 !important;
+}
+.store-empty { padding: 40px 16px; text-align: center; }
+
+@media (max-width: 900px) {
+  .store-layout { grid-template-columns: 1fr; }
+  .store-filters { order: -1; }
+  .store-list.store-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+
 /* ---------- БИБЛИОТЕКА: сетка карточек ---------- */
 .lib-head {
   display: flex;
@@ -3096,8 +3293,11 @@ body.web .main {
 }
 
 .hp-avatar {
-  width: 88px;
-  height: 88px;
+  width: 88px !important;
+  height: 88px !important;
+  min-width: 88px !important;
+  min-height: 88px !important;
+  aspect-ratio: 1 / 1;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -3107,10 +3307,56 @@ body.web .main {
   color: #fff;
   border: 2px solid rgba(255,255,255,0.12);
   box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-  flex-shrink: 0;
+  flex-shrink: 0 !important;
   overflow: hidden;
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
+  box-sizing: border-box;
+}
+.hp-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.hp-role-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  background: rgba(255,255,255,0.12);
+  color: var(--text-bright);
+  text-shadow: none;
+}
+.hp-role-badge.is-admin {
+  background: rgba(239, 91, 44, 0.25);
+  color: #ffb08a;
+  border: 1px solid rgba(239, 91, 44, 0.4);
+}
+.hp-role-badge.is-dev {
+  background: rgba(80, 160, 255, 0.2);
+  color: #9ec9ff;
+  border: 1px solid rgba(80, 160, 255, 0.35);
+}
+.hp-role-badge.is-banned {
+  background: rgba(220, 60, 60, 0.25);
+  color: #ff9a9a;
+  border: 1px solid rgba(220, 60, 60, 0.4);
+}
+.hp-role-badge.is-newbie {
+  background: rgba(120, 220, 140, 0.18);
+  color: #b6f0c2;
+  border: 1px solid rgba(120, 220, 140, 0.35);
+}
+.hp-role-badge.is-user {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-muted);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .hp-username {
@@ -5522,39 +5768,95 @@ button.avatar,
   width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
-  padding: 8px 0 4px;
+  padding: 0;
+  margin: 0 0 8px;
   background: transparent !important;
   border: none !important;
+  box-sizing: border-box;
 }
+/* Галерея на всю ширину колонки — как .gp-meta-card */
 .gp-gallery-viewport {
-  width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: none !important;
   border-radius: 8px;
   overflow: hidden;
   background: #0e0d0b;
+  border: 1px solid rgba(255,255,255,0.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-sizing: border-box;
+}
+.gp-gallery-main {
+  aspect-ratio: 16/9;
+  width: 100%;
+  min-height: 280px;
+  background: #0e0d0b;
+}
+@media (min-width: 900px) {
+  .gp-gallery-main { min-height: 360px; }
 }
 @media (min-width: 1280px) {
-  .gp-gallery-viewport { width: 60%; max-height: 500px; }
+  .gp-gallery-main { min-height: 420px; }
 }
-@media (min-width: 1536px) {
-  .gp-gallery-viewport { width: 50%; max-height: 600px; }
-}
-.gp-gallery-main { aspect-ratio: 16/9; width: 100%; background: #0e0d0b; }
 .gp-gallery-main img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
-.gp-gallery-thumbs {
+.gp-gallery-main video,
+.gp-gallery-main iframe {
   width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+  border: 0;
+}
+.gp-thumb-video { position: relative; }
+.gp-thumb-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.35);
+  color: #fff;
+  font-size: 14px;
+  pointer-events: none;
+}
+.gp-like-btn.liked {
+  color: #ff4d6d !important;
+  border-color: rgba(255,77,109,.5) !important;
+}
+.gp-like-btn.liked svg {
+  fill: #ff4d6d;
+  stroke: #ff4d6d;
+}
+.side-lib-item {
+  position: relative;
+}
+.side-lib-item.liked {
+  color: var(--text-bright);
+}
+.side-lib-heart {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.95;
+  text-shadow: 0 0 6px rgba(255,255,255,.35);
+}
+.side-lib-item img {
+  object-fit: cover;
+}
+.gp-gallery-thumbs {
+  width: 100% !important;
+  max-width: 100% !important;
   display: flex;
   gap: 6px;
   overflow-x: auto;
   padding: 4px 0;
   background: transparent !important;
-}
-@media (min-width: 1280px) {
-  .gp-gallery-thumbs { width: 60%; }
-}
-@media (min-width: 1536px) {
-  .gp-gallery-thumbs { width: 50%; }
+  box-sizing: border-box;
 }
 .gp-thumb {
   flex: 0 0 18%;
@@ -5576,6 +5878,40 @@ button.avatar,
 }
 .gp-description { color: var(--text); line-height: 22px; font-size: 0.92rem; }
 .gp-description p { margin: 0 0 10px; }
+.gp-description img,
+.gp-description video,
+.gp-description .gp-desc-video {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 12px 0;
+  display: block;
+  background: #0e0d0b;
+}
+/* Видео в «Об игре»: без UI плеера, как фоновый ролик */
+.gp-description video,
+.gp-description .gp-desc-video {
+  pointer-events: none;
+  object-fit: cover;
+  aspect-ratio: 16 / 9;
+}
+.gp-description video::-webkit-media-controls,
+.gp-description video::-webkit-media-controls-enclosure {
+  display: none !important;
+}
+.gp-description iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 8px;
+  margin: 12px 0;
+  display: block;
+  background: #000;
+}
+.gp-description a { color: var(--accent); text-decoration: underline; }
+.gp-description ul, .gp-description ol { margin: 8px 0 12px 1.2em; }
+.gp-description li { margin-bottom: 4px; }
 .gp-description--collapsed {
   max-height: 300px;
   overflow: hidden;
@@ -6814,4 +7150,507 @@ body.client #view-game {
 
 body.client #view-profile {
   margin: -8px -8px 0;
+}
+/* ===== Экран бана ===== */
+.ban-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: radial-gradient(ellipse at 50% 20%, #2a2218 0%, #12110e 55%, #0a0908 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.ban-screen-inner {
+  max-width: 440px;
+  width: 100%;
+  text-align: center;
+}
+.ban-logo {
+  font-size: 72px;
+  line-height: 1;
+  margin-bottom: 12px;
+  filter: grayscale(0.15);
+  animation: ban-bob 2.4s ease-in-out infinite;
+}
+@keyframes ban-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.ban-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-bright);
+  margin: 0 0 8px;
+}
+.ban-sub {
+  color: var(--text-muted);
+  margin: 0 0 20px;
+  font-size: 0.95rem;
+}
+.ban-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  text-align: left;
+  margin-bottom: 22px;
+}
+.ban-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 0.88rem;
+}
+.ban-row:last-child { border-bottom: none; }
+.ban-row span { color: var(--text-muted); }
+.ban-row b { color: var(--text-bright); font-weight: 600; text-align: right; }
+.ban-back-btn {
+  display: inline-block;
+  background: var(--accent);
+  color: #12110e;
+  font-weight: 700;
+  padding: 12px 22px;
+  border-radius: 10px;
+  text-decoration: none;
+  transition: background .12s;
+}
+.ban-back-btn:hover { background: var(--accent-hover); }
+
+/* Админ: редактирование пользователя */
+.admin-user-media-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.admin-user-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+.admin-user-ban-title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  color: var(--text-bright);
+}
+.admin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+#admin-user-modal .settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+#admin-user-modal .settings-label input,
+#admin-user-modal .settings-label select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text-bright);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+/* Отзывы в профиле */
+.hp-reviews-list { display: flex; flex-direction: column; gap: 12px; }
+.hp-review-item {
+  display: flex; gap: 14px; padding: 12px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+}
+.hp-review-game {
+  flex: 0 0 110px; display: flex; flex-direction: column; gap: 6px;
+  background: none; border: none; color: var(--text-bright); cursor: pointer;
+  font-family: inherit; font-size: 0.78rem; text-align: left; padding: 0;
+}
+.hp-review-game img {
+  width: 110px; height: 62px; object-fit: cover; border-radius: 6px; background: var(--bg-elevated);
+}
+.hp-review-body { flex: 1; min-width: 0; }
+.hp-review-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; font-size: 0.78rem; color: var(--text-muted); }
+.hp-review-stars { color: #f5c542; letter-spacing: 1px; }
+.hp-review-text { color: var(--text); font-size: 0.9rem; line-height: 1.45; white-space: pre-wrap; margin: 0; }
+
+/* Приписка «к игре …» в отзывах профиля */
+.hp-profile-reviews .gp-review { margin-bottom: 4px; }
+.hp-review-game-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 5px 10px 5px 5px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.hp-review-game-chip:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-bright);
+}
+.hp-review-game-chip img {
+  width: 40px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #0e0d0b;
+}
+#hp-admin-edit-user {
+  margin-right: 8px;
+}
+
+/* ===== Отзывы в профиле (ровная вёрстка) ===== */
+.hp-reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hp-rev {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.hp-rev-banner {
+  width: 100%;
+  height: 72px;
+  background: #1a1814 center/cover no-repeat;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.hp-rev-inner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+}
+.hp-rev.has-banner .hp-rev-inner {
+  padding-top: 12px;
+}
+.hp-rev-av {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  overflow: hidden;
+  flex-shrink: 0;
+  background-size: cover;
+  background-position: center;
+}
+.hp-rev-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hp-rev-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.2;
+}
+.hp-rev-name {
+  font-weight: 700;
+  color: var(--text-bright);
+  font-size: 0.92rem;
+}
+.hp-rev-score {
+  font-size: 0.78rem;
+  color: #e6b84d;
+  background: rgba(230,184,77,0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.hp-rev-date {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.hp-rev-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.hp-rev-game {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.hp-rev-game:hover {
+  color: var(--text-bright);
+  background: rgba(255,255,255,0.08);
+}
+.hp-rev-game img {
+  width: 36px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #0e0d0b;
+}
+
+/* Согласие на ПДн при регистрации */
+.auth-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 12px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.auth-consent input {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.auth-consent-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.auth-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* В отзывах профиля — квадратный аватар как в комментариях */
+.hp-profile-reviews .gp-review-av {
+  border-radius: 8px !important;
+}
+.hp-profile-reviews .gp-review-headcard:not(.with-banner) {
+  background: rgba(255,255,255,0.04);
+}
+
+/* Скачать — неактивна без файлов */
+.gp-bar-btn.is-disabled,
+.gp-bar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: auto;
+  filter: grayscale(0.3);
+}
+.gp-bar-btn.primary.is-disabled {
+  background: rgba(255,255,255,0.08) !important;
+  color: rgba(255,255,255,0.45) !important;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.gp-actionbar {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.gp-playtime {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+.gp-last-play {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Админ: список пользователей */
+.admin-users-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.admin-users-toolbar .auth-input { flex: 1; min-width: 180px; }
+.admin-users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.admin-user-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.admin-user-av {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+}
+.admin-user-info { flex: 1; min-width: 0; }
+.admin-user-name {
+  font-weight: 700;
+  color: var(--text-bright);
+  font-size: 0.95rem;
+}
+.admin-user-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-user-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.admin-user-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+}
+.admin-user-badge.is-admin {
+  background: rgba(239, 91, 44, 0.2);
+  color: #ffb08a;
+  border-color: rgba(239, 91, 44, 0.35);
+}
+.admin-user-badge.is-dev {
+  background: rgba(80, 160, 255, 0.15);
+  color: #9ec9ff;
+  border-color: rgba(80, 160, 255, 0.3);
+}
+.admin-user-badge.is-banned {
+  background: rgba(220, 60, 60, 0.2);
+  color: #ff9a9a;
+  border-color: rgba(220, 60, 60, 0.35);
+}
+.admin-user-badge.is-user {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-muted);
+}
+.admin-user-badge.is-newbie {
+  background: rgba(120, 220, 140, 0.18);
+  color: #b6f0c2;
+  border-color: rgba(120, 220, 140, 0.35);
+}
+.admin-user-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Админ: скролл только списка пользователей
+   ВАЖНО: только .active — иначе #view-admin.view { display:flex }
+   перебивает .view { display:none } и админка торчит под главной */
+#view-admin.view.active {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: calc(100vh - 48px);
+  overflow: hidden;
+}
+body.client #view-admin.view.active {
+  height: 100%;
+  max-height: 100%;
+}
+#view-admin.view:not(.active) {
+  display: none !important;
+}
+#view-admin .admin-settings-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+  align-items: stretch;
+  overflow: hidden;
+}
+#view-admin .settings-nav {
+  overflow-y: auto;
+  max-height: 100%;
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+#view-admin .settings-main {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#admin-pane-users {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+#admin-pane-users.hidden { display: none !important; }
+#admin-pane-users .settings-title,
+#admin-pane-users .settings-desc,
+#admin-pane-users .admin-users-toolbar {
+  flex-shrink: 0;
+}
+#admin-users-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-top: 4px;
+}
+/* остальные admin pane тоже не раздувают страницу */
+#view-admin .settings-pane:not(.hidden) {
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+}
+#admin-pane-users.settings-pane:not(.hidden) {
+  overflow: hidden;
 }

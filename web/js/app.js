@@ -123,6 +123,7 @@ function iconSvg(name, size=16) {
     settings: `<svg ${common}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
     plus: `<svg ${common}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
     pencil: `<svg ${common}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+    share: `<svg ${common}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`,
   };
   return map[name] || '';
 }
@@ -229,7 +230,7 @@ function syncUrl(view, gameId) {
   history.replaceState(null, '', '?' + params.toString());
 }
 
-function showView(name, gameId) {
+function showView(name, gameId, opts) {
   // Библиотека живёт только в десктоп-клиенте
   if (name === 'library' && !window.IS_CLIENT) name = 'home';
 
@@ -263,7 +264,14 @@ function showView(name, gameId) {
   if (name === 'library') loadLibrary();
   if (name === 'community') loadWorkshop();
   if (name === 'downloads') renderDownloadsView();
-  if (name === 'profile') loadProfile();
+  if (name === 'profile') {
+    if (opts && opts.foreign) {
+      // чужой профиль — loadProfile не вызываем
+    } else {
+      viewingUserId = null;
+      loadProfile();
+    }
+  }
   if (name === 'admin') loadAdminPending();
   if (name === 'game' && gameId) loadGamePage(gameId);
 }
@@ -536,6 +544,7 @@ async function loadSideLibrary() {
   const list = $('#side-lib-list');
   if (!list) return;
   if (!window.AUTH_STATE || !window.AUTH_STATE.authorized) {
+    sideLibCache = [];
     list.innerHTML = '';
     return;
   }
@@ -545,8 +554,42 @@ async function loadSideLibrary() {
     sideLibCache = data.library || [];
     renderSideLibrary();
   } catch (err) {
-    list.innerHTML = '<div class="side-lib-empty">Не удалось загрузить</div>';
+    // не затираем кэш при сетевой ошибке, если уже что-то было
+    if (!sideLibCache || !sideLibCache.length) {
+      list.innerHTML = '<div class="side-lib-empty">Не удалось загрузить</div>';
+    }
   }
+}
+
+/** Мгновенно добавить игру в сайдбар, потом синхронизировать с сервером */
+function sideLibAddOptimistic(game) {
+  if (!game || !game.id) return;
+  if (!Array.isArray(sideLibCache)) sideLibCache = [];
+  if (!sideLibCache.some(g => +g.id === +game.id)) {
+    sideLibCache = [{
+      id: game.id,
+      title: game.title || 'Игра',
+      cover_url: game.cover_url || game.cover_src || '',
+      icon_url: game.icon_url || '',
+      icon_src: game.icon_src || game.icon_url || '',
+      rating: game.rating,
+      platforms: game.platforms || '',
+      owned: true,
+      is_pinned: game.is_pinned || 0,
+      is_liked: game.is_liked || 0,
+      liked: !!(game.is_liked || game.liked),
+    }, ...sideLibCache];
+    renderSideLibrary();
+  }
+  // фоновая синхронизация
+  loadSideLibrary();
+}
+
+function sideLibRemoveOptimistic(gameId) {
+  if (!Array.isArray(sideLibCache)) return;
+  sideLibCache = sideLibCache.filter(g => +g.id !== +gameId);
+  renderSideLibrary();
+  loadSideLibrary();
 }
 
 function renderSideLibrary(filter) {
@@ -566,11 +609,20 @@ function renderSideLibrary(filter) {
     games = games.filter(g => (g.platforms || '').split(',').includes(sideLibPlat));
   }
 
-  if (sideLibSort === 'name') {
-    games = [...games].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
-  } else if (sideLibSort === 'rating') {
-    games = [...games].sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
-  } // recent — порядок из API (недавно сыгранные)
+  // лайкнутые всегда сверху (пины профиля сюда не лезут)
+  games = [...games].sort((a, b) => {
+    const la = (+a.is_liked || a.liked) ? 1 : 0;
+    const lb = (+b.is_liked || b.liked) ? 1 : 0;
+    if (lb !== la) return lb - la;
+    if (la && lb) {
+      const ta = a.liked_at ? new Date(a.liked_at).getTime() : 0;
+      const tb = b.liked_at ? new Date(b.liked_at).getTime() : 0;
+      if (tb !== ta) return tb - ta;
+    }
+    if (sideLibSort === 'name') return (a.title || '').localeCompare(b.title || '', 'ru');
+    if (sideLibSort === 'rating') return parseFloat(b.rating) - parseFloat(a.rating);
+    return 0;
+  });
 
   if (!games.length) {
     const msg = sideLibInstalledOnly ? 'Ничего не установлено' : (q ? 'Ничего не найдено' : 'Пока пусто');
@@ -578,11 +630,16 @@ function renderSideLibrary(filter) {
     return;
   }
 
-  list.innerHTML = games.map(g => `
-    <button type="button" class="side-lib-item" data-id="${g.id}">
-      <img src="media.php?type=icon&id=${g.id}" alt="" loading="lazy" />
+  list.innerHTML = games.map(g => {
+    const icon = g.icon_src || g.icon_url || g.cover_url || g.cover_src || (g.id ? ('media.php?type=icon&id=' + g.id) : '');
+    const liked = !!(+g.is_liked || g.liked);
+    return `
+    <button type="button" class="side-lib-item ${liked ? 'liked' : ''}" data-id="${g.id}">
+      <img src="${escapeHtml(icon)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='media.php?type=icon&id=${g.id}'" />
       <span class="side-lib-name">${escapeHtml(g.title)}</span>
-    </button>`).join('');
+      ${liked ? '<span class="side-lib-heart" title="В избранном">♥</span>' : ''}
+    </button>`;
+  }).join('');
 
   $$('.side-lib-item', list).forEach(btn => {
     btn.addEventListener('click', () => gotoGame(btn.dataset.id));
@@ -676,19 +733,22 @@ function initContentHead() {
 }
 
 // ============================================================
-//  КАТАЛОГ (список строк + панель фильтров справа, как в Hydra)
+//  КАТАЛОГ (сетка / список + фильтры справа, как в Hydra)
 // ============================================================
 let storeCache = [];
 let storeGenres = new Set();
 let storeDevs = new Set();
 let storeSearch = '';
 let storeSort = 'popular';
+let storeViewMode = localStorage.getItem('catio_store_mode') || 'list'; // 'list' | 'grid'
+let storePrice = 'all'; // 'all' | 'free' | 'paid'
 
 async function loadStore() {
   homeCache = null;
   const list = $('#store-list');
   if (!list) return;
   list.innerHTML = '<div class="loading">Загрузка каталога...</div>';
+  list.dataset.mode = storeViewMode;
 
   try {
     const data = await fetchJSON(`${API_BASE}?action=list&category=game`);
@@ -696,6 +756,7 @@ async function loadStore() {
 
     storeCache = data.games || [];
     buildStoreFilters();
+    syncStoreViewToggle();
     renderStoreList();
   } catch (err) {
     if (isOffline(err)) {
@@ -706,7 +767,17 @@ async function loadStore() {
   }
 }
 
-// Панель фильтров: жанры и разработчики собираются из реальных данных каталога
+function syncStoreViewToggle() {
+  $$('.store-view-btn').forEach(btn => {
+    const on = btn.dataset.mode === storeViewMode;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const list = $('#store-list');
+  if (list) list.dataset.mode = storeViewMode;
+}
+
+// Панель фильтров: жанры и разработчики из реальных данных
 function buildStoreFilters() {
   const genres = [...new Set(storeCache.map(g => g.genre).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
   const devs = [...new Set(storeCache.map(g => g.developer_name || g.developer).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
@@ -733,16 +804,15 @@ function buildStoreFilters() {
   renderOpts($('#genre-opts'), genres, storeGenres);
   renderOpts($('#dev-opts'), devs, storeDevs);
 
-  // Поиск внутри списка фильтров
   const bindFilterSearch = (inputId, boxId) => {
     const inp = $(inputId);
     if (!inp) return;
-    inp.addEventListener('input', () => {
+    inp.oninput = () => {
       const q = inp.value.trim().toLowerCase();
       $$('.filter-opt', $(boxId)).forEach(opt => {
         opt.style.display = !q || opt.dataset.value.includes(q) ? '' : 'none';
       });
-    });
+    };
   };
   bindFilterSearch('#genre-filter-search', '#genre-opts');
   bindFilterSearch('#dev-filter-search', '#dev-opts');
@@ -756,23 +826,113 @@ function applyStoreFilters(games) {
   if (storeDevs.size) {
     out = out.filter(g => storeDevs.has(g.developer_name || g.developer));
   }
+  if (storePrice === 'free') {
+    out = out.filter(g => !(parseFloat(g.price) > 0));
+  } else if (storePrice === 'paid') {
+    out = out.filter(g => parseFloat(g.price) > 0);
+  }
   if (storeSearch) {
     const q = storeSearch.toLowerCase();
     out = out.filter(g =>
       (g.title || '').toLowerCase().includes(q) ||
       (g.short_description || '').toLowerCase().includes(q) ||
-      (g.developer_name || '').toLowerCase().includes(q)
+      (g.developer_name || g.developer || '').toLowerCase().includes(q) ||
+      (g.genre || '').toLowerCase().includes(q) ||
+      (g.tags || '').toLowerCase().includes(q)
     );
   }
   if (storeSort === 'popular') {
     out = [...out].sort((a, b) => (b.download_count || 0) - (a.download_count || 0));
   } else if (storeSort === 'rating') {
-    out = [...out].sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
+    out = [...out].sort((a, b) => parseFloat(b.rating || 0) - parseFloat(a.rating || 0));
   } else if (storeSort === 'price') {
-    out = [...out].sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+    out = [...out].sort((a, b) => parseFloat(a.price || 0) - parseFloat(b.price || 0));
+  } else if (storeSort === 'title') {
+    out = [...out].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
   }
-  // 'new' — порядок из API (сначала новые)
+  // 'new' — порядок из API
   return out;
+}
+
+function clearStoreFilters() {
+  storeGenres.clear();
+  storeDevs.clear();
+  storePrice = 'all';
+  storeSearch = '';
+  const hs = $('#head-search-input');
+  if (hs) hs.value = '';
+  $$('#price-pills .price-pill').forEach(p => p.classList.toggle('active', p.dataset.price === 'all'));
+  $$('#genre-opts input[type="checkbox"], #dev-opts input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+  const gfs = $('#genre-filter-search');
+  const dfs = $('#dev-filter-search');
+  if (gfs) gfs.value = '';
+  if (dfs) dfs.value = '';
+  $$('#genre-opts .filter-opt, #dev-opts .filter-opt').forEach(o => { o.style.display = ''; });
+  renderStoreList();
+}
+
+function createStoreRow(game) {
+  const price = formatPrice(game.price);
+  const row = document.createElement('article');
+  row.className = 'store-row';
+  row.dataset.id = game.id;
+  row.innerHTML = `
+    <div class="store-row-cover">
+      <img src="${escapeHtml(game.cover_src || ('media.php?type=cover&id=' + game.id))}" alt="${escapeHtml(game.title)}" loading="lazy" />
+      ${game.owned ? '<span class="card-badge owned">В библиотеке</span>' : ''}
+    </div>
+    <div class="store-row-info">
+      <h3 class="store-row-title">${escapeHtml(game.title)}</h3>
+      <div class="store-row-meta">${escapeHtml([game.genre, game.developer_name || game.developer].filter(Boolean).join(' · '))}</div>
+      <div class="store-row-rating">${starsHtml(game.rating, game.ratings_count)}</div>
+    </div>
+    <div class="store-row-side">
+      <span class="price ${price.className}">${price.text}</span>
+      <button type="button" class="btn-get ${game.owned ? 'owned' : ''}" data-id="${game.id}"></button>
+    </div>
+    <span class="store-row-arrow">›</span>
+  `;
+  const btn = row.querySelector('.btn-get');
+  paintCardButton(btn, game, price);
+  row.addEventListener('click', () => gotoGame(game.id));
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    buyFromCard(btn, game, price);
+  });
+  return row;
+}
+
+function createStoreGridCard(game) {
+  const price = formatPrice(game.price);
+  const tags = tagsToArray(game.tags).slice(0, 2);
+  const card = document.createElement('article');
+  card.className = 'store-grid-card';
+  card.dataset.id = game.id;
+  card.innerHTML = `
+    <div class="store-grid-cover">
+      <img src="${escapeHtml(game.cover_src || ('media.php?type=cover&id=' + game.id))}" alt="${escapeHtml(game.title)}" loading="lazy" />
+      ${game.owned ? '<span class="card-badge owned">В библиотеке</span>' : ''}
+      <div class="store-grid-overlay">
+        <span class="price ${price.className}">${price.text}</span>
+      </div>
+    </div>
+    <div class="store-grid-body">
+      <h3 class="store-grid-title">${escapeHtml(game.title)}</h3>
+      <div class="store-grid-meta">${escapeHtml(game.developer_name || game.developer || game.genre || '')}</div>
+      <div class="store-grid-footer">
+        <div class="store-grid-rating">${starsHtml(game.rating, game.ratings_count)}</div>
+        <button type="button" class="btn-get btn-get-sm ${game.owned ? 'owned' : ''}" data-id="${game.id}"></button>
+      </div>
+    </div>
+  `;
+  const btn = card.querySelector('.btn-get');
+  paintCardButton(btn, game, price);
+  card.addEventListener('click', () => gotoGame(game.id));
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    buyFromCard(btn, game, price);
+  });
+  return card;
 }
 
 function renderStoreList() {
@@ -783,42 +943,20 @@ function renderStoreList() {
   const count = $('#store-count');
   if (count) count.textContent = games.length.toLocaleString('ru-RU');
 
+  list.dataset.mode = storeViewMode;
+  list.className = storeViewMode === 'grid' ? 'store-list store-grid' : 'store-list';
+
   if (!games.length) {
-    list.innerHTML = '<div class="loading">Ничего не найдено. Попробуй другой запрос.</div>';
+    list.innerHTML = '<div class="loading store-empty">Ничего не найдено.<br><small>Сбрось фильтры или измени запрос.</small></div>';
     return;
   }
 
   list.innerHTML = '';
-  games.forEach(game => {
-    const price = formatPrice(game.price);
-    const row = document.createElement('article');
-    row.className = 'store-row';
-    row.dataset.id = game.id;
-    row.innerHTML = `
-      <div class="store-row-cover">
-        <img src="${escapeHtml(game.cover_src || ('media.php?type=cover&id=' + game.id))}" alt="${escapeHtml(game.title)}" loading="lazy" />
-        ${game.owned ? '<span class="card-badge owned">В библиотеке</span>' : ''}
-      </div>
-      <div class="store-row-info">
-        <h3 class="store-row-title">${escapeHtml(game.title)}</h3>
-        <div class="store-row-meta">${escapeHtml([game.genre, game.developer_name || game.developer].filter(Boolean).join(' · '))}</div>
-        <div class="store-row-rating">${starsHtml(game.rating, game.ratings_count)}</div>
-      </div>
-      <div class="store-row-side">
-        <span class="price ${price.className}">${price.text}</span>
-        <button type="button" class="btn-get ${game.owned ? 'owned' : ''}" data-id="${game.id}"></button>
-      </div>
-      <span class="store-row-arrow">›</span>
-    `;
-    const btn = row.querySelector('.btn-get');
-    paintCardButton(btn, game, price);
-    row.addEventListener('click', () => gotoGame(game.id));
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      buyFromCard(btn, game, price);
-    });
-    list.appendChild(row);
-  });
+  if (storeViewMode === 'grid') {
+    games.forEach(game => list.appendChild(createStoreGridCard(game)));
+  } else {
+    games.forEach(game => list.appendChild(createStoreRow(game)));
+  }
 }
 
 // ============================================================
@@ -919,7 +1057,7 @@ async function buyFromCard(btn, game, price) {
     if (data.balance !== undefined) updateBalance(data.balance);
     game.owned = true;
     paintCardButton(btn, game, price);
-    loadSideLibrary(); // обновить список в сайдбаре
+    sideLibAddOptimistic(game);
     // Бейдж «В библиотеке» на обложке
     const cover = btn.closest('.game-card').querySelector('.game-cover');
     if (cover && !cover.querySelector('.card-badge.owned')) {
@@ -945,7 +1083,34 @@ function initStoreControls() {
     });
   }
 
-  // Сворачивание блоков фильтров (жанры / разработчики)
+  // Переключатель вид: список / сетка
+  $$('.store-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      storeViewMode = btn.dataset.mode || 'list';
+      localStorage.setItem('catio_store_mode', storeViewMode);
+      syncStoreViewToggle();
+      if (storeCache.length) renderStoreList();
+    });
+  });
+  syncStoreViewToggle();
+
+  // Фильтр по цене
+  $$('#price-pills .price-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      $$('#price-pills .price-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      storePrice = pill.dataset.price || 'all';
+      renderStoreList();
+    });
+  });
+
+  // Сброс фильтров
+  const clearBtn = $('#store-clear-filters');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', clearStoreFilters);
+  }
+
+  // Сворачивание блоков фильтров
   $$('.filter-block-head').forEach(head => {
     head.addEventListener('click', () => {
       head.closest('.filter-block').classList.toggle('collapsed');
@@ -995,10 +1160,16 @@ function renderGamePage(wrap, data) {
   const gallery = [];
   videos.forEach((v, i) => {
     if (!v || !v.url) return;
+    let src = String(v.url).replace(/^http:\/\//i, 'https://');
+    const fallbacks = Array.isArray(v.fallbacks)
+      ? v.fallbacks.map(u => String(u).replace(/^http:\/\//i, 'https://'))
+      : [];
     gallery.push({
       type: 'video',
-      src: v.url,
-      thumb: v.thumbnail || cover || v.url,
+      src,
+      fallbacks,
+      format: v.format || '',
+      thumb: v.thumbnail || cover || '',
       name: v.name || ('Трейлер ' + (i + 1)),
     });
   });
@@ -1006,28 +1177,42 @@ function renderGamePage(wrap, data) {
     if (!src) return;
     gallery.push({ type: 'image', src, thumb: src });
   });
-  const descHtml = (g.description || 'Описание отсутствует.')
-    .split(/\n+/).map(p => `<p>${escapeHtml(p)}</p>`).join('');
+  const descHtml = formatGameDescription(g.description || 'Описание отсутствует.');
   const releaseLabel = g.created_at
     ? ('Выпущено ' + formatDate(g.created_at))
     : '';
   const publisher = g.developer_name || g.developer || '';
 
+  const buildsCount = Array.isArray(data.builds) ? data.builds.length : (parseInt(g.builds_count, 10) || 0);
+  const hasBuilds = buildsCount > 0;
+  const playHours = g.playtime_minutes ? Math.max(1, Math.round(+g.playtime_minutes / 60)) : 0;
+  const playLabel = playHours
+    ? ('Сыграно ' + playHours + ' ' + (playHours === 1 ? 'час' : (playHours < 5 ? 'часа' : 'часов')))
+    : 'Ещё не запускалась';
+  const lastLabel = g.last_played
+    ? ('Последний запуск ' + (typeof formatRelative === 'function' ? formatRelative(g.last_played) : formatDate(g.last_played)))
+    : '';
+
   const actionLeft = g.owned
-    ? `<div class="gp-playtime">В библиотеке${g.playtime_minutes ? ' · ' + formatPlaytime(g.playtime_minutes) : ''}</div>
-       <div class="gp-last-play">${g.last_played ? 'Последний запуск: ' + formatDate(g.last_played) : ''}</div>`
-    : `<div class="gp-playtime">Нет доступных источников</div>`;
+    ? `<div class="gp-playtime">${escapeHtml(playLabel)}</div>
+       ${lastLabel ? `<div class="gp-last-play">${escapeHtml(lastLabel)}</div>` : ''}`
+    : `<div class="gp-playtime">${hasBuilds ? 'Доступна для добавления' : 'Нет файлов для скачивания'}</div>`;
 
   const adminEditBtn = viewer && viewer.is_admin
     ? `<button type="button" class="gp-bar-btn icon" id="gp-admin-edit" title="Редактировать">${iconSvg('pencil',16)}</button>`
     : '';
 
+  const dlDisabled = !hasBuilds ? ' disabled aria-disabled="true"' : '';
+  const dlClass = hasBuilds ? 'gp-bar-btn primary' : 'gp-bar-btn primary is-disabled';
+  const dlTitle = hasBuilds ? 'Скачать' : 'Нет файлов для скачивания';
+
   const actionBtns = g.owned
-    ? `<button type="button" class="gp-bar-btn primary" id="btn-buy-game">
+    ? `<button type="button" class="${dlClass}" id="btn-buy-game"${dlDisabled} title="${dlTitle}">
          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
          Скачать
        </button>
-       <button type="button" class="gp-bar-btn icon" id="gp-like" title="В избранное">${iconSvg('heart',16)}</button>
+       <button type="button" class="gp-bar-btn icon gp-like-btn ${g.is_liked || g.liked ? 'liked' : ''}" id="gp-like" title="${g.is_liked || g.liked ? 'Убрать лайк' : 'Лайк'}">${iconSvg('heart',16)}</button>
+       <button type="button" class="gp-bar-btn icon" id="gp-share" title="Поделиться">${iconSvg('share',16) || '↗'}</button>
        <button type="button" class="gp-bar-btn icon" id="gp-settings" title="Настройки">${iconSvg('settings',16)}</button>
        ${adminEditBtn}`
     : `${price.className === 'paid' ? `<span class="gp-price">${escapeHtml(price.text)}</span>` : ''}
@@ -1188,7 +1373,12 @@ function renderGamePage(wrap, data) {
     </div>
   `;
 
+  wrap._galleryItems = gallery;
   initGallery(wrap);
+  // корректно показать первый элемент (YouTube iframe / https video)
+  if (gallery.length && gallery[0].type === 'video') {
+    setGalleryMain(wrap, 'video', gallery[0].src, gallery[0].thumb || '', gallery[0].fallbacks || []);
+  }
   if (typeof initGameCollapsibles === 'function') initGameCollapsibles(wrap);
   initBuyButton(wrap, g);
   initRateStars(wrap, g);
@@ -1199,9 +1389,21 @@ function renderGamePage(wrap, data) {
   loadSimilarGames(g);
   bindAdminGameEdit(g, viewer);
 
-  // description toggle
+  // description toggle + автоплей зацикленных видео в «Об игре»
   const desc = $('#gp-description');
   const tog = $('#gp-desc-toggle');
+  if (desc) {
+    $$('video', desc).forEach(v => {
+      v.muted = true;
+      v.defaultMuted = true;
+      v.loop = true;
+      v.playsInline = true;
+      v.removeAttribute('controls');
+      const tryPlay = () => v.play().catch(() => {});
+      if (v.readyState >= 2) tryPlay();
+      else v.addEventListener('loadeddata', tryPlay, { once: true });
+    });
+  }
   if (desc && tog) {
     const needsToggle = desc.scrollHeight > 320;
     if (!needsToggle) {
@@ -1210,7 +1412,6 @@ function renderGamePage(wrap, data) {
     } else {
       tog.addEventListener('click', () => {
         const open = desc.classList.toggle('gp-description--collapsed');
-        // toggle returns new state of class: true if now has collapsed
         tog.textContent = open ? 'Показать больше' : 'Показать меньше';
       });
     }
@@ -1223,7 +1424,60 @@ function renderGamePage(wrap, data) {
     });
   });
 
-  $('#gp-like')?.addEventListener('click', () => toast('Избранное скоро появится'));
+  const shareBtn = $('#gp-share', wrap);
+  if (shareBtn) {
+    shareBtn.addEventListener('click', async () => {
+      const url = location.href.split('#')[0];
+      try {
+        if (navigator.clipboard) await navigator.clipboard.writeText(url);
+        toast('Ссылка скопирована');
+      } catch (e) {
+        prompt('Ссылка на игру', url);
+      }
+    });
+  }
+  const likeBtn = $('#gp-like', wrap);
+  if (likeBtn) {
+    likeBtn.addEventListener('click', async () => {
+      if (!window.AUTH_STATE || !window.AUTH_STATE.authorized) {
+        toast('Войди в аккаунт, чтобы лайкнуть игру');
+        return;
+      }
+      if (!g.owned) {
+        toast('Сначала добавь игру в библиотеку');
+        return;
+      }
+      const was = !!(g.is_liked || g.liked);
+      likeBtn.disabled = true;
+      try {
+        const res = await postJSON(`${USER_API}?action=like`, {
+          game_id: +g.id,
+          liked: was ? 0 : 1,
+        });
+        if (!res.ok) throw new Error(res.error || 'Ошибка');
+        g.is_liked = was ? 0 : 1;
+        g.liked = !was;
+        likeBtn.classList.toggle('liked', g.liked);
+        likeBtn.title = g.liked ? 'Убрать лайк' : 'Лайк — поднять в библиотеке';
+        if (Array.isArray(sideLibCache)) {
+          const item = sideLibCache.find(x => +x.id === +g.id);
+          if (item) {
+            item.is_liked = g.is_liked;
+            item.liked = g.liked;
+            item.liked_at = g.liked ? new Date().toISOString() : null;
+          }
+          renderSideLibrary();
+        } else {
+          loadSideLibrary();
+        }
+        toast(g.liked ? 'Лайк! Игра поднята в «Моя библиотека»' : 'Лайк снят');
+      } catch (err) {
+        toast(err.message || 'Не удалось');
+      } finally {
+        likeBtn.disabled = false;
+      }
+    });
+  }
   $('#gp-settings')?.addEventListener('click', () => toast('Настройки запуска скоро'));
   $$('.gp-comm-shot', wrap).forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1246,10 +1500,13 @@ function renderControllerSupport(raw) {
     return `<div class="gp-ctrl-none">Нет данных о поддержке контроллера</div>`;
   }
   const full = /full|полная|complete/.test(s) || (hasX && hasP) || hasAny;
+  // Чистые SVG-логотипы Xbox / PlayStation (без лишнего $ перед тегом)
+  const icoXbox = `<svg class="gp-brand-logo" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.102 21.033C6.211 22.881 8.977 24 12 24c3.026 0 5.792-1.119 7.898-2.967 1.877-1.912-4.356-9.104-7.899-9.104-3.54 0-9.776 7.193-7.897 9.104zm9.102-19.16c-.282-.408-.549-.645-.736-.766a1.036 1.036 0 0 0-.213-.105c.016.015.15.117.285.297.116.155.247.38.373.67L12 3.73l-.971-1.762c.126-.29.257-.515.373-.67.135-.18.269-.282.285-.297a1.036 1.036 0 0 0-.213.105c-.187.121-.454.358-.736.767C9.713 3.306 8.5 5.327 8.5 8.253c0 1.54.393 3.18 1.223 4.528.825 1.34 1.95 2.293 2.277 2.293s1.452-.953 2.277-2.293c.83-1.348 1.223-2.989 1.223-4.528 0-2.926-1.213-4.947-2.238-6.379z"/></svg>`;
+  const icoPS = `<svg class="gp-brand-logo" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.5v9.4l2.9 1.05V6.2c0-.7.32-1.15.8-1.15.53 0 .82.45.82 1.15v6.4c2.5 1.2 4.43 0 4.43-3.28 0-3.37-1.93-4.64-4.43-3.43V2.3C19.4 1.44 24 3.75 24 9.08c0 5.6-4.16 8.53-10 7.25V22.5L3.5 18.95V1.5L9.5 3.5v4zM3.5 14.2l4.4 1.55v2.15L3.5 16.4v-2.2zm13.2-1.85c1.35.55 2.05 1.45 2.05 2.7 0 1.7-1.15 2.75-3.15 2.05v-3.55c.4-.4.7-.8 1.1-1.2z"/></svg>`;
   return `
     <div class="gp-ctrl-icons">
-      <span class="gp-ctrl-ico" title="Xbox">$<svg class="gp-brand-logo" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M4.102 21.033C6.211 22.881 8.977 24 12 24c3.026 0 5.792-1.119 7.898-2.967 1.877-1.912-4.356-9.104-7.899-9.104-3.54 0-9.776 7.193-7.897 9.104zm9.102-19.16c-.282-.408-.549-.645-.736-.766a1.036 1.036 0 0 0-.213-.105c.016.015.15.117.285.297.116.155.247.38.373.67L12 3.73l-.971-1.762c.126-.29.257-.515.373-.67.135-.18.269-.282.285-.297a1.036 1.036 0 0 0-.213.105c-.187.121-.454.358-.736.767C9.713 3.306 8.5 5.327 8.5 8.253c0 1.54.393 3.18 1.223 4.528.825 1.34 1.95 2.293 2.277 2.293s1.452-.953 2.277-2.293c.83-1.348 1.223-2.989 1.223-4.528 0-2.926-1.213-4.947-2.238-6.379z"/></svg></span>
-      <span class="gp-ctrl-ico" title="PlayStation">$<svg class="gp-brand-logo" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M8.984 2.596v17.547l2.802.961V8.064c0-.674.306-1.109.768-1.109.512 0 .795.435.795 1.109v6.166c2.414 1.163 4.278 0 4.278-3.163 0-3.248-1.864-4.471-4.278-3.308V2.596c5.09-.831 9.651 1.395 9.651 6.53 0 5.396-4.01 8.217-9.651 6.98V24l-9.984-3.418V0l5.619 1.928v.668z"/></svg></span>
+      <span class="gp-ctrl-ico" title="Xbox">${icoXbox}</span>
+      <span class="gp-ctrl-ico" title="PlayStation">${icoPS}</span>
     </div>
     <div class="gp-ctrl-badge ${full ? 'full' : 'partial'}">${full ? 'ПОЛНАЯ ПОДДЕРЖКА' : 'ЧАСТИЧНАЯ ПОДДЕРЖКА'}</div>
     <p class="gp-ctrl-note">${full ? 'Отлично работает с контроллерами Xbox и PlayStation.' : (escapeHtml(raw) || 'Поддержка контроллера заявлена разработчиком.')}</p>`;
@@ -1475,11 +1732,26 @@ async function loadSimilarGames(game) {
     const data = await fetchJSON(`${API_BASE}?action=list&category=game`);
     if (!data.ok) throw new Error();
     let list = (data.games || []).filter(g => +g.id !== +game.id);
+
+    // Shuffle — при каждой перезагрузке другой набор
+    const shuffle = (arr) => {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+    let same = [];
+    let other = list;
     if (game.genre) {
-      const same = list.filter(g => g.genre === game.genre);
-      list = [...same, ...list.filter(g => g.genre !== game.genre)];
+      same = shuffle(list.filter(g => g.genre === game.genre));
+      other = shuffle(list.filter(g => g.genre !== game.genre));
+    } else {
+      other = shuffle(list);
     }
-    list = list.slice(0, 6);
+    list = [...same, ...other].slice(0, 4); // максимум 4
+
     if (!list.length) {
       grid.innerHTML = '<div class="gp-empty-sub">Пока нет похожих игр</div>';
       return;
@@ -1504,9 +1776,10 @@ function refreshBuyButton(g) {
   if (!btn) return;
   const price = formatPrice(g.price);
   if (g.owned) {
-    btn.textContent = 'Скачать';
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Скачать`;
     btn.classList.add('owned');
-    if (note) note.textContent = ''; // «в библиотеке» уже написано на панели под обложкой
+    // disabled если нет сборок (ставится при рендере)
+    if (note) note.textContent = '';
   } else {
     btn.textContent = price.className === 'free' ? 'Получить бесплатно' : `Купить за ${price.text}`;
     btn.classList.remove('owned');
@@ -1520,11 +1793,19 @@ function initBuyButton(wrap, g) {
   if (!btn) return;
 
   btn.addEventListener('click', async () => {
+    if (btn.disabled || btn.classList.contains('is-disabled')) {
+      toast('Нет файлов для скачивания');
+      return;
+    }
     if (g.owned) {
-      // В библиотеке → предлагаем сборки к загрузке
+      // В библиотеке → сборки к загрузке
       const first = $('#game-builds .btn-download', wrap);
       if (first) first.click();
-      else gotoView('downloads');
+      else {
+        const builds = $('#game-builds', wrap) || $('#gp-section-builds');
+        if (builds) builds.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        else toast('Нет доступных сборок');
+      }
       return;
     }
     btn.disabled = true;
@@ -1535,6 +1816,7 @@ function initBuyButton(wrap, g) {
       if (data.balance !== undefined) updateBalance(data.balance);
       g.owned = true;
       toast(data.message || 'Добавлено в библиотеку');
+      sideLibAddOptimistic(g);
       loadGamePage(g.id);
     } catch (err) {
       toast(err.message || 'Ошибка покупки');
@@ -2398,13 +2680,10 @@ async function loadProfile() {
       bg.style.backgroundSize = size;
       bg.classList.add('has-image');
     }
-    const av = $('#hp-avatar');
-    if (av && me.avatar_url) {
-      av.style.backgroundImage = `url('${me.avatar_url}')`;
-      av.style.backgroundSize = 'cover';
-      av.style.backgroundPosition = 'center';
-      av.textContent = '';
-    }
+    applyUserAvatarEl($('#hp-avatar'), me);
+    applyUserAvatarEl($('#side-avatar'), me);
+    applyUserAvatarEl($('#settings-avatar-preview'), me);
+    setProfileRoleBadge(me);
     const uname = $('#hp-username');
     if (uname) uname.textContent = me.username;
   }
@@ -2412,10 +2691,12 @@ async function loadProfile() {
   loadProfileActivity();
   loadProfileFriends();
   await loadProfileLibrary();
+  loadProfileReviews(null);
   initProfileControls();
 }
 
 async function loadProfileStats() {
+  if (viewingUserId) return;
   try {
     const data = await fetchJSON(`${USER_API}?action=stats`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
@@ -2438,6 +2719,7 @@ async function loadProfileStats() {
 }
 
 async function loadProfileActivity() {
+  if (viewingUserId) return;
   const box = $('#hp-activity');
   if (!box) return;
   try {
@@ -2477,6 +2759,8 @@ async function loadProfileActivity() {
 }
 
 async function loadProfileLibrary() {
+  // Не трогаем чужой профиль
+  if (viewingUserId) return;
   const pinnedBox = $('#hp-pinned-games');
   const libBox = $('#hp-library-games');
   if (!libBox) return;
@@ -3167,6 +3451,7 @@ function initClientNav() {
 //  ДРУЗЬЯ + ЧУЖИЕ ПРОФИЛИ
 // ============================================================
 const FRIENDS_API = 'api/friends.php';
+const ADMIN_API = 'api/admin.php';
 
 function friendAvatarStyle(u) {
   if (u.avatar_url) {
@@ -3460,6 +3745,110 @@ function initFriendsUI() {
 // ---------- Просмотр чужого профиля ----------
 let viewingUserId = null;
 
+
+function renderForeignLibraryOnly(library) {
+  profileLibraryCache = library || [];
+  const pinned = profileLibraryCache.filter(g => +g.is_pinned);
+  const rest = profileLibraryCache.filter(g => !+g.is_pinned);
+  const pinnedBox = $('#hp-pinned-games');
+  const pinnedSection = $('#hp-pinned-section');
+  const pinnedCount = $('#hp-pinned-count');
+  if (pinnedBox) {
+    if (!pinned.length) {
+      if (pinnedSection) pinnedSection.style.display = 'none';
+      pinnedBox.innerHTML = '';
+    } else {
+      if (pinnedSection) pinnedSection.style.display = '';
+      if (pinnedCount) pinnedCount.textContent = pinned.length;
+      pinnedBox.innerHTML = pinned.map(g => gameCardHtml(g, { showPin: false })).join('');
+    }
+  }
+  const libBox = $('#hp-library-games');
+  const libCount = $('#hp-library-count');
+  if (libCount) libCount.textContent = rest.length;
+  if (libBox) {
+    if (!rest.length && !pinned.length) {
+      libBox.innerHTML = '<div class="hp-empty">Библиотека пуста</div>';
+    } else {
+      libBox.innerHTML = rest.map(g => gameCardHtml(g, { showPin: false })).join('');
+    }
+  }
+  $$('.hp-game-card').forEach(card => {
+    card.addEventListener('click', () => gotoGame(card.dataset.id));
+  });
+}
+
+async function loadProfileReviews(userId) {
+  const pane = $('#hp-pane-reviews');
+  if (!pane) return;
+  pane.innerHTML = '<div class="loading">Загрузка отзывов...</div>';
+  try {
+    const url = userId
+      ? `${FRIENDS_API}?action=user_comments&user_id=${userId}`
+      : `${USER_API}?action=my_comments`;
+    const data = await fetchJSON(url);
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    const list = data.comments || [];
+    if (!list.length) {
+      pane.innerHTML = '<div class="hp-empty">Пока нет отзывов</div>';
+      return;
+    }
+    // Та же структура, что у комментариев на странице игры
+    pane.innerHTML = `<div class="gp-comments-list hp-profile-reviews">${list.map(c => {
+      const hasCustomAv = !!c.avatar_url;
+      const avStyle = hasCustomAv
+        ? `background-image:url('${escapeHtml(avatarUrlBust(c.avatar_url, c.user_id))}');background-size:cover;background-position:center;`
+        : (c.avatar_color ? `background:${escapeHtml(c.avatar_color)}` : '');
+      const uname = c.username || 'Игрок';
+      const rating = c.rating != null && c.rating !== '' ? c.rating : null;
+      const gameTitle = c.game_title || 'Игра';
+      const cover = c.cover_src || c.cover_url || ('media.php?type=cover&id=' + c.game_id);
+      const banner = c.banner_url || c.profile_banner || '';
+      const bannerStyle = banner
+        ? `background-image:url('${escapeHtml(avatarUrlBust(banner, c.user_id))}');`
+        : '';
+      const showBanner = !!banner;
+      const timeStr = c.created_at
+        ? (typeof formatRelative === 'function' ? formatRelative(c.created_at) : formatDateTime(c.created_at))
+        : '';
+      return `
+      <div class="gp-review ${showBanner ? 'has-banner' : ''}" data-id="${c.id}">
+        <div class="gp-review-main" style="flex-direction:column;gap:10px">
+          <div class="gp-review-headcard ${showBanner ? 'with-banner' : ''}">
+            ${showBanner ? `<div class="gp-review-banner" style="${bannerStyle}"></div>` : ''}
+            <div class="gp-review-headcard-inner">
+              <div class="gp-review-av ${hasCustomAv ? 'has-img' : 'is-placeholder'}" style="${avStyle}">
+                ${hasCustomAv ? '' : escapeHtml((uname || '?').slice(0, 1).toUpperCase())}
+              </div>
+              <div class="gp-review-userblock">
+                <div class="gp-review-name-row">
+                  <span class="gp-review-name">${escapeHtml(uname)}</span>
+                </div>
+                <div class="gp-review-meta-row">
+                  ${rating != null ? `<span class="gp-review-score">★ ${escapeHtml(String(rating))}/5</span>` : ''}
+                </div>
+              </div>
+              <span class="gp-review-time">${escapeHtml(timeStr)}</span>
+            </div>
+          </div>
+          <div class="gp-review-content">
+            <div class="gp-review-text">${escapeHtml(c.body || '')}</div>
+            <button type="button" class="hp-rev-game" data-id="${c.game_id}" style="margin-top:8px">
+              <img src="${escapeHtml(cover)}" alt="" loading="lazy" onerror="this.style.display='none'" />
+              <span>к игре «${escapeHtml(gameTitle)}»</span>
+            </button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+    $$('.hp-rev-game', pane).forEach(btn => {
+      btn.addEventListener('click', () => gotoGame(btn.dataset.id));
+    });
+  } catch (err) {
+    pane.innerHTML = `<div class="hp-empty">${escapeHtml(err.message || 'Не удалось загрузить')}</div>`;
+  }
+}
+
 async function openUserProfile(username, id) {
   closeFriendsModal();
   try {
@@ -3476,15 +3865,22 @@ async function openUserProfile(username, id) {
     }
 
     viewingUserId = p.id;
-    // render into existing profile view in "foreign" mode
-    showView('profile');
-    renderForeignProfile(p, data.library || []);
+    showView('profile', null, { foreign: true });
+    const isAdmin = !!(data.viewer_is_admin || (window.AUTH_STATE && window.AUTH_STATE.user && (window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin)));
+    renderForeignProfile(p, data.library || [], isAdmin);
+    // подстрахуемся: если loadProfile всё же ушёл — через тик снова нарисуем чужую библиотеку
+    const libSnapshot = data.library || [];
+    setTimeout(() => {
+      if (viewingUserId === p.id) {
+        renderForeignLibraryOnly(libSnapshot);
+      }
+    }, 50);
   } catch (err) {
     toast(err.message || 'Не удалось открыть профиль');
   }
 }
 
-function renderForeignProfile(p, library) {
+function renderForeignProfile(p, library, viewerIsAdmin) {
   // banner
   const bg = $('#hp-banner-bg');
   if (bg) {
@@ -3516,15 +3912,31 @@ function renderForeignProfile(p, library) {
   }
   const uname = $('#hp-username');
   if (uname) uname.textContent = p.username;
+  setProfileRoleBadge(p);
 
   // hide own-only controls
   const upload = $('#hp-banner-upload');
   if (upload) upload.style.display = 'none';
   const toolbar = $('.hp-toolbar');
   if (toolbar) {
+    const authUser = window.AUTH_STATE && window.AUTH_STATE.user;
+    const isAdm = !!(viewerIsAdmin
+      || (authUser && (authUser.role === 'admin' || authUser.is_admin === true || authUser.is_admin === 1)));
+    const adminBtn = isAdm
+      ? `<button type="button" class="hp-btn-edit" id="hp-admin-edit-user">Редактировать</button>`
+      : '';
+    // Админ-кнопка ОТДЕЛЬНО от friend-actions — иначе innerHTML друзей её стирает
     toolbar.innerHTML = `
       <div class="hp-toolbar-spacer"></div>
+      ${adminBtn}
       <div class="hp-friend-actions" id="hp-friend-actions"></div>`;
+    if (isAdm) {
+      $('#hp-admin-edit-user')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openAdminUserModal(p);
+      });
+    }
     const box = $('#hp-friend-actions');
     if (box) {
       if (p.relation === 'none') {
@@ -3628,6 +4040,8 @@ function renderForeignProfile(p, library) {
   const act = $('#hp-activity');
   if (act) act.innerHTML = '<div class="hp-empty" style="padding:12px 0">Скрыто</div>';
   loadProfileFriends(p.id);
+  loadProfileReviews(p.id);
+  renderForeignLibraryOnly(library);
 }
 
 
@@ -4221,13 +4635,159 @@ function parseSysReq(raw) {
 }
 function parseLangs(raw) {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  try {
-    const j = JSON.parse(raw);
-    if (Array.isArray(j)) return j;
-  } catch (e) {}
-  // legacy comma list
-  return String(raw).split(',').map(s => s.trim()).filter(Boolean).map(name => ({ name, subtitles: true, audio: false }));
+  if (Array.isArray(raw)) {
+    return raw.map(normalizeLangRow).filter(r => r && r.name);
+  }
+  let s = String(raw).trim();
+  // двойное экранирование / HTML-entities
+  if (s.includes('&quot;') || s.includes('&#')) {
+    const ta = document.createElement('textarea');
+    ta.innerHTML = s;
+    s = ta.value;
+  }
+  // попытка JSON
+  const tryParse = (str) => {
+    try {
+      const j = JSON.parse(str);
+      if (Array.isArray(j)) return j.map(normalizeLangRow).filter(r => r && r.name);
+      if (j && typeof j === 'object' && j.name) return [normalizeLangRow(j)];
+    } catch (e) {}
+    return null;
+  };
+  let parsed = tryParse(s);
+  if (parsed) return parsed;
+  // обрезанный JSON (VARCHAR 255) — вытащим целые объекты {"name":"..."}
+  const objs = [];
+  const re = /\{\s*"name"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"subtitles"\s*:\s*(true|false)\s*,\s*"audio"\s*:\s*(true|false)\s*\}/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    objs.push({ name: m[1].replace(/\\"/g, '"'), subtitles: m[2] === 'true', audio: m[3] === 'true' });
+  }
+  if (objs.length) return objs;
+  // legacy: "English, French*, German"
+  return s.split(/[,;]+/).map(part => {
+    const full = part.includes('*');
+    const name = part.replace(/\*/g, '').trim();
+    if (!name || name.length > 80 || name.startsWith('{') || name.startsWith('"')) return null;
+    return { name, subtitles: true, audio: full };
+  }).filter(Boolean);
+}
+function normalizeLangRow(r) {
+  if (!r) return null;
+  if (typeof r === 'string') return { name: r, subtitles: true, audio: false };
+  const name = String(r.name || r.lang || r.language || '').trim();
+  if (!name) return null;
+  return {
+    name,
+    subtitles: !!(r.subtitles ?? r.subs ?? true),
+    audio: !!(r.audio ?? r.full_audio ?? false),
+  };
+}
+
+/** Описание игры: если есть HTML (img/video/iframe) — санитизируем; иначе — абзацы из текста */
+function formatGameDescription(raw) {
+  const text = String(raw || '').trim() || 'Описание отсутствует.';
+  if (!/<[a-z][\s\S]*>/i.test(text)) {
+    return text.split(/\n+/).map(p => `<p>${escapeHtml(p)}</p>`).join('');
+  }
+  // DOM-санитизация: только безопасные теги
+  const allowed = new Set(['P','BR','IMG','VIDEO','SOURCE','IFRAME','A','B','STRONG','I','EM','U','UL','OL','LI','H1','H2','H3','H4','H5','SPAN','DIV','TABLE','THEAD','TBODY','TR','TH','TD','HR']);
+  const tmp = document.createElement('div');
+  tmp.innerHTML = text;
+  const walk = (node) => {
+    [...node.childNodes].forEach(ch => {
+      if (ch.nodeType === 1) {
+        if (!allowed.has(ch.tagName)) {
+          // заменить на содержимое
+          while (ch.firstChild) node.insertBefore(ch.firstChild, ch);
+          node.removeChild(ch);
+          return;
+        }
+        // атрибуты
+        [...ch.attributes].forEach(attr => {
+          const n = attr.name.toLowerCase();
+          if (n.startsWith('on') || n === 'style' || n === 'srcdoc') ch.removeAttribute(attr.name);
+        });
+        if (ch.tagName === 'A') {
+          const href = ch.getAttribute('href') || '';
+          if (!/^https?:\/\//i.test(href)) ch.removeAttribute('href');
+          else {
+            ch.setAttribute('target', '_blank');
+            ch.setAttribute('rel', 'noopener noreferrer');
+          }
+        }
+        if (ch.tagName === 'IMG') {
+          const src = ch.getAttribute('src') || '';
+          if (!/^https?:\/\//i.test(src)) { node.removeChild(ch); return; }
+          ch.setAttribute('loading', 'lazy');
+          ch.setAttribute('referrerpolicy', 'no-referrer');
+        }
+        if (ch.tagName === 'IFRAME') {
+          const src = ch.getAttribute('src') || '';
+          if (!/^https?:\/\/(www\.)?(youtube\.com|youtube-nocookie\.com|player\.vimeo\.com)\//i.test(src)) {
+            node.removeChild(ch); return;
+          }
+          ch.setAttribute('loading', 'lazy');
+          ch.setAttribute('allowfullscreen', '');
+          ch.setAttribute('referrerpolicy', 'no-referrer');
+        }
+        if (ch.tagName === 'VIDEO') {
+          // без UI плеера: зациклено, автоплей, без звука
+          ch.removeAttribute('controls');
+          ch.setAttribute('autoplay', '');
+          ch.setAttribute('muted', '');
+          ch.setAttribute('loop', '');
+          ch.setAttribute('playsinline', '');
+          ch.setAttribute('preload', 'auto');
+          ch.muted = true;
+          ch.defaultMuted = true;
+          ch.playsInline = true;
+          ch.style.maxWidth = '100%';
+        }
+        walk(ch);
+      }
+    });
+  };
+  walk(tmp);
+  // стили для медиа внутри описания
+  tmp.querySelectorAll('img').forEach(img => {
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.borderRadius = '8px';
+    img.style.margin = '10px 0';
+  });
+  tmp.querySelectorAll('video').forEach(v => {
+    v.removeAttribute('controls');
+    v.setAttribute('autoplay', '');
+    v.setAttribute('muted', '');
+    v.setAttribute('loop', '');
+    v.setAttribute('playsinline', '');
+    v.muted = true;
+    v.classList.add('gp-desc-video');
+  });
+  tmp.querySelectorAll('iframe').forEach(f => {
+    f.style.width = '100%';
+    f.style.aspectRatio = '16/9';
+    f.style.border = '0';
+    f.style.borderRadius = '8px';
+    f.style.margin = '10px 0';
+    // youtube: autoplay + mute + loop
+    let src = f.getAttribute('src') || '';
+    if (/youtube\.com|youtube-nocookie\.com/i.test(src)) {
+      const u = new URL(src, 'https://www.youtube.com');
+      u.searchParams.set('autoplay', '1');
+      u.searchParams.set('mute', '1');
+      u.searchParams.set('controls', '0');
+      u.searchParams.set('modestbranding', '1');
+      u.searchParams.set('rel', '0');
+      u.searchParams.set('playsinline', '1');
+      const id = u.pathname.split('/').pop();
+      if (id) u.searchParams.set('loop', '1'), u.searchParams.set('playlist', id);
+      f.setAttribute('src', u.toString());
+      f.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+    }
+  });
+  return tmp.innerHTML || `<p>${escapeHtml(text)}</p>`;
 }
 function renderSysReqBlock(minRaw, recRaw) {
   const min = parseSysReq(minRaw);
@@ -4407,6 +4967,7 @@ function initAdminUI() {
         p.classList.toggle('hidden', p.id !== 'admin-pane-' + tab);
       });
       if (tab === 'moderation') loadAdminPending();
+      if (tab === 'users') loadAdminUsers();
     });
   });
 
@@ -4558,6 +5119,77 @@ async function openAdminGame(id) {
   }
 }
 
+
+async function loadAdminUsers() {
+  const list = $('#admin-users-list');
+  if (!list) return;
+  const q = ($('#admin-users-search')?.value || '').trim();
+  const filter = $('#admin-users-filter')?.value || 'all';
+  list.innerHTML = '<div class="loading">Загрузка...</div>';
+  try {
+    const data = await fetchJSON(`${ADMIN_API}?action=list_users&q=${encodeURIComponent(q)}&filter=${encodeURIComponent(filter)}`);
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    const users = data.users || [];
+    if (!users.length) {
+      list.innerHTML = '<div class="friends-empty">Никого не найдено</div>';
+      return;
+    }
+    list.innerHTML = users.map(u => {
+      const avStyle = u.avatar_url
+        ? `background-image:url('${escapeHtml(avatarUrlBust(u.avatar_url, u.id))}');background-size:cover;background-position:center;`
+        : `background:${escapeHtml(u.avatar_color || '#ef5b2c')}`;
+      const letter = (u.username || '?').slice(0, 1).toUpperCase();
+      const badges = [];
+      if (+u.is_banned) badges.push('<span class="admin-user-badge is-banned">Забанен</span>');
+      if (u.role === 'admin') badges.push('<span class="admin-user-badge is-admin">Админ</span>');
+      else if (u.role === 'developer') badges.push('<span class="admin-user-badge is-dev">Разработчик</span>');
+      else {
+        // та же логика, что на профиле: < 30 дней = Новичок
+        let isNewbie = false;
+        if (u.created_at) {
+          const ts = new Date(String(u.created_at).replace(' ', 'T')).getTime();
+          if (ts && (Date.now() - ts) < 30 * 86400 * 1000) isNewbie = true;
+        }
+        if (isNewbie) badges.push('<span class="admin-user-badge is-newbie">Новичок</span>');
+        else badges.push('<span class="admin-user-badge is-user">Игрок</span>');
+      }
+      return `
+        <div class="admin-user-row" data-id="${u.id}" data-username="${escapeHtml(u.username)}">
+          <div class="admin-user-av" style="${avStyle}">${u.avatar_url ? '' : escapeHtml(letter)}</div>
+          <div class="admin-user-info">
+            <div class="admin-user-name">${escapeHtml(u.username)}</div>
+            <div class="admin-user-meta">${escapeHtml(u.email || '')} · id ${u.id}</div>
+            <div class="admin-user-badges">${badges.join('')}</div>
+          </div>
+          <div class="admin-user-actions">
+            <button type="button" class="hp-btn-edit" data-act="profile">Профиль</button>
+            <button type="button" class="hp-btn-edit" data-act="edit">Редактировать</button>
+          </div>
+        </div>`;
+    }).join('');
+    $$('.admin-user-row', list).forEach(row => {
+      const id = +row.dataset.id;
+      const uname = row.dataset.username;
+      row.querySelector('[data-act="profile"]')?.addEventListener('click', () => openUserProfile(uname, id));
+      row.querySelector('[data-act="edit"]')?.addEventListener('click', () => {
+        openAdminUserModal({ id, username: uname, role: 'user' });
+      });
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="friends-empty">${escapeHtml(err.message || 'Ошибка')}</div>`;
+  }
+}
+
+function initAdminUsersControls() {
+  let t = null;
+  const run = () => loadAdminUsers();
+  $('#admin-users-search')?.addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(run, 250);
+  });
+  $('#admin-users-filter')?.addEventListener('change', run);
+}
+
 function initAdminPanel() {
   if (!$('#view-admin')) return;
   try { initAdminUI(); } catch (e) {}
@@ -4658,19 +5290,102 @@ function initAdminPanel() {
 }
 
 // ---------- Галерея: видео (трейлеры) + скриншоты ----------
-function setGalleryMain(wrap, type, src, thumb) {
+function youtubeIdFromUrl(url) {
+  if (!url) return null;
+  const m = String(url).match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/i);
+  return m ? m[1] : null;
+}
+
+let _hlsScriptPromise = null;
+function loadHlsJs() {
+  if (window.Hls) return Promise.resolve(window.Hls);
+  if (_hlsScriptPromise) return _hlsScriptPromise;
+  _hlsScriptPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js';
+    s.onload = () => resolve(window.Hls);
+    s.onerror = () => reject(new Error('hls.js load failed'));
+    document.head.appendChild(s);
+  });
+  return _hlsScriptPromise;
+}
+
+function setGalleryMain(wrap, type, src, thumb, fallbacks) {
   const box = $('#gallery-main', wrap) || $('.gp-gallery-main', wrap);
   if (!box) return;
-  // остановить предыдущее видео
+  // остановить предыдущее видео / hls
+  if (wrap._hls) {
+    try { wrap._hls.destroy(); } catch (e) {}
+    wrap._hls = null;
+  }
   const oldVid = $('#gallery-main-video', wrap);
   if (oldVid) {
     try { oldVid.pause(); } catch (e) {}
   }
   if (type === 'video') {
-    box.innerHTML = `<video id="gallery-main-video" src="${escapeHtml(src)}" controls playsinline preload="metadata" poster="${escapeHtml(thumb || '')}"></video>`;
-    const v = $('#gallery-main-video', wrap);
-    if (v) {
-      v.play().catch(() => {});
+    const yt = youtubeIdFromUrl(src);
+    if (yt) {
+      box.innerHTML = `<iframe id="gallery-main-video" src="https://www.youtube.com/embed/${escapeHtml(yt)}?autoplay=1&rel=0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen style="width:100%;height:100%;border:0;border-radius:8px;background:#000"></iframe>`;
+    } else {
+      const queue = [String(src || '').replace(/^http:\/\//i, 'https://')]
+        .concat((fallbacks || []).map(u => String(u).replace(/^http:\/\//i, 'https://')))
+        .filter(Boolean);
+      let idx = 0;
+      const tryPlay = async () => {
+        if (idx >= queue.length) {
+          if (thumb) {
+            box.innerHTML = `<img id="gallery-main-img" src="${escapeHtml(thumb)}" alt="Трейлер недоступен" />`;
+          }
+          return;
+        }
+        const safeSrc = queue[idx++];
+        const isHls = /\.m3u8(\?|$)/i.test(safeSrc);
+        const isDash = /\.mpd(\?|$)/i.test(safeSrc);
+        if (isDash) {
+          // DASH без dash.js пропускаем
+          return tryPlay();
+        }
+        box.innerHTML = `<video id="gallery-main-video" controls playsinline preload="metadata" poster="${escapeHtml(thumb || '')}"></video>`;
+        const v = $('#gallery-main-video', wrap);
+        if (!v) return;
+        v.addEventListener('error', () => tryPlay(), { once: true });
+
+        if (isHls) {
+          // Safari — native HLS
+          if (v.canPlayType('application/vnd.apple.mpegurl')) {
+            v.src = safeSrc;
+            v.play().catch(() => {});
+            return;
+          }
+          try {
+            const Hls = await loadHlsJs();
+            if (Hls && Hls.isSupported()) {
+              const hls = new Hls({ enableWorker: true });
+              wrap._hls = hls;
+              hls.loadSource(safeSrc);
+              hls.attachMedia(v);
+              hls.on(Hls.Events.MANIFEST_PARSED, () => { v.play().catch(() => {}); });
+              hls.on(Hls.Events.ERROR, (_, data) => {
+                if (data && data.fatal) {
+                  try { hls.destroy(); } catch (e) {}
+                  wrap._hls = null;
+                  tryPlay();
+                }
+              });
+              return;
+            }
+          } catch (e) {
+            return tryPlay();
+          }
+          return tryPlay();
+        }
+
+        v.src = safeSrc;
+        v.play().catch(() => {});
+      };
+      tryPlay();
     }
   } else {
     box.innerHTML = `<img id="gallery-main-img" src="${escapeHtml(src)}" alt="" />`;
@@ -4682,11 +5397,13 @@ function setGalleryMain(wrap, type, src, thumb) {
 }
 
 function initGallery(wrap) {
-  $$('.gp-thumb', wrap).forEach(btn => {
+  $$('.gp-thumb', wrap).forEach((btn, i) => {
     btn.addEventListener('click', () => {
       $$('.gp-thumb', wrap).forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      setGalleryMain(wrap, btn.dataset.type || 'image', btn.dataset.src, btn.dataset.thumb || '');
+      const item = (wrap._galleryItems && wrap._galleryItems[i]) || null;
+      const fb = item && item.fallbacks ? item.fallbacks : [];
+      setGalleryMain(wrap, btn.dataset.type || 'image', btn.dataset.src, btn.dataset.thumb || '', fb);
     });
   });
   const mainImg = $('#gallery-main-img', wrap);
@@ -4736,6 +5453,216 @@ function initLightbox() {
 }
 
 // Patch showView to load admin list
+
+// ============================================================
+//  АДМИН: редактирование чужого профиля + бан
+// ============================================================
+function openAdminUserModal(p) {
+  const modal = $('#admin-user-modal');
+  if (!modal) { toast('Модалка админа не найдена'); return; }
+  modal.classList.remove('hidden');
+  $('#admin-user-id').value = p.id;
+  $('#admin-user-name').value = p.username || '';
+  $('#admin-user-role').value = p.role || 'user';
+  $('#admin-user-balance').value = p.balance ?? 0;
+  $('#admin-user-karma').value = p.karma ?? 0;
+  $('#admin-user-color').value = p.avatar_color || '#ef5b2c';
+  $('#admin-user-ban-reason').value = p.ban_reason || '';
+  $('#admin-user-ban-days').value = 0;
+  $('#admin-user-status').textContent = p.is_banned ? 'Пользователь сейчас забанен' : '';
+  // подтянуть свежие данные
+  fetchJSON(`${ADMIN_API}?action=get_user&id=${p.id}`).then(data => {
+    if (!data.ok || !data.user) return;
+    const u = data.user;
+    $('#admin-user-name').value = u.username || '';
+    $('#admin-user-role').value = u.role || 'user';
+    $('#admin-user-balance').value = u.balance ?? 0;
+    $('#admin-user-karma').value = u.karma ?? 0;
+    $('#admin-user-color').value = u.avatar_color || '#ef5b2c';
+    $('#admin-user-ban-reason').value = u.ban_reason || '';
+    $('#admin-user-status').textContent = +u.is_banned ? 'Пользователь сейчас забанен' : '';
+  }).catch(() => {});
+}
+
+function closeAdminUserModal() {
+  $('#admin-user-modal')?.classList.add('hidden');
+}
+
+function initAdminUserModal() {
+  $('#admin-user-close')?.addEventListener('click', closeAdminUserModal);
+  document.querySelectorAll('[data-close-admin-user]').forEach(el => {
+    el.addEventListener('click', closeAdminUserModal);
+  });
+
+  $('#admin-user-save')?.addEventListener('click', async () => {
+    const id = +($('#admin-user-id')?.value || 0);
+    if (!id) return;
+    const status = $('#admin-user-status');
+    try {
+      const res = await postJSON(`${ADMIN_API}?action=update_user`, {
+        user_id: id,
+        username: $('#admin-user-name')?.value || '',
+        role: $('#admin-user-role')?.value || 'user',
+        balance: +($('#admin-user-balance')?.value || 0),
+        karma: +($('#admin-user-karma')?.value || 0),
+        avatar_color: $('#admin-user-color')?.value || '#ef5b2c',
+      });
+      if (!res.ok) throw new Error(res.error || 'Ошибка');
+      // медиа
+      const av = $('#admin-user-avatar')?.files?.[0];
+      const bn = $('#admin-user-banner')?.files?.[0];
+      const upload = async (file, kind) => {
+        const fd = new FormData();
+        fd.append('csrf_token', window.CSRF_TOKEN || '');
+        fd.append('user_id', String(id));
+        fd.append('kind', kind);
+        fd.append('file', file);
+        const r = await fetch(`${ADMIN_API}?action=upload_user_media`, { method: 'POST', body: fd, credentials: 'same-origin' });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'Ошибка загрузки');
+      };
+      if (av) await upload(av, 'avatar');
+      if (bn) await upload(bn, 'banner');
+      if (status) status.textContent = 'Сохранено';
+      toast('Профиль обновлён');
+      // обновить открытый профиль
+      const uname = $('#admin-user-name')?.value;
+      if (uname) openUserProfile(uname, id);
+    } catch (err) {
+      if (status) status.textContent = err.message || 'Ошибка';
+      toast(err.message || 'Ошибка');
+    }
+  });
+
+  $('#admin-user-ban')?.addEventListener('click', async () => {
+    const id = +($('#admin-user-id')?.value || 0);
+    if (!id) return;
+    if (!confirm('Забанить этого пользователя?')) return;
+    try {
+      const res = await postJSON(`${ADMIN_API}?action=ban`, {
+        user_id: id,
+        reason: $('#admin-user-ban-reason')?.value || 'Нарушение правил',
+        days: +($('#admin-user-ban-days')?.value || 0),
+      });
+      if (!res.ok) throw new Error(res.error || 'Ошибка');
+      toast('Пользователь забанен');
+      $('#admin-user-status').textContent = 'Забанен';
+    } catch (err) {
+      toast(err.message || 'Ошибка');
+    }
+  });
+
+  $('#admin-user-unban')?.addEventListener('click', async () => {
+    const id = +($('#admin-user-id')?.value || 0);
+    if (!id) return;
+    try {
+      const res = await postJSON(`${ADMIN_API}?action=unban`, { user_id: id });
+      if (!res.ok) throw new Error(res.error || 'Ошибка');
+      toast('Бан снят');
+      $('#admin-user-status').textContent = 'Бан снят';
+    } catch (err) {
+      toast(err.message || 'Ошибка');
+    }
+  });
+
+  // кнопка «вернуться к авторизации» на экране бана
+  $('#ban-back-auth')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+      await postJSON((window.AUTH_API || 'api/auth.php') + '?action=logout', {});
+    } catch (err) {}
+    try {
+      await fetch('api/auth.php?action=logout', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csrf_token: window.CSRF_TOKEN || '' }) });
+    } catch (err) {}
+    const q = window.IS_CLIENT ? '?view=auth&client=1' : '?view=auth';
+    window.location.href = q;
+  });
+}
+
+function avatarUrlBust(url, uid) {
+  if (!url) return '';
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + 'u=' + (uid || 0) + '&t=' + encodeURIComponent(String(url).slice(-12));
+}
+
+function applyUserAvatarEl(el, user) {
+  if (!el || !user) return;
+  // Не красим контейнер side-user-btn — только сам кружок/квадрат аватара
+  if (el.id === 'avatar-btn' && el.classList.contains('side-user-btn')) {
+    const inner = el.querySelector('.side-avatar') || $('#side-avatar');
+    if (inner) el = inner;
+    else return;
+  }
+  const url = user.avatar_url || '';
+  // Жёстко фиксируем квадрат — защита от растягивания
+  if (el.classList.contains('side-avatar')) {
+    el.style.width = '38px';
+    el.style.height = '38px';
+    el.style.minWidth = '38px';
+    el.style.minHeight = '38px';
+    el.style.flexShrink = '0';
+    el.style.borderRadius = '10px';
+  }
+  if (el.classList.contains('hp-avatar')) {
+    el.style.width = '88px';
+    el.style.height = '88px';
+    el.style.minWidth = '88px';
+    el.style.minHeight = '88px';
+    el.style.flexShrink = '0';
+    el.style.aspectRatio = '1 / 1';
+  }
+  if (url) {
+    el.style.backgroundImage = `url('${avatarUrlBust(url, user.id)}')`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+    el.style.backgroundRepeat = 'no-repeat';
+    el.style.backgroundColor = 'transparent';
+    el.textContent = '';
+  } else {
+    el.style.backgroundImage = 'none';
+    el.style.backgroundColor = user.avatar_color || '#ef5b2c';
+    el.style.background = user.avatar_color || '#ef5b2c';
+    el.textContent = (user.avatar || (user.username || '?').slice(0, 1)).toUpperCase();
+  }
+}
+
+function profileRoleLabel(user) {
+  if (!user) return '';
+  if (+user.is_banned === 1) return { text: 'Забанен', cls: 'is-banned' };
+  const role = (user.role || 'user').toLowerCase();
+  if (role === 'admin') return { text: 'Администратор', cls: 'is-admin' };
+  if (role === 'developer') return { text: 'Разработчик', cls: 'is-dev' };
+  // Новичок: аккаунт младше 30 дней
+  if (user.created_at) {
+    const ts = new Date(user.created_at).getTime();
+    if (ts && (Date.now() - ts) < 30 * 86400 * 1000) {
+      return { text: 'Новичок', cls: 'is-newbie' };
+    }
+  }
+  return { text: 'Игрок', cls: 'is-user' };
+}
+
+function setProfileRoleBadge(user) {
+  let badge = $('#hp-role-badge');
+  const info = $('#hp-user-info') || $('.hp-user-info');
+  if (!badge && info) {
+    badge = document.createElement('span');
+    badge.id = 'hp-role-badge';
+    badge.className = 'hp-role-badge';
+    info.insertBefore(badge, info.firstChild);
+  }
+  if (!badge) return;
+  const r = profileRoleLabel(user);
+  if (!r || !r.text) { badge.style.display = 'none'; return; }
+  badge.style.display = '';
+  badge.className = 'hp-role-badge ' + r.cls;
+  badge.textContent = r.text;
+}
+
+
+
 document.addEventListener('DOMContentLoaded', () => {
   // Сначала кнопка «+», чтобы сбой других init её не убил
   try { initSubmitGame(); } catch (e) { console.error('initSubmitGame', e); }
@@ -4754,6 +5681,7 @@ document.addEventListener('DOMContentLoaded', () => {
   safe('initChatExtras', initChatExtras);
   safe('initNotificationsUI', initNotificationsUI);
   safe('initAdminPanel', initAdminPanel);
+  safe('initAdminUserModal', initAdminUserModal);
   safe('initSideLibrary', initSideLibrary);
   safe('initContentHead', initContentHead);
   safe('updateDownloadsBadge', updateDownloadsBadge);

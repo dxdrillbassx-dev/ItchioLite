@@ -58,14 +58,114 @@ function ownsGame(PDO $pdo, int $userId, int $gameId): bool {
 function attachUserState(PDO $pdo, array $row, ?array $user): array {
     $row['owned'] = false;
     $row['user_rating'] = null;
+    $row['is_pinned'] = 0;
+    $row['is_liked'] = 0;
+    $row['liked'] = false;
     if ($user) {
         $row['owned'] = ownsGame($pdo, (int)$user['id'], (int)$row['id']);
         $stmt = $pdo->prepare("SELECT value FROM ratings WHERE user_id = ? AND game_id = ?");
         $stmt->execute([(int)$user['id'], (int)$row['id']]);
         $v = $stmt->fetchColumn();
         $row['user_rating'] = $v !== false ? (int)$v : null;
+        if ($row['owned']) {
+            try {
+                $st = $pdo->prepare("SELECT is_pinned, is_liked FROM library WHERE user_id = ? AND game_id = ?");
+                $st->execute([(int)$user['id'], (int)$row['id']]);
+                $lib = $st->fetch();
+                if ($lib) {
+                    $row['is_pinned'] = (int)($lib['is_pinned'] ?? 0);
+                    $row['is_liked'] = (int)($lib['is_liked'] ?? 0);
+                    $row['liked'] = (bool)$row['is_liked'];
+                }
+            } catch (Throwable $e) {
+                $st = $pdo->prepare("SELECT is_pinned FROM library WHERE user_id = ? AND game_id = ?");
+                $st->execute([(int)$user['id'], (int)$row['id']]);
+                $pin = $st->fetchColumn();
+                $row['is_pinned'] = $pin !== false ? (int)$pin : 0;
+            }
+        }
     }
     return $row;
+}
+
+
+function catioFetchSteamMovies(int $appId): array {
+    if ($appId <= 0) return [];
+    static $cache = [];
+    if (isset($cache[$appId])) return $cache[$appId];
+
+    $urls = [
+        "https://store.steampowered.com/api/appdetails?appids={$appId}&l=english&cc=us",
+        "https://store.steampowered.com/api/appdetails?appids={$appId}&l=russian&cc=us",
+    ];
+    $raw = null;
+    foreach ($urls as $url) {
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => 12,
+                CURLOPT_CONNECTTIMEOUT => 6,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; CATio/1.0)',
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                    'Cookie: birthtime=631152000; lastagecheckage=1-0-1990; mature_content=1; wants_mature_content=1',
+                ],
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            $raw = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($raw === false || $code >= 400) { $raw = null; continue; }
+        } else {
+            $ctx = stream_context_create([
+                'http' => [
+                    'timeout' => 12,
+                    'header' => "User-Agent: Mozilla/5.0\r\nCookie: birthtime=631152000; mature_content=1\r\n",
+                ],
+                'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+            ]);
+            $raw = @file_get_contents($url, false, $ctx);
+            if ($raw === false) { $raw = null; continue; }
+        }
+        $json = json_decode($raw, true);
+        if (!is_array($json)) { $raw = null; continue; }
+        $block = $json[(string)$appId] ?? $json[$appId] ?? null;
+        if (!is_array($block) || empty($block['success'])) { $raw = null; continue; }
+        $movies = $block['data']['movies'] ?? [];
+        if (!is_array($movies) || !$movies) { $raw = null; continue; }
+
+        $out = [];
+        foreach (array_slice($movies, 0, 5) as $m) {
+            // приоритет: HLS (браузер + hls.js) → DASH → legacy mp4/webm
+            $urlVid = $m['hls_h264'] ?? ($m['dash_h264'] ?? '');
+            if (!$urlVid && is_array($m['mp4'] ?? null)) {
+                $urlVid = $m['mp4']['max'] ?? ($m['mp4']['480'] ?? '');
+            }
+            if (!$urlVid && is_array($m['webm'] ?? null)) {
+                $urlVid = $m['webm']['max'] ?? ($m['webm']['480'] ?? '');
+            }
+            if (!$urlVid) continue;
+            if (stripos($urlVid, 'http://') === 0) $urlVid = 'https://' . substr($urlVid, 7);
+            $thumb = $m['thumbnail'] ?? '';
+            if ($thumb && stripos($thumb, 'http://') === 0) $thumb = 'https://' . substr($thumb, 7);
+            $fmt = 'mp4';
+            if (stripos($urlVid, '.m3u8') !== false) $fmt = 'hls';
+            elseif (stripos($urlVid, '.mpd') !== false) $fmt = 'dash';
+            elseif (stripos($urlVid, '.webm') !== false) $fmt = 'webm';
+            $out[] = [
+                'url' => $urlVid,
+                'thumbnail' => $thumb,
+                'name' => $m['name'] ?? 'Трейлер',
+                'format' => $fmt,
+            ];
+        }
+        $cache[$appId] = $out;
+        return $out;
+    }
+    $cache[$appId] = [];
+    return [];
 }
 
 try {
@@ -128,13 +228,14 @@ try {
         $videos = [];
         $mediaUrls = [];
         try {
-            $ms = $pdo->prepare("SELECT kind, url, thumb_url, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order, id");
+            $ms = $pdo->prepare("SELECT kind, url, thumb_url, title, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order, id");
             $ms->execute([$id]);
             foreach ($ms->fetchAll() as $row) {
                 if (($row['kind'] ?? '') === 'video') {
                     $videos[] = [
                         'url' => $row['url'],
-                        'thumbnail' => !empty($row['thumb_url']) ? $row['thumb_url'] : null,
+                        'thumbnail' => !empty($row['thumb_url']) ? $row['thumb_url'] : (!empty($game['cover_url']) ? $game['cover_url'] : null),
+                        'name' => !empty($row['title']) ? $row['title'] : 'Трейлер',
                     ];
                 } else {
                     $mediaUrls[] = $row['url'];
@@ -146,16 +247,58 @@ try {
                 $ms->execute([$id]);
                 foreach ($ms->fetchAll() as $row) {
                     if (($row['kind'] ?? '') === 'video') {
-                        $videos[] = ['url' => $row['url'], 'thumbnail' => null];
+                        $videos[] = [
+                            'url' => $row['url'],
+                            'thumbnail' => !empty($game['cover_url']) ? $game['cover_url'] : null,
+                            'name' => 'Трейлер',
+                        ];
                     } else {
                         $mediaUrls[] = $row['url'];
                     }
                 }
             } catch (Throwable $e2) {}
         }
+        // fallback: games.video_url — но мёртвые movie_max.mp4 / movie480.mp4 игнорим
         if (!$videos && !empty($game['video_url'])) {
-            $videos[] = ['url' => $game['video_url'], 'thumbnail' => null];
+            $vu = $game['video_url'];
+            if (stripos($vu, 'http://') === 0) {
+                $vu = 'https://' . substr($vu, 7);
+            }
+            $dead = (bool)preg_match('~steam/apps/\d+/(movie_max|movie480)\.(mp4|webm)~i', $vu);
+            if (!$dead) {
+                $fmt = 'mp4';
+                if (stripos($vu, '.m3u8') !== false) $fmt = 'hls';
+                elseif (stripos($vu, '.mpd') !== false) $fmt = 'dash';
+                $videos[] = [
+                    'url' => $vu,
+                    'thumbnail' => !empty($game['cover_url']) ? $game['cover_url'] : (!empty($game['banner_url']) ? $game['banner_url'] : null),
+                    'name' => 'Трейлер',
+                    'format' => $fmt,
+                ];
+            }
         }
+        // живые трейлеры Steam (HLS) по appid из slug (...-s1091500)
+        if (!$videos && !empty($game['slug']) && preg_match('/-s(\d{3,10})$/', $game['slug'], $sm)) {
+            $aid = $sm[1];
+            foreach (catioFetchSteamMovies((int)$aid) as $smv) {
+                $videos[] = $smv;
+            }
+        }
+        // нормализуем URL видео: http→https, относительные пути оставляем как есть
+        foreach ($videos as &$vv) {
+            if (empty($vv['url'])) continue;
+            $u = $vv['url'];
+            if (stripos($u, 'http://') === 0) {
+                $u = 'https://' . substr($u, 7);
+            }
+            // локальные uploads/... — ок для <video src>
+            $vv['url'] = $u;
+            if (empty($vv['thumbnail']) && !empty($game['cover_url'])) {
+                $vv['thumbnail'] = $game['cover_url'];
+            }
+            if (empty($vv['name'])) $vv['name'] = 'Трейлер';
+        }
+        unset($vv);
 
         $screenshots = [];
         try {
@@ -233,22 +376,29 @@ try {
         $stmt = $pdo->prepare("
             SELECT g.id, g.title, g.slug, g.short_description, g.description,
                    g.price, g.category, g.genre, g.tags, g.rating,
-                   g.cover_emoji, g.cover_color, g.developer_name, g.download_count,
+                   g.cover_url, g.banner_url, g.icon_url, g.cover_emoji, g.cover_color,
+                   g.developer_name, g.download_count,
                    l.added_at, l.last_played, l.playtime_minutes, l.is_pinned, l.pinned_order,
+                   COALESCE(l.is_liked, 0) AS is_liked, l.liked_at,
                    (SELECT COUNT(*) FROM game_builds b WHERE b.game_id = g.id) AS builds_count,
                    (SELECT GROUP_CONCAT(DISTINCT b.platform) FROM game_builds b WHERE b.game_id = g.id) AS platforms
             FROM library l
             JOIN games g ON g.id = l.game_id
             WHERE l.user_id = ?
-            ORDER BY l.is_pinned DESC, l.pinned_order DESC, COALESCE(l.last_played, l.added_at) DESC
+            ORDER BY COALESCE(l.is_liked, 0) DESC, l.liked_at DESC, l.is_pinned DESC, l.pinned_order DESC, COALESCE(l.last_played, l.added_at) DESC
         ");
         $stmt->execute([(int)$user['id']]);
         $games = $stmt->fetchAll();
         foreach ($games as &$g) {
             $g['owned'] = true;
             $g['cover_src'] = !empty($g['cover_url']) ? $g['cover_url'] : ('media.php?type=cover&id=' . $g['id']);
+            $g['icon_src'] = !empty($g['icon_url'])
+                ? $g['icon_url']
+                : ('media.php?type=icon&id=' . $g['id']);
             $g['playtime_minutes'] = (int)($g['playtime_minutes'] ?? 0);
             $g['is_pinned'] = (int)($g['is_pinned'] ?? 0);
+            $g['is_liked'] = (int)($g['is_liked'] ?? 0);
+            $g['liked'] = (bool)$g['is_liked'];
         }
         unset($g);
         echo json_encode(['ok' => true, 'library' => $games], JSON_UNESCAPED_UNICODE);
@@ -308,6 +458,27 @@ try {
             'message' => $price > 0
                 ? '«' . $game['title'] . '» куплена и добавлена в библиотеку'
                 : '«' . $game['title'] . '» добавлена в библиотеку',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // ===== УДАЛИТЬ ИЗ БИБЛИОТЕКИ =====
+    if ($method === 'POST' && $action === 'remove') {
+        $user = requireAuth();
+        $body = jsonBody();
+        checkCsrf($body);
+        $gameId = (int)($body['game_id'] ?? 0);
+        if ($gameId <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Не указана игра'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $stmt = $pdo->prepare("DELETE FROM library WHERE user_id = ? AND game_id = ?");
+        $stmt->execute([(int)$user['id'], $gameId]);
+        echo json_encode([
+            'ok' => true,
+            'removed' => $stmt->rowCount() > 0,
+            'message' => 'Игра убрана из библиотеки',
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }

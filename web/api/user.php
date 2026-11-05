@@ -203,7 +203,50 @@ try {
             break;
 
 
-        // ===== ЗАКРЕПИТЬ / ОТКРЕПИТЬ ИГРУ =====
+        // ===== ЛАЙК (избранное в сайдбаре библиотеки, НЕ пин профиля) =====
+        case 'like':
+            if ($method !== 'POST') {
+                http_response_code(405);
+                echo json_encode(['ok' => false, 'error' => 'Method not allowed']);
+                break;
+            }
+            $user = requireAuthUser();
+            $body = jsonBodyUser();
+            if (!verifyCsrfToken($body['csrf_token'] ?? '')) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => 'Неверный CSRF-токен. Обнови страницу.'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $gameId = (int)($body['game_id'] ?? 0);
+            $liked = (int)($body['liked'] ?? 0) ? 1 : 0;
+            $uid = (int)$user['id'];
+
+            $check = $pdo->prepare("SELECT id FROM library WHERE user_id = ? AND game_id = ?");
+            $check->execute([$uid, $gameId]);
+            if (!$check->fetch()) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Игра не в библиотеке'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
+            try {
+                if ($liked) {
+                    $pdo->prepare("UPDATE library SET is_liked = 1, liked_at = NOW() WHERE user_id = ? AND game_id = ?")
+                        ->execute([$uid, $gameId]);
+                } else {
+                    $pdo->prepare("UPDATE library SET is_liked = 0, liked_at = NULL WHERE user_id = ? AND game_id = ?")
+                        ->execute([$uid, $gameId]);
+                }
+            } catch (Throwable $e) {
+                // колонка ещё не создана — миграция
+                echo json_encode(['ok' => false, 'error' => 'Обнови db.php и перезагрузи страницу: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
+            echo json_encode(['ok' => true, 'liked' => $liked], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ===== ЗАКРЕПИТЬ / ОТКРЕПИТЬ ИГРУ (только профиль) =====
         case 'pin':
             if ($method !== 'POST') {
                 http_response_code(405);
@@ -263,17 +306,20 @@ try {
                 break;
             }
             $file = $_FILES['file'];
-            if ($file['size'] > 5 * 1024 * 1024) {
-                http_response_code(400);
-                echo json_encode(['ok' => false, 'error' => 'Максимум 5 МБ'], JSON_UNESCAPED_UNICODE);
-                break;
-            }
             $finfo = new finfo(FILEINFO_MIME_TYPE);
             $mime = $finfo->file($file['tmp_name']);
-            $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+            $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
             if (!isset($allowed[$mime])) {
                 http_response_code(400);
-                echo json_encode(['ok' => false, 'error' => 'Только JPG, PNG или WebP'], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['ok' => false, 'error' => 'Только JPG, PNG, WebP или GIF'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            // GIF до 50 МБ, остальные до 8 МБ
+            $maxBytes = ($mime === 'image/gif') ? (50 * 1024 * 1024) : (8 * 1024 * 1024);
+            if ($file['size'] > $maxBytes) {
+                http_response_code(400);
+                $lim = ($mime === 'image/gif') ? '50 МБ' : '8 МБ';
+                echo json_encode(['ok' => false, 'error' => 'Максимум ' . $lim], JSON_UNESCAPED_UNICODE);
                 break;
             }
             $ext = $allowed[$mime];
@@ -429,6 +475,31 @@ try {
 
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Unknown section'], JSON_UNESCAPED_UNICODE);
+            break;
+
+
+        case 'my_comments':
+            $user = requireAuthUser();
+            $uid = (int)$user['id'];
+            $st = $pdo->prepare("
+                SELECT c.id, c.body, c.created_at, c.game_id, c.parent_id, c.user_id,
+                       g.title AS game_title, g.cover_url,
+                       u.username, u.avatar, u.avatar_color, u.avatar_url, u.banner_url,
+                       (SELECT r.value FROM ratings r WHERE r.user_id = c.user_id AND r.game_id = c.game_id LIMIT 1) AS rating
+                FROM comments c
+                JOIN games g ON g.id = c.game_id
+                JOIN users u ON u.id = c.user_id
+                WHERE c.user_id = ? AND (c.parent_id IS NULL OR c.parent_id = 0)
+                ORDER BY c.created_at DESC
+                LIMIT 100
+            ");
+            $st->execute([$uid]);
+            $rows = $st->fetchAll();
+            foreach ($rows as &$c) {
+                $c['cover_src'] = !empty($c['cover_url']) ? $c['cover_url'] : ('media.php?type=cover&id=' . $c['game_id']);
+            }
+            unset($c);
+            echo json_encode(['ok' => true, 'comments' => $rows], JSON_UNESCAPED_UNICODE);
             break;
 
         default:

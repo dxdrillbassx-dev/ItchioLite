@@ -163,25 +163,29 @@ function getDB() {
         ensureColumn($pdo, 'library', 'is_pinned', "TINYINT(1) NOT NULL DEFAULT 0");
         
         ensureColumn($pdo, 'library', 'pinned_order', "INT NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'library', 'is_liked', "TINYINT(1) NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'library', 'liked_at', "TIMESTAMP NULL DEFAULT NULL");
 
-        // Демо: если у всех игр playtime = 0 — раздаём случайное время для красоты профиля
-        try {
-            $zero = (int)$pdo->query("SELECT COUNT(*) FROM library WHERE playtime_minutes > 0")->fetchColumn();
-            $total = (int)$pdo->query("SELECT COUNT(*) FROM library")->fetchColumn();
-            if ($total > 0 && $zero === 0) {
-                $rows = $pdo->query("SELECT id FROM library")->fetchAll();
-                $upd = $pdo->prepare("UPDATE library SET playtime_minutes = ?, last_played = DATE_SUB(NOW(), INTERVAL FLOOR(RAND()*14) DAY) WHERE id = ?");
-                foreach ($rows as $r) {
-                    $mins = rand(5, 6000);
-                    $upd->execute([$mins, $r['id']]);
-                }
-                // Закрепим первую игру
-                $first = $pdo->query("SELECT id FROM library ORDER BY id ASC LIMIT 1")->fetchColumn();
-                if ($first) {
-                    $pdo->prepare("UPDATE library SET is_pinned = 1, pinned_order = 1 WHERE id = ?")->execute([$first]);
-                }
-            }
-        } catch (Throwable $e) { /* ignore */ }
+        // Ban fields
+        ensureColumn($pdo, 'users', 'is_banned', "TINYINT(1) NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'users', 'ban_reason', "VARCHAR(512) NOT NULL DEFAULT ''");
+        ensureColumn($pdo, 'users', 'banned_at', "TIMESTAMP NULL DEFAULT NULL");
+        ensureColumn($pdo, 'users', 'banned_until', "TIMESTAMP NULL DEFAULT NULL");
+        ensureColumn($pdo, 'users', 'banned_by', "INT UNSIGNED NULL DEFAULT NULL");
+        ensureColumn($pdo, 'users', 'show_unban_notice', "TINYINT(1) NOT NULL DEFAULT 0");
+
+        // Друзья
+        $pdo->exec("CREATE TABLE IF NOT EXISTS friendships (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            friend_id INT UNSIGNED NOT NULL,
+            status ENUM('pending','accepted','blocked') NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_pair (user_id, friend_id),
+            INDEX idx_friend (friend_id),
+            INDEX idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 
         // Сборки игр (файлы для скачивания)
@@ -311,7 +315,11 @@ function getDB() {
         ensureColumn($pdo, 'games', 'sys_req_min', "TEXT NULL");
         ensureColumn($pdo, 'games', 'sys_req_rec', "TEXT NULL");
         ensureColumn($pdo, 'games', 'controllers', "VARCHAR(64) NOT NULL DEFAULT ''");
-        ensureColumn($pdo, 'games', 'languages', "VARCHAR(255) NOT NULL DEFAULT ''");
+        ensureColumn($pdo, 'games', 'languages', "TEXT NULL");
+        // Было VARCHAR(255) — JSON языков обрезался на середине
+        try {
+            $pdo->exec("ALTER TABLE `games` MODIFY COLUMN `languages` TEXT NULL");
+        } catch (Throwable $e) { /* already TEXT */ }
         ensureColumn($pdo, 'games', 'review_note', "VARCHAR(512) DEFAULT NULL");
         ensureColumn($pdo, 'games', 'is_adult', "TINYINT(1) NOT NULL DEFAULT 0");
 
@@ -320,11 +328,19 @@ function getDB() {
             game_id INT UNSIGNED NOT NULL,
             kind ENUM('screenshot','video') NOT NULL DEFAULT 'screenshot',
             url VARCHAR(512) NOT NULL,
+            thumb_url VARCHAR(512) DEFAULT NULL,
+            title VARCHAR(255) DEFAULT NULL,
             sort_order INT NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_game (game_id),
             FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Авто-миграция media + иконки
+        ensureColumn($pdo, 'game_media', 'thumb_url', "VARCHAR(512) DEFAULT NULL");
+        ensureColumn($pdo, 'game_media', 'title', "VARCHAR(255) DEFAULT NULL");
+        ensureColumn($pdo, 'games', 'icon_url', "VARCHAR(512) DEFAULT NULL");
+        ensureColumn($pdo, 'games', 'video_url', "VARCHAR(512) DEFAULT NULL");
 
         ensureColumn($pdo, 'comments', 'parent_id', "INT UNSIGNED NULL DEFAULT NULL");
         ensureColumn($pdo, 'comments', 'likes', "INT UNSIGNED NOT NULL DEFAULT 0");

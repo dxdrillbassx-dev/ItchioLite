@@ -46,7 +46,7 @@ if ($id > 0 && $type !== 'shot') {
 
     // Реальная обложка из БД (uploads/...), не процедурный SVG
     $pdo = getDB();
-    $stmt = $pdo->prepare("SELECT title, genre, category, cover_emoji, cover_color, cover_url, banner_url FROM games WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT title, slug, genre, category, cover_emoji, cover_color, cover_url, banner_url, icon_url FROM games WHERE id = ?");
     $stmt->execute([$id]);
     $game = $stmt->fetch() ?: null;
     if ($game) {
@@ -54,6 +54,16 @@ if ($id > 0 && $type !== 'shot') {
         if ($type === 'hero') {
             if (!empty($game['banner_url'])) $candidates[] = $game['banner_url'];
             if (!empty($game['cover_url'])) $candidates[] = $game['cover_url'];
+        } elseif ($type === 'icon') {
+            if (!empty($game['icon_url'])) $candidates[] = $game['icon_url'];
+            if (!empty($game['cover_url'])) $candidates[] = $game['cover_url'];
+            if (!empty($game['banner_url'])) $candidates[] = $game['banner_url'];
+            // Steam: capsule с CDN по appid из slug (...-s1091500)
+            if (!empty($game['slug']) && preg_match('/-s(\d{3,10})$/', $game['slug'], $m)) {
+                $aid = $m[1];
+                $candidates[] = 'https://cdn.cloudflare.steamstatic.com/steam/apps/' . $aid . '/capsule_231x87.jpg';
+                $candidates[] = 'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/' . $aid . '/capsule_231x87.jpg';
+            }
         } else {
             if (!empty($game['cover_url'])) $candidates[] = $game['cover_url'];
             if (!empty($game['banner_url'])) $candidates[] = $game['banner_url'];
@@ -89,7 +99,7 @@ header('X-Content-Type-Options: nosniff');
 
 if (!$game) {
     $pdo = getDB();
-    $stmt = $pdo->prepare("SELECT title, genre, category, cover_emoji, cover_color, cover_url, banner_url FROM games WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT title, slug, genre, category, cover_emoji, cover_color, cover_url, banner_url, icon_url FROM games WHERE id = ?");
     $stmt->execute([$id]);
     $game = $stmt->fetch();
 }

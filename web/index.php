@@ -5,10 +5,85 @@ getDB();
 
 $isClient = isset($_GET['client']) && $_GET['client'] == '1';
 $currentView = isset($_GET['view']) ? $_GET['view'] : 'home';
+// Выход по ссылке с экрана бана
+if (isset($_GET['logout']) && $_GET['logout'] == '1') {
+    try {
+        if (function_exists('logoutUser')) logoutUser();
+        elseif (function_exists('logout')) logout();
+        else {
+            if (session_status() === PHP_SESSION_NONE) session_start();
+            $_SESSION = [];
+            if (ini_get('session.use_cookies')) {
+                $p = session_get_cookie_params();
+                setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
+            }
+            session_destroy();
+        }
+    } catch (Throwable $e) {}
+    $qs = [];
+    if (isset($_GET['client']) && $_GET['client'] == '1') $qs[] = 'client=1';
+    $qs[] = 'view=auth';
+    header('Location: ?' . implode('&', $qs));
+    exit;
+}
+
 $auth = getAuthState();
 $isAuthorized = $auth['authorized'];
 $user = $auth['user'];
 $csrfToken = $auth['csrf_token'];
+
+// ===== БАН: полный экран вместо приложения =====
+$banInfo = null;
+if ($isAuthorized && !empty($user['id'])) {
+    try {
+        $pdoBan = getDB();
+        foreach ([
+            "ALTER TABLE users ADD COLUMN is_banned TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN ban_reason VARCHAR(512) NOT NULL DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN banned_at TIMESTAMP NULL DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN banned_until TIMESTAMP NULL DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN banned_by INT UNSIGNED NULL DEFAULT NULL",
+        ] as $sqlTry) {
+            try { $pdoBan->exec($sqlTry); } catch (Throwable $e) {}
+        }
+        $stBan = $pdoBan->prepare("SELECT COALESCE(is_banned,0) AS is_banned, ban_reason, banned_at, banned_until, banned_by FROM users WHERE id = ?");
+        $stBan->execute([(int)$user['id']]);
+        $br = $stBan->fetch() ?: [];
+        if ((int)($br['is_banned'] ?? 0) === 1) {
+            if (!empty($br['banned_until']) && strtotime($br['banned_until']) < time()) {
+                try { $pdoBan->exec("ALTER TABLE users ADD COLUMN show_unban_notice TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
+                $pdoBan->prepare("UPDATE users SET is_banned = 0, ban_reason = '', banned_at = NULL, banned_until = NULL, banned_by = NULL, show_unban_notice = 1 WHERE id = ?")
+                    ->execute([(int)$user['id']]);
+            } else {
+                $byName = '';
+                if (!empty($br['banned_by'])) {
+                    $bn = $pdoBan->prepare("SELECT username FROM users WHERE id = ?");
+                    $bn->execute([(int)$br['banned_by']]);
+                    $byName = (string)($bn->fetchColumn() ?: '');
+                }
+                $banInfo = [
+                    'reason' => $br['ban_reason'] ?: 'Нарушение правил',
+                    'banned_at' => $br['banned_at'],
+                    'banned_until' => $br['banned_until'],
+                    'banned_by_name' => $byName,
+                ];
+            }
+        }
+    } catch (Throwable $e) { /* ignore */ }
+}
+
+
+// ===== Уведомление о разбане (один раз) =====
+$unbanNotice = false;
+if ($isAuthorized && empty($banInfo) && !empty($user['id'])) {
+    try {
+        $pdoU = getDB();
+        try { $pdoU->exec("ALTER TABLE users ADD COLUMN show_unban_notice TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
+        $stU = $pdoU->prepare("SELECT COALESCE(show_unban_notice,0) FROM users WHERE id = ?");
+        $stU->execute([(int)$user['id']]);
+        $unbanNotice = ((int)$stU->fetchColumn() === 1);
+    } catch (Throwable $e) {}
+}
 
 // Неавторизованным показываем только авторизацию — без мигания основного интерфейса
 if (!$isAuthorized && $currentView !== 'auth') {
@@ -34,9 +109,11 @@ if ($isAuthorized) {
     $avatarText = mb_strtoupper(mb_substr($user['username'], 0, 1));
     $avatarColor = $user['avatar_color'] ?? '#ef5b2c';
 }
-function avatarStyleAttr($url, $color) {
+function avatarStyleAttr($url, $color, $uid = 0) {
     if ($url) {
-        return 'background-image:url(\'' . htmlspecialchars($url, ENT_QUOTES) . '\');background-size:cover;background-position:center;';
+        $sep = (strpos($url, '?') !== false) ? '&' : '?';
+        $bust = $url . $sep . 'u=' . (int)$uid . '&t=' . substr(md5($url . $uid), 0, 8);
+        return 'background-image:url(\'' . htmlspecialchars($bust, ENT_QUOTES) . '\');background-size:cover;background-position:center;';
     }
     return 'background:' . htmlspecialchars($color) . ';';
 }
@@ -72,7 +149,7 @@ if ($isAuthorized) {
     <aside class="sidebar">
       <div class="side-user avatar-wrap">
         <button type="button" class="side-user-btn" id="avatar-btn" aria-haspopup="true" aria-expanded="false">
-          <span class="side-avatar" id="side-avatar" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></span>
+          <span class="side-avatar" id="side-avatar" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor, (int)($user['id'] ?? 0)); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></span>
           <span class="side-user-name"><?php echo htmlspecialchars($user['username']); ?></span>
           <span class="side-user-arrow">▾</span>
         </button>
@@ -155,7 +232,7 @@ if ($isAuthorized) {
       <div class="user-area">
         <?php if ($isAuthorized): ?>
         <div class="avatar-wrap">
-          <button type="button" class="avatar" id="avatar-btn" aria-haspopup="true" aria-expanded="false" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></button>
+          <button type="button" class="avatar" id="avatar-btn" aria-haspopup="true" aria-expanded="false" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor, (int)($user['id'] ?? 0)); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></button>
           <div class="user-menu hidden" id="user-menu" role="menu">
             <div class="user-menu-head">
               <div class="user-menu-name"><?php echo htmlspecialchars($user['username']); ?></div>
@@ -219,29 +296,53 @@ if ($isAuthorized) {
         <div class="home-grid" id="home-grid"><div class="loading">Загрузка...</div></div>
       </section>
 
-      <!-- ===== КАТАЛОГ (список + фильтры справа, как в Hydra) ===== -->
+      <!-- ===== КАТАЛОГ (сетка/список + фильтры справа, как в Hydra) ===== -->
       <section id="view-store" class="view <?php echo $currentView === 'store' ? 'active' : ''; ?>">
         <div class="store-layout">
           <div class="store-main">
             <div class="store-head">
               <div class="store-count-line">
                 <b id="store-count">0</b> результатов
-                <span class="store-hint">Используй боковую панель для уточнения поиска</span>
+                <span class="store-hint">Фильтры справа · поиск в шапке</span>
               </div>
-              <label class="sort-label">
-                Сортировать по
-                <select id="sort-select" class="sort-select" aria-label="Сортировка">
-                  <option value="popular">Популярности</option>
-                  <option value="new">Новизне</option>
-                  <option value="rating">Оценке</option>
-                  <option value="price">Цене</option>
-                </select>
-              </label>
+              <div class="store-head-actions">
+                <div class="store-view-toggle" role="group" aria-label="Вид каталога">
+                  <button type="button" class="store-view-btn active" data-mode="list" title="Список" aria-pressed="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                  </button>
+                  <button type="button" class="store-view-btn" data-mode="grid" title="Сетка" aria-pressed="false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                  </button>
+                </div>
+                <label class="sort-label">
+                  Сортировать по
+                  <select id="sort-select" class="sort-select" aria-label="Сортировка">
+                    <option value="popular">Популярности</option>
+                    <option value="new">Новизне</option>
+                    <option value="rating">Оценке</option>
+                    <option value="price">Цене</option>
+                    <option value="title">Названию</option>
+                  </select>
+                </label>
+              </div>
             </div>
-            <div id="store-list" class="store-list"><div class="loading">Загрузка каталога...</div></div>
+            <div id="store-list" class="store-list" data-mode="list"><div class="loading">Загрузка каталога...</div></div>
           </div>
 
           <aside class="store-filters">
+            <div class="filter-block filter-block-price">
+              <button type="button" class="filter-block-head">
+                <span class="filter-dot" style="background:#ef5b2c"></span>
+                Цена
+              </button>
+              <div class="filter-block-body">
+                <div class="filter-price-pills" id="price-pills">
+                  <button type="button" class="price-pill active" data-price="all">Все</button>
+                  <button type="button" class="price-pill" data-price="free">Бесплатные</button>
+                  <button type="button" class="price-pill" data-price="paid">Платные</button>
+                </div>
+              </div>
+            </div>
             <div class="filter-block">
               <button type="button" class="filter-block-head">
                 <span class="filter-dot" style="background:#a78bfa"></span>
@@ -264,6 +365,7 @@ if ($isAuthorized) {
                 <div class="filter-opts" id="dev-opts"></div>
               </div>
             </div>
+            <button type="button" class="filter-clear-btn" id="store-clear-filters">Сбросить фильтры</button>
           </aside>
         </div>
       </section>
@@ -340,17 +442,30 @@ if ($isAuthorized) {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Загрузить баннер
               </button>
-              <input type="file" id="hp-banner-file" accept="image/png,image/jpeg,image/webp" hidden />
+              <input type="file" id="hp-banner-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
               <div class="hp-user">
                 <div class="hp-avatar" id="hp-avatar" style="<?php
                   if (!empty($user['avatar_url'])) {
-                    echo 'background-image:url(\'' . htmlspecialchars($user['avatar_url'], ENT_QUOTES) . '\');background-size:cover;background-position:center;';
+                    echo avatarStyleAttr($user['avatar_url'] ?? '', $user['avatar_color'] ?? '#ef5b2c', (int)($user['id'] ?? 0));
                   } else {
                     echo 'background:' . htmlspecialchars($avatarColor) . ';';
                   }
                 ?>"><?php echo empty($user['avatar_url']) ? htmlspecialchars($avatarText) : ''; ?></div>
-                <div class="hp-user-info">
-                  <h1 class="hp-username" id="hp-username"><?php echo htmlspecialchars($user['username']); ?></h1>
+<?php
+                  $roleBadge = 'Игрок';
+                  $roleCls = 'is-user';
+                  if ($isAuthorized && $user) {
+                    if (!empty($user['is_banned'])) { $roleBadge = 'Забанен'; $roleCls = 'is-banned'; }
+                    elseif (($user['role'] ?? '') === 'admin') { $roleBadge = 'Администратор'; $roleCls = 'is-admin'; }
+                    elseif (($user['role'] ?? '') === 'developer') { $roleBadge = 'Разработчик'; $roleCls = 'is-dev'; }
+                    elseif (!empty($user['created_at']) && (time() - strtotime($user['created_at'])) < 30*86400) {
+                      $roleBadge = 'Новичок'; $roleCls = 'is-newbie';
+                    }
+                  }
+                ?>
+                <div class="hp-user-info" id="hp-user-info">
+                  <span class="hp-role-badge <?php echo $roleCls; ?>" id="hp-role-badge"><?php echo htmlspecialchars($roleBadge); ?></span>
+                  <h1 class="hp-username" id="hp-username"><?php echo htmlspecialchars($user['username'] ?? ''); ?></h1>
                 </div>
               </div>
             </div>
@@ -499,7 +614,7 @@ if ($isAuthorized) {
               <div class="hp-edit-avatar-wrap">
                 <div class="hp-edit-avatar" id="hp-edit-avatar" style="<?php
                   if (!empty($user['avatar_url'])) {
-                    echo 'background-image:url(\'' . htmlspecialchars($user['avatar_url'], ENT_QUOTES) . '\');background-size:cover;background-position:center;';
+                    echo avatarStyleAttr($user['avatar_url'] ?? '', $user['avatar_color'] ?? '#ef5b2c', (int)($user['id'] ?? 0));
                   } else {
                     echo 'background:' . htmlspecialchars($avatarColor) . ';';
                   }
@@ -507,7 +622,7 @@ if ($isAuthorized) {
                 <button type="button" class="hp-edit-avatar-btn" id="hp-avatar-upload" title="Сменить аватар">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 </button>
-                <input type="file" id="hp-avatar-file" accept="image/png,image/jpeg,image/webp" hidden />
+                <input type="file" id="hp-avatar-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
               </div>
               <label class="hp-edit-label">
                 <span>Отображаемое имя</span>
@@ -546,7 +661,7 @@ if ($isAuthorized) {
                 <button type="button" class="hp-btn-edit" id="hp-banner-pick">Выбрать файл</button>
                 <button type="button" class="hp-edit-save" id="hp-banner-save">Сохранить</button>
               </div>
-              <input type="file" id="hp-banner-file-modal" accept="image/png,image/jpeg,image/webp" hidden />
+              <input type="file" id="hp-banner-file-modal" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
             </div>
           </div>
         </div>
@@ -581,11 +696,11 @@ if ($isAuthorized) {
               <p class="settings-sub">Профиль, язык и внешний вид</p>
 
               <div class="settings-avatar-block">
-                <div class="settings-avatar-preview" id="settings-avatar-preview" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></div>
+                <div class="settings-avatar-preview" id="settings-avatar-preview" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor, (int)($user['id'] ?? 0)); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></div>
                 <div class="settings-avatar-actions">
                   <button type="button" class="hp-btn-edit" id="settings-avatar-upload">Загрузить аватар</button>
                 </div>
-                <input type="file" id="settings-avatar-file" accept="image/png,image/jpeg,image/webp" hidden />
+                <input type="file" id="settings-avatar-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
               </div>
 
               <label class="settings-label">
@@ -598,7 +713,7 @@ if ($isAuthorized) {
                 <div class="settings-banner-row">
                   <div class="settings-banner-preview" id="settings-banner-preview" <?php if (!empty($user['banner_url'])): ?>style="background-image:url('<?php echo htmlspecialchars($user['banner_url'], ENT_QUOTES); ?>')"<?php endif; ?>></div>
                   <button type="button" class="hp-btn-edit" id="settings-banner-upload">Загрузить баннер</button>
-                  <input type="file" id="settings-banner-file" accept="image/png,image/jpeg,image/webp" hidden />
+                  <input type="file" id="settings-banner-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
                 </div>
               </label>
 
@@ -694,6 +809,10 @@ if ($isAuthorized) {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               Модерация
             </button>
+            <button type="button" class="settings-nav-btn" data-atab="users">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Пользователи
+            </button>
             <button type="button" class="settings-nav-btn" data-atab="import">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Загрузка игр
@@ -752,7 +871,25 @@ if ($isAuthorized) {
               </div>
             </div>
 
-            <div class="settings-pane hidden" id="admin-pane-import">
+            
+            <div class="settings-pane hidden" id="admin-pane-users">
+              <h2 class="settings-title">Пользователи</h2>
+              <p class="settings-desc">Список аккаунтов, роли, баны. Можно открыть профиль или редактировать.</p>
+              <div class="admin-users-toolbar">
+                <input type="search" class="auth-input" id="admin-users-search" placeholder="Поиск по нику или почте…" />
+                <select id="admin-users-filter" class="auth-input" style="max-width:160px">
+                  <option value="all">Все</option>
+                  <option value="admin">Админы</option>
+                  <option value="developer">Разработчики</option>
+                  <option value="user">Игроки</option>
+                  <option value="banned">Забаненные</option>
+                </select>
+              </div>
+              <div id="admin-users-list" class="admin-users-list">
+                <div class="loading">Загрузка...</div>
+              </div>
+            </div>
+<div class="settings-pane hidden" id="admin-pane-import">
               <h2 class="settings-title">Загрузка игр</h2>
               <p class="settings-desc">Вставь ссылку на страницу Steam Store — подтянем название, описание, шапку, обложку, скриншоты и трейлер.</p>
               <div class="settings-block steam-import-box">
@@ -833,7 +970,11 @@ if ($isAuthorized) {
                   <span>Пароль</span>
                   <input type="password" name="password" required minlength="8" autocomplete="new-password" class="auth-input" placeholder="Минимум 8 символов" />
                 </label>
-                <button type="submit" class="auth-submit">Создать аккаунт</button>
+                <label class="auth-consent">
+                  <input type="checkbox" name="privacy_consent" id="reg-privacy-consent" value="1" />
+                  <span>Я согласен(а) на <button type="button" class="auth-consent-link" id="privacy-open-btn">обработку персональных данных</button></span>
+                </label>
+                <button type="submit" class="auth-submit" id="reg-submit-btn" disabled>Создать аккаунт</button>
               </form>
             </div>
           </div>
@@ -869,6 +1010,27 @@ function switchAuthTab(tab) {
   document.getElementById('form-register').classList.toggle('hidden', tab !== 'register');
   hideAuthError();
 }
+
+(function initPrivacyConsent() {
+  const cb = document.getElementById('reg-privacy-consent');
+  const btn = document.getElementById('reg-submit-btn');
+  if (cb && btn) {
+    const sync = () => { btn.disabled = !cb.checked; };
+    cb.addEventListener('change', sync);
+    sync();
+  }
+  document.getElementById('privacy-open-btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const m = document.getElementById('privacy-modal');
+    if (m) m.classList.remove('hidden');
+  });
+  document.getElementById('privacy-modal-close')?.addEventListener('click', () => {
+    document.getElementById('privacy-modal')?.classList.add('hidden');
+  });
+  document.querySelector('[data-close-privacy]')?.addEventListener('click', () => {
+    document.getElementById('privacy-modal')?.classList.add('hidden');
+  });
+})();
 
 function showAuthError(msg) {
   const el = document.getElementById('auth-error');
@@ -933,6 +1095,11 @@ async function doRegister(e) {
   hideAuthError();
 
   const form = e.target;
+  const consent = form.querySelector('#reg-privacy-consent') || form.querySelector('[name="privacy_consent"]');
+  if (!consent || !consent.checked) {
+    showAuthError('Нужно согласие на обработку персональных данных');
+    return false;
+  }
   const btn = form.querySelector('.auth-submit');
   btn.disabled = true;
   btn.textContent = 'Создаём...';
@@ -945,6 +1112,7 @@ async function doRegister(e) {
         username: form.username.value.trim(),
         email: form.email.value.trim(),
         password: form.password.value,
+        privacy_consent: 1,
         csrf_token: window.CSRF_TOKEN,
       }),
     });
@@ -1280,5 +1448,115 @@ function socialAuth(provider) {
     </div>
   </div>
 
+  <!-- ===== АДМИН: РЕДАКТИРОВАНИЕ ПОЛЬЗОВАТЕЛЯ ===== -->
+  <div class="submit-modal hidden" id="admin-user-modal">
+    <div class="submit-modal-backdrop" data-close-admin-user></div>
+    <div class="submit-modal-box submit-modal-wide" role="dialog" aria-modal="true">
+      <div class="submit-modal-head">
+        <h2>Редактирование пользователя</h2>
+        <button type="button" class="friends-modal-close" id="admin-user-close" aria-label="Закрыть">×</button>
+      </div>
+      <div class="submit-modal-body" id="admin-user-body">
+        <input type="hidden" id="admin-user-id" value="" />
+        <label class="settings-label"><span>Ник</span><input type="text" id="admin-user-name" maxlength="32" /></label>
+        <label class="settings-label"><span>Роль</span>
+          <select id="admin-user-role">
+            <option value="user">user</option>
+            <option value="developer">developer</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
+        <label class="settings-label"><span>Баланс</span><input type="number" id="admin-user-balance" min="0" step="1" /></label>
+        <label class="settings-label"><span>Карма</span><input type="number" id="admin-user-karma" step="1" /></label>
+        <label class="settings-label"><span>Цвет аватара</span><input type="color" id="admin-user-color" value="#ef5b2c" /></label>
+        <div class="admin-user-media-row">
+          <label class="settings-label"><span>Новый аватар</span><input type="file" id="admin-user-avatar" accept="image/*" /></label>
+          <label class="settings-label"><span>Новая шапка</span><input type="file" id="admin-user-banner" accept="image/*" /></label>
+        </div>
+        <hr class="admin-user-hr" />
+        <h3 class="admin-user-ban-title">Бан</h3>
+        <label class="settings-label"><span>Причина бана</span><input type="text" id="admin-user-ban-reason" placeholder="Нарушение правил…" /></label>
+        <label class="settings-label"><span>Срок (дней, 0 = навсегда)</span><input type="number" id="admin-user-ban-days" min="0" value="0" /></label>
+        <div class="admin-user-actions">
+          <button type="button" class="auth-submit" id="admin-user-save">Сохранить</button>
+          <button type="button" class="btn-danger" id="admin-user-ban">Забанить</button>
+          <button type="button" class="hp-btn-edit" id="admin-user-unban">Разбанить</button>
+        </div>
+        <p class="comment-hint" id="admin-user-status"></p>
+      </div>
+    </div>
+  </div>
+
+  <?php if ($banInfo): ?>
+  <!-- ===== ЭКРАН БАНА ===== -->
+  <div class="ban-screen" id="ban-screen">
+    <div class="ban-screen-inner">
+      <div class="ban-logo">🐱</div>
+      <h1 class="ban-title">Котик в тебе разочарован</h1>
+      <p class="ban-sub">Твой доступ к CATio ограничен.</p>
+      <div class="ban-card">
+        <div class="ban-row"><span>Причина</span><b><?php echo htmlspecialchars($banInfo['reason'], ENT_QUOTES, 'UTF-8'); ?></b></div>
+        <div class="ban-row"><span>Кто забанил</span><b><?php echo htmlspecialchars($banInfo['banned_by_name'] ?: 'Администратор', ENT_QUOTES, 'UTF-8'); ?></b></div>
+        <div class="ban-row"><span>Срок</span><b><?php
+          if (!empty($banInfo['banned_until'])) {
+            echo 'до ' . htmlspecialchars(date('d.m.Y H:i', strtotime($banInfo['banned_until'])), ENT_QUOTES, 'UTF-8');
+          } else {
+            echo 'навсегда';
+          }
+        ?></b></div>
+      </div>
+      <a class="ban-back-btn" href="?view=auth&logout=1<?php echo $isClient ? '&amp;client=1' : ''; ?>" id="ban-back-auth">Вернуться к авторизации</a>
+    </div>
+  </div>
+  <style>
+    #app, .topbar, .sidebar { display: none !important; }
+  </style>
+  <?php endif; ?>
+
+
+  <?php if (!empty($unbanNotice)): ?>
+  <!-- ===== ЭКРАН РАЗБАНА ===== -->
+  <div class="ban-screen unban-screen" id="unban-screen">
+    <div class="ban-screen-inner">
+      <div class="ban-logo">😺</div>
+      <h1 class="ban-title">Котик милостливый пожалел тебя</h1>
+      <p class="ban-sub">Больше не ссы мимо лотка.<br>Вы были разблокированы.</p>
+      <button type="button" class="ban-back-btn" id="unban-continue-btn">Продолжить</button>
+    </div>
+  </div>
+  <style>
+    #app, .topbar, .sidebar { display: none !important; }
+  </style>
+  <script>
+  document.getElementById('unban-continue-btn')?.addEventListener('click', async () => {
+    try {
+      await fetch('api/admin.php?action=dismiss_unban', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ csrf_token: window.CSRF_TOKEN || '' })
+      });
+    } catch (e) {}
+    const client = <?php echo $isClient ? 'true' : 'false'; ?>;
+    window.location.href = client ? '?view=home&client=1' : '?view=home';
+  });
+  </script>
+  <?php endif; ?>
+
+
+  <div class="submit-modal hidden" id="privacy-modal">
+    <div class="submit-modal-backdrop" data-close-privacy></div>
+    <div class="submit-modal-box">
+      <div class="submit-modal-head">
+        <h2>Обработка персональных данных</h2>
+        <button type="button" class="friends-modal-close" id="privacy-modal-close" aria-label="Закрыть">×</button>
+      </div>
+      <div class="submit-modal-body" style="max-height:60vh;overflow:auto;font-size:0.9rem;line-height:1.5;color:var(--text)">
+        <p>Регистрируясь в CATio, вы соглашаетесь на обработку персональных данных: имя пользователя, адрес электронной почты, технические данные сессии и сведения о библиотеке игр.</p>
+        <p>Данные используются для работы аккаунта, безопасности и функционирования сервиса. Мы не передаём их третьим лицам без законного основания.</p>
+        <p>Вы можете запросить удаление или уточнение данных, обратившись к администрации сервиса.</p>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

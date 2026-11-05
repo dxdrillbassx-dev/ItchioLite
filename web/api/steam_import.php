@@ -116,11 +116,78 @@ function slugifySteam(string $s): string {
     return substr($s, 0, 80);
 }
 
+/**
+ * Сохраняем медиа из Steam-описания (img/gif/video/iframe), убираем скрипты.
+ * Раньше strip_tags убивал все картинки — «Об игре» было только текстом.
+ */
 function stripSteamHtml(string $html): string {
-    $html = preg_replace('~<br\s*/?>~i', "\n", $html);
-    $html = preg_replace('~</p>~i', "\n\n", $html);
-    $html = preg_replace('~</li>~i', "\n", $html);
-    $html = strip_tags($html);
+    if ($html === '') return '';
+
+    // YouTube ссылки → iframe
+    $html = preg_replace(
+        '~https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_\-]{6,})~i',
+        '<iframe src="https://www.youtube.com/embed/$1" allowfullscreen loading="lazy"></iframe>',
+        $html
+    );
+
+    // Оставляем безопасные теги (включая img/video/iframe)
+    $allowed = '<p><br><br/><b><strong><i><em><u><ul><ol><li><h1><h2><h3><h4><h5>'
+             . '<img><video><source><iframe><a><span><div><table><thead><tbody><tr><th><td><hr>';
+    $html = strip_tags($html, $allowed);
+
+    // Убираем on* и style/class
+    $html = preg_replace('~\s+on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)~i', '', $html);
+    $html = preg_replace('~\s+(style|class)\s*=\s*("[^"]*"|\'[^\']*\')~i', '', $html);
+
+    // iframe — только youtube/vimeo
+    $html = preg_replace_callback('~<iframe\b([^>]*)>~i', function ($m) {
+        $attrs = $m[1];
+        if (!preg_match('~src\s*=\s*["\'](https?://(?:www\.)?(?:youtube\.com|youtube-nocookie\.com|player\.vimeo\.com)/[^"\']+)["\']~i', $attrs, $sm)) {
+            return '';
+        }
+        $src = htmlspecialchars($sm[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return '<iframe src="' . $src . '" allowfullscreen loading="lazy" referrerpolicy="no-referrer"></iframe>';
+    }, $html);
+
+    // img — только http(s)
+    $html = preg_replace_callback('~<img\b([^>]*)>~i', function ($m) {
+        $attrs = $m[1];
+        if (!preg_match('~src\s*=\s*["\'](https?://[^"\']+)["\']~i', $attrs, $sm)) {
+            return '';
+        }
+        $src = htmlspecialchars($sm[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $alt = '';
+        if (preg_match('~alt\s*=\s*["\']([^"\']*)["\']~i', $attrs, $am)) {
+            $alt = htmlspecialchars($am[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+        return '<img src="' . $src . '" alt="' . $alt . '" loading="lazy" referrerpolicy="no-referrer" />';
+    }, $html);
+
+    // video
+    $html = preg_replace_callback('~<video\b([^>]*)>(.*?)</video>~is', function ($m) {
+        $attrs = $m[1];
+        $inner = $m[2];
+        $src = '';
+        if (preg_match('~src\s*=\s*["\'](https?://[^"\']+)["\']~i', $attrs, $sm)) {
+            $src = $sm[1];
+        } elseif (preg_match('~<source\b[^>]*src\s*=\s*["\'](https?://[^"\']+)["\']~i', $inner, $sm)) {
+            $src = $sm[1];
+        }
+        if ($src === '') return '';
+        $src = htmlspecialchars($src, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return '<video src="' . $src . '" autoplay muted loop playsinline preload="auto" class="gp-desc-video"></video>';
+    }, $html);
+
+    // ссылки — только http(s)
+    $html = preg_replace_callback('~<a\b([^>]*)>~i', function ($m) {
+        $attrs = $m[1];
+        if (!preg_match('~href\s*=\s*["\'](https?://[^"\']+)["\']~i', $attrs, $hm)) {
+            return '<span>';
+        }
+        $href = htmlspecialchars($hm[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return '<a href="' . $href . '" target="_blank" rel="noopener noreferrer">';
+    }, $html);
+
     $html = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $html = preg_replace("/[ \t]+/", ' ', $html);
     $html = preg_replace("/\n{3,}/", "\n\n", $html);
@@ -130,14 +197,24 @@ function stripSteamHtml(string $html): string {
 function parseSteamLanguages(string $raw): string {
     $raw = strip_tags($raw);
     $raw = html_entity_decode($raw, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    // Steam: "English*, French*, German, ..." — * = full audio
     $parts = preg_split('~[,;]+~', $raw);
     $out = [];
+    $seen = [];
     foreach ($parts as $p) {
+        $full = (strpos($p, '*') !== false);
         $name = trim(preg_replace('~\*~', '', $p));
         $name = trim(preg_replace('~\s+~', ' ', $name));
-        if ($name === '' || mb_strlen($name) > 60) continue;
-        $out[] = ['name' => $name, 'subtitles' => true, 'audio' => true];
-        if (count($out) >= 30) break;
+        if ($name === '' || mb_strlen($name) > 80) continue;
+        $key = mb_strtolower($name);
+        if (isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $out[] = [
+            'name' => $name,
+            'subtitles' => true,
+            'audio' => $full,
+        ];
+        if (count($out) >= 40) break;
     }
     return json_encode($out, JSON_UNESCAPED_UNICODE);
 }
@@ -174,15 +251,30 @@ function mapSteamToPreview(array $d, int $appId): array {
         elseif (!empty($s['path_thumbnail'])) $shots[] = $s['path_thumbnail'];
         if (count($shots) >= 12) break;
     }
+    $toHttps = function ($u) {
+        $u = trim((string)$u);
+        if ($u === '') return '';
+        if (stripos($u, 'http://') === 0) $u = 'https://' . substr($u, 7);
+        return $u;
+    };
     $movies = [];
     foreach (($d['movies'] ?? []) as $m) {
+        $mp4 = is_array($m['mp4'] ?? null) ? ($m['mp4']['max'] ?? ($m['mp4']['480'] ?? '')) : '';
+        $webm = is_array($m['webm'] ?? null) ? ($m['webm']['max'] ?? ($m['webm']['480'] ?? '')) : '';
+        $hls = $toHttps($m['hls_h264'] ?? '');
+        $dash = $toHttps($m['dash_h264'] ?? '');
+        // лучший progressive или stream
+        $best = $hls ?: ($toHttps($mp4) ?: ($toHttps($webm) ?: $dash));
         $movies[] = [
-            'name' => $m['name'] ?? '',
-            'thumbnail' => $m['thumbnail'] ?? '',
-            'mp4' => $m['mp4']['max'] ?? ($m['mp4']['480'] ?? ''),
-            'webm' => $m['webm']['max'] ?? ($m['webm']['480'] ?? ''),
+            'name' => $m['name'] ?? 'Trailer',
+            'thumbnail' => $toHttps($m['thumbnail'] ?? ''),
+            'mp4' => $toHttps($mp4),
+            'webm' => $toHttps($webm),
+            'hls' => $hls,
+            'dash' => $dash,
+            'best' => $best,
         ];
-        if (count($movies) >= 3) break;
+        if (count($movies) >= 5) break;
     }
     $genres = [];
     foreach (($d['genres'] ?? []) as $g) {
@@ -308,7 +400,9 @@ try {
         }
 
         $video = '';
-        if (!empty($p['movies'][0]['mp4'])) $video = $p['movies'][0]['mp4'];
+        if (!empty($p['movies'][0]['best'])) $video = $p['movies'][0]['best'];
+        elseif (!empty($p['movies'][0]['hls'])) $video = $p['movies'][0]['hls'];
+        elseif (!empty($p['movies'][0]['mp4'])) $video = $p['movies'][0]['mp4'];
         elseif (!empty($p['movies'][0]['webm'])) $video = $p['movies'][0]['webm'];
 
         // превью трейлеров
@@ -368,10 +462,10 @@ try {
 
         // Трейлеры Steam — ПЕРЕД скриншотами (как в магазине Steam)
         foreach (array_slice($p['movies'] ?? [], 0, 3) as $mi => $movie) {
-            $mp4 = $movie['mp4'] ?? '';
-            $webm = $movie['webm'] ?? '';
-            $src = $mp4 !== '' ? $mp4 : $webm;
+            $src = $movie['best'] ?? ($movie['hls'] ?? ($movie['mp4'] ?? ($movie['webm'] ?? '')));
             if ($src === '') continue;
+            // HLS/DASH нельзя «скачать» как файл — храним URL стрима
+            $isStream = (stripos($src, '.m3u8') !== false) || (stripos($src, '.mpd') !== false);
 
             // превью кадра трейлера скачиваем локально
             $thumbLocal = null;
@@ -379,18 +473,19 @@ try {
                 $thumbLocal = saveRemoteImage($movie['thumbnail'], $shotDir, 'steam' . $appId . '_vidthumb' . $mi);
             }
 
-            // пробуем скачать сам ролик (480p/max может быть тяжёлым — если не вышло, оставляем CDN)
+            // progressive mp4/webm — пробуем скачать; HLS/DASH — только URL
             $localVideo = null;
-            $ext = (stripos($src, '.webm') !== false) ? 'webm' : 'mp4';
-            $destName = 'steam' . $appId . '_vid' . $mi . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
-            $destFull = $videoDir . DIRECTORY_SEPARATOR . $destName;
-            if (httpDownload($src, $destFull, 90)) {
-                $sz = @filesize($destFull);
-                // отсекаем пустышки / слишком огромные (>120 МБ)
-                if ($sz !== false && $sz > 50 * 1024 && $sz < 120 * 1024 * 1024) {
-                    $localVideo = 'uploads/games/videos/' . $destName;
-                } else {
-                    @unlink($destFull);
+            if (empty($isStream)) {
+                $ext = (stripos($src, '.webm') !== false) ? 'webm' : 'mp4';
+                $destName = 'steam' . $appId . '_vid' . $mi . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
+                $destFull = $videoDir . DIRECTORY_SEPARATOR . $destName;
+                if (httpDownload($src, $destFull, 90)) {
+                    $sz = @filesize($destFull);
+                    if ($sz !== false && $sz > 50 * 1024 && $sz < 120 * 1024 * 1024) {
+                        $localVideo = 'uploads/games/videos/' . $destName;
+                    } else {
+                        @unlink($destFull);
+                    }
                 }
             }
 
@@ -425,6 +520,35 @@ try {
             }
         }
 
+        // Иконка для сайдбара библиотеки
+        $iconUrl = null;
+        $iconDir = $base . '/icons';
+        if (!is_dir($iconDir)) @mkdir($iconDir, 0775, true);
+        $iconSrc = $p['capsule_image'] ?: ($p['header_image'] ?? '');
+        if ($iconSrc) {
+            $iconUrl = saveRemoteImage($iconSrc, $iconDir, 'steam' . $appId . '_icon');
+        }
+        if ($iconUrl) {
+            try {
+                $pdo->prepare("UPDATE games SET icon_url = ? WHERE id = ?")->execute([$iconUrl, $gameId]);
+            } catch (Throwable $e) {}
+            $coversDir = dirname(__DIR__) . '/covers';
+            if (!is_dir($coversDir)) @mkdir($coversDir, 0775, true);
+            $srcFile = dirname(__DIR__) . '/' . ltrim($iconUrl, '/');
+            if (is_file($srcFile)) {
+                $ext = strtolower(pathinfo($srcFile, PATHINFO_EXTENSION)) ?: 'jpg';
+                @copy($srcFile, $coversDir . '/icon_' . $gameId . '.' . $ext);
+            }
+        }
+
+        // video_url https
+        if (!empty($video) && stripos($video, 'http://') === 0) {
+            $video = 'https://' . substr($video, 7);
+            try {
+                $pdo->prepare("UPDATE games SET video_url = ? WHERE id = ?")->execute([$video, $gameId]);
+            } catch (Throwable $e) {}
+        }
+
         echo json_encode([
             'ok' => true,
             'game_id' => $gameId,
@@ -432,6 +556,7 @@ try {
             'status' => $status,
             'cover_url' => $coverUrl,
             'banner_url' => $bannerUrl,
+            'icon_url' => $iconUrl,
             'screenshots' => max(0, $order - $videosSaved),
             'videos' => $videosSaved,
             'steam_app_id' => $appId,

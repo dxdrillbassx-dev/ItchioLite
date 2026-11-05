@@ -175,14 +175,28 @@ function mapSteamToPreview(array $d, int $appId): array {
         if (count($shots) >= 12) break;
     }
     $movies = [];
+    $toHttps = function ($u) {
+        $u = trim((string)$u);
+        if ($u === '') return '';
+        if (stripos($u, 'http://') === 0) $u = 'https://' . substr($u, 7);
+        return $u;
+    };
     foreach (($d['movies'] ?? []) as $m) {
+        $mp4 = '';
+        if (is_array($m['mp4'] ?? null)) {
+            $mp4 = $m['mp4']['max'] ?? ($m['mp4']['480'] ?? '');
+        }
+        $webm = '';
+        if (is_array($m['webm'] ?? null)) {
+            $webm = $m['webm']['max'] ?? ($m['webm']['480'] ?? '');
+        }
         $movies[] = [
-            'name' => $m['name'] ?? '',
-            'thumbnail' => $m['thumbnail'] ?? '',
-            'mp4' => $m['mp4']['max'] ?? ($m['mp4']['480'] ?? ''),
-            'webm' => $m['webm']['max'] ?? ($m['webm']['480'] ?? ''),
+            'name' => $m['name'] ?? 'Trailer',
+            'thumbnail' => $toHttps($m['thumbnail'] ?? ''),
+            'mp4' => $toHttps($mp4),
+            'webm' => $toHttps($webm),
         ];
-        if (count($movies) >= 3) break;
+        if (count($movies) >= 5) break;
     }
     $genres = [];
     foreach (($d['genres'] ?? []) as $g) {
@@ -356,6 +370,44 @@ try {
             }
         }
 
+        // Видео-трейлеры в game_media (и дублируем первый в video_url уже записан)
+        $vidCount = 0;
+        foreach (array_slice($p['movies'], 0, 5) as $mi => $m) {
+            $url = $m['mp4'] ?: ($m['webm'] ?? '');
+            if ($url === '') continue;
+            $thumb = $m['thumbnail'] ?? '';
+            $titleVid = $m['name'] ?: ('Трейлер ' . ($mi + 1));
+            try {
+                $pdo->prepare("INSERT INTO game_media (game_id, kind, url, thumb_url, title, sort_order) VALUES (?,?,?,?,?,?)")
+                    ->execute([$gameId, 'video', $url, $thumb ?: null, $titleVid, $mi]);
+                $vidCount++;
+            } catch (Throwable $e) {
+                try {
+                    $pdo->prepare("INSERT INTO game_media (game_id, kind, url, sort_order) VALUES (?,?,?,?)")
+                        ->execute([$gameId, 'video', $url, $mi]);
+                    $vidCount++;
+                } catch (Throwable $e2) {}
+            }
+        }
+
+        // Иконка для сайдбара: capsule / header → uploads/games/icons + covers/icon_{id}
+        $iconDir = $base . '/icons';
+        if (!is_dir($iconDir)) @mkdir($iconDir, 0775, true);
+        $iconUrl = saveRemoteImage($p['capsule_image'] ?: $p['header_image'], $iconDir, 'steam' . $appId . '_icon');
+        if ($iconUrl) {
+            try {
+                $pdo->prepare("UPDATE games SET icon_url = ? WHERE id = ?")->execute([$iconUrl, $gameId]);
+            } catch (Throwable $e) {}
+            // копия в covers/icon_{id}.ext для media.php?type=icon
+            $coversDir = dirname(__DIR__) . '/covers';
+            if (!is_dir($coversDir)) @mkdir($coversDir, 0775, true);
+            $src = dirname(__DIR__) . '/' . ltrim($iconUrl, '/');
+            if (is_file($src)) {
+                $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION)) ?: 'jpg';
+                @copy($src, $coversDir . '/icon_' . $gameId . '.' . $ext);
+            }
+        }
+
         echo json_encode([
             'ok' => true,
             'game_id' => $gameId,
@@ -363,7 +415,9 @@ try {
             'status' => $status,
             'cover_url' => $coverUrl,
             'banner_url' => $bannerUrl,
+            'icon_url' => $iconUrl ?? null,
             'screenshots' => $order,
+            'videos' => $vidCount,
             'steam_app_id' => $appId,
         ], JSON_UNESCAPED_UNICODE);
         exit;
