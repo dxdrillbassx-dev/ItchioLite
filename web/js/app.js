@@ -5,6 +5,7 @@
 const API_BASE = 'api/games.php';
 const USER_API = 'api/user.php';
 const FETCH_TIMEOUT = 6000;
+const FETCH_TIMEOUT_LONG = 120000; // импорт Steam, публикация, тяжёлые загрузки
 
 function $(sel, ctx = document) {
   return ctx.querySelector(sel);
@@ -25,21 +26,29 @@ function escapeHtml(str) {
 
 // ---------- Fetch с таймаутом ----------
 async function fetchJSON(url, opts = {}) {
+  const timeout = opts.timeout ?? FETCH_TIMEOUT;
+  const { timeout: _ignore, ...fetchOpts } = opts;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), opts.timeout || FETCH_TIMEOUT);
+  const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const res = await fetch(url, { ...opts, signal: ctrl.signal });
+    const res = await fetch(url, { ...fetchOpts, signal: ctrl.signal });
     return await res.json();
+  } catch (err) {
+    if (err && (err.name === 'AbortError' || /aborted/i.test(String(err.message || '')))) {
+      throw new Error('Сервер не ответил вовремя. Попробуй ещё раз или проверь XAMPP.');
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function postJSON(url, payload) {
+async function postJSON(url, payload, timeout) {
   return fetchJSON(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, csrf_token: window.CSRF_TOKEN }),
+    timeout: timeout ?? FETCH_TIMEOUT,
   });
 }
 
@@ -977,10 +986,26 @@ function renderGamePage(wrap, data) {
   const price = formatPrice(g.price);
   const tags = tagsToArray(g.tags);
   const shots = data.screenshots || [];
-  const authorized = data.viewer && data.viewer.authorized;
+  const videos = data.videos || [];
+  const viewer = data.viewer || {};
+  const authorized = viewer.authorized;
   const cover = g.cover_src || g.cover_url || '';
   const hero = g.banner_url || g.cover_url || cover || (`media.php?type=hero&id=${g.id}`);
-  const gallery = shots.length ? shots : (cover ? [cover] : []);
+  // как в Steam: сначала трейлеры, потом скрины
+  const gallery = [];
+  videos.forEach((v, i) => {
+    if (!v || !v.url) return;
+    gallery.push({
+      type: 'video',
+      src: v.url,
+      thumb: v.thumbnail || cover || v.url,
+      name: v.name || ('Трейлер ' + (i + 1)),
+    });
+  });
+  (shots.length ? shots : (cover ? [cover] : [])).forEach((src) => {
+    if (!src) return;
+    gallery.push({ type: 'image', src, thumb: src });
+  });
   const descHtml = (g.description || 'Описание отсутствует.')
     .split(/\n+/).map(p => `<p>${escapeHtml(p)}</p>`).join('');
   const releaseLabel = g.created_at
@@ -993,6 +1018,10 @@ function renderGamePage(wrap, data) {
        <div class="gp-last-play">${g.last_played ? 'Последний запуск: ' + formatDate(g.last_played) : ''}</div>`
     : `<div class="gp-playtime">Нет доступных источников</div>`;
 
+  const adminEditBtn = viewer && viewer.is_admin
+    ? `<button type="button" class="gp-bar-btn icon" id="gp-admin-edit" title="Редактировать">${iconSvg('pencil',16)}</button>`
+    : '';
+
   const actionBtns = g.owned
     ? `<button type="button" class="gp-bar-btn primary" id="btn-buy-game">
          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1000,12 +1029,13 @@ function renderGamePage(wrap, data) {
        </button>
        <button type="button" class="gp-bar-btn icon" id="gp-like" title="В избранное">${iconSvg('heart',16)}</button>
        <button type="button" class="gp-bar-btn icon" id="gp-settings" title="Настройки">${iconSvg('settings',16)}</button>
-       ${viewer && viewer.is_admin ? `<button type="button" class="gp-bar-btn icon" id="gp-admin-edit" title="Редактировать">${iconSvg('pencil',16)}</button>` : ''}`
+       ${adminEditBtn}`
     : `${price.className === 'paid' ? `<span class="gp-price">${escapeHtml(price.text)}</span>` : ''}
        <button type="button" class="gp-bar-btn primary" id="btn-buy-game">
          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
          Добавить в библиотеку
-       </button>`;
+       </button>
+       ${adminEditBtn}`;
 
   wrap.innerHTML = `
     <div class="gp">
@@ -1032,14 +1062,18 @@ function renderGamePage(wrap, data) {
           ${gallery.length ? `
           <div class="gp-gallery">
             <div class="gp-gallery-viewport">
-              <div class="gp-gallery-main">
-                <img id="gallery-main-img" src="${escapeHtml(gallery[0])}" alt="" />
+              <div class="gp-gallery-main" id="gallery-main">
+                ${gallery[0].type === 'video'
+                  ? `<video id="gallery-main-video" src="${escapeHtml(gallery[0].src)}" controls playsinline preload="metadata" poster="${escapeHtml(gallery[0].thumb || '')}"></video>`
+                  : `<img id="gallery-main-img" src="${escapeHtml(gallery[0].src)}" alt="" />`}
               </div>
             </div>
             <div class="gp-gallery-thumbs">
-              ${gallery.map((src, i) => `
-                <button type="button" class="gp-thumb ${i===0?'active':''}" data-src="${escapeHtml(src)}">
-                  <img src="${escapeHtml(src)}" alt="" />
+              ${gallery.map((item, i) => `
+                <button type="button" class="gp-thumb ${i===0?'active':''}${item.type==='video'?' gp-thumb-video':''}"
+                  data-type="${item.type}" data-src="${escapeHtml(item.src)}" data-thumb="${escapeHtml(item.thumb || '')}">
+                  <img src="${escapeHtml(item.thumb || item.src)}" alt="" />
+                  ${item.type === 'video' ? '<span class="gp-thumb-play">▶</span>' : ''}
                 </button>`).join('')}
             </div>
           </div>` : ''}
@@ -1127,11 +1161,11 @@ function renderGamePage(wrap, data) {
           <div class="gp-side-card">
             <button type="button" class="gp-side-head">Скриншоты сообщества <span class="chev">▾</span></button>
             <div class="gp-side-body">
-              ${gallery.length ? `
+              ${gallery.filter(it => it.type === 'image').length ? `
                 <div class="gp-comm-shots">
-                  ${gallery.slice(0, 3).map(src => `
-                    <button type="button" class="gp-comm-shot" data-src="${escapeHtml(src)}">
-                      <img src="${escapeHtml(src)}" alt="" loading="lazy" />
+                  ${gallery.filter(it => it.type === 'image').slice(0, 3).map(item => `
+                    <button type="button" class="gp-comm-shot" data-src="${escapeHtml(item.src)}">
+                      <img src="${escapeHtml(item.thumb || item.src)}" alt="" loading="lazy" />
                       <span class="gp-comm-meta">${iconSvg('heart',12)} 0 · ${iconSvg('message',12)} 0</span>
                     </button>`).join('')}
                 </div>
@@ -1163,6 +1197,7 @@ function renderGamePage(wrap, data) {
   initBuildButtons(wrap, g);
   initReviewSort(data.comments || [], data.viewer);
   loadSimilarGames(g);
+  bindAdminGameEdit(g, viewer);
 
   // description toggle
   const desc = $('#gp-description');
@@ -1639,71 +1674,89 @@ function openAdminGameEditModal(g) {
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'admin-game-edit-modal';
-    modal.className = 'modal-overlay hidden';
+    modal.className = 'submit-modal hidden';
     modal.innerHTML = `
-      <div class="modal-card admin-edit-card" role="dialog" aria-modal="true">
-        <div class="modal-head">
+      <div class="submit-modal-backdrop" id="age-backdrop"></div>
+      <div class="submit-modal-box submit-modal-wide" role="dialog" aria-modal="true">
+        <div class="submit-modal-head">
           <h2>Редактирование карточки</h2>
-          <button type="button" class="modal-close" id="admin-edit-close" aria-label="Закрыть">×</button>
+          <button type="button" class="friends-modal-close" id="admin-edit-close" aria-label="Закрыть">×</button>
         </div>
-        <div class="modal-body">
-          <label class="settings-label"><span>Название</span><input class="auth-input" id="age-title" /></label>
-          <label class="settings-label"><span>Жанр</span><input class="auth-input" id="age-genre" /></label>
-          <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="age-price" type="number" min="0" step="1" /></label>
-          <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="age-short" /></label>
-          <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="age-desc" rows="6"></textarea></label>
-          <label class="settings-label full"><span>Видео URL</span><input class="auth-input" id="age-video" /></label>
-          <label class="settings-label"><span>Новая обложка</span><input type="file" id="age-cover" accept="image/*" /></label>
-          <label class="settings-label"><span>Новый баннер</span><input type="file" id="age-banner" accept="image/*" /></label>
-          <div id="age-error" class="gp-comment-error hidden"></div>
+        <div class="submit-modal-body">
+          <div class="submit-grid">
+            <label class="settings-label"><span>Название</span><input class="auth-input" id="age-title" maxlength="120" /></label>
+            <label class="settings-label"><span>Жанр</span><input class="auth-input" id="age-genre" /></label>
+            <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="age-price" type="number" min="0" step="1" /></label>
+            <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="age-short" maxlength="200" /></label>
+            <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="age-desc" rows="6"></textarea></label>
+            <label class="settings-label full"><span>Видео URL</span><input class="auth-input" id="age-video" placeholder="https://youtube.com/..." /></label>
+            <label class="settings-label"><span>Новая обложка</span><input type="file" id="age-cover" accept="image/*" /></label>
+            <label class="settings-label"><span>Новый баннер</span><input type="file" id="age-banner" accept="image/*" /></label>
+          </div>
+          <div id="age-error" class="gp-comment-error hidden" style="margin-top:12px"></div>
         </div>
-        <div class="modal-foot admin-edit-foot">
+        <div class="submit-modal-foot admin-edit-foot">
           <button type="button" class="btn-danger" id="age-delete">Удалить карточку</button>
           <div class="admin-edit-foot-right">
-            <button type="button" class="btn-ghost" id="age-cancel">Отмена</button>
+            <button type="button" class="hp-btn-edit" id="age-cancel">Отмена</button>
             <button type="button" class="auth-submit" id="age-save">Сохранить</button>
           </div>
         </div>
       </div>`;
     document.body.appendChild(modal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
-    modal.querySelector('#admin-edit-close')?.addEventListener('click', () => modal.classList.add('hidden'));
-    modal.querySelector('#age-cancel')?.addEventListener('click', () => modal.classList.add('hidden'));
+
+    const close = () => modal.classList.add('hidden');
+    modal.querySelector('#age-backdrop')?.addEventListener('click', close);
+    modal.querySelector('#admin-edit-close')?.addEventListener('click', close);
+    modal.querySelector('#age-cancel')?.addEventListener('click', close);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) close();
+    });
   }
-  $('#age-title').value = g.title || '';
-  $('#age-genre').value = g.genre || '';
-  $('#age-price').value = g.price || 0;
-  $('#age-short').value = g.short_description || '';
-  $('#age-desc').value = g.description || '';
-  $('#age-video').value = g.video_url || '';
-  const err = $('#age-error');
+
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+  setVal('age-title', g.title || '');
+  setVal('age-genre', g.genre || '');
+  setVal('age-price', g.price ?? 0);
+  setVal('age-short', g.short_description || '');
+  setVal('age-desc', g.description || '');
+  setVal('age-video', g.video_url || '');
+
+  const coverInput = document.getElementById('age-cover');
+  const bannerInput = document.getElementById('age-banner');
+  if (coverInput) coverInput.value = '';
+  if (bannerInput) bannerInput.value = '';
+
+  const err = document.getElementById('age-error');
   if (err) { err.classList.add('hidden'); err.textContent = ''; }
+
   modal.dataset.gameId = String(g.id);
   modal.classList.remove('hidden');
 
-  const saveBtn = $('#age-save');
-  const delBtn = $('#age-delete');
+  const saveBtn = document.getElementById('age-save');
+  const delBtn = document.getElementById('age-delete');
+
   if (saveBtn) {
     saveBtn.onclick = async () => {
       const id = modal.dataset.gameId;
       const fd = new FormData();
       fd.append('csrf_token', window.CSRF_TOKEN || '');
       fd.append('id', id);
-      fd.append('title', $('#age-title')?.value || '');
-      fd.append('genre', $('#age-genre')?.value || '');
-      fd.append('price', $('#age-price')?.value || '0');
-      fd.append('short_description', $('#age-short')?.value || '');
-      fd.append('description', $('#age-desc')?.value || '');
-      fd.append('video_url', $('#age-video')?.value || '');
+      fd.append('title', document.getElementById('age-title')?.value || '');
+      fd.append('genre', document.getElementById('age-genre')?.value || '');
+      fd.append('price', document.getElementById('age-price')?.value || '0');
+      fd.append('short_description', document.getElementById('age-short')?.value || '');
+      fd.append('description', document.getElementById('age-desc')?.value || '');
+      fd.append('video_url', document.getElementById('age-video')?.value || '');
       fd.append('sys_req_min', g.sys_req_min || '');
       fd.append('sys_req_rec', g.sys_req_rec || '');
       fd.append('controllers', g.controllers || '');
       fd.append('languages', typeof g.languages === 'string' ? g.languages : JSON.stringify(g.languages || []));
       fd.append('review_note', '');
       fd.append('delete_media', '');
-      const cover = $('#age-cover')?.files?.[0];
+      const cover = document.getElementById('age-cover')?.files?.[0];
       if (cover) fd.append('cover', cover);
-      const banner = $('#age-banner')?.files?.[0];
+      const banner = document.getElementById('age-banner')?.files?.[0];
       if (banner) fd.append('banner', banner);
       saveBtn.disabled = true;
       try {
@@ -1723,6 +1776,7 @@ function openAdminGameEditModal(g) {
       }
     };
   }
+
   if (delBtn) {
     delBtn.onclick = async () => {
       if (!confirm('Удалить карточку игры полностью? Это нельзя отменить.')) return;
@@ -4372,7 +4426,7 @@ function initAdminUI() {
     const btn = $('#steam-preview-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Загрузка...'; }
     try {
-      const data = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`);
+      const data = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
       if (!data.ok) throw new Error(data.error || 'Ошибка');
       const p = data.preview || {};
       const banner = $('#steam-preview-banner');
@@ -4410,9 +4464,10 @@ function initAdminUI() {
       const data = await postJSON(`${STEAM_API}?action=import`, {
         url,
         publish: $('#steam-publish')?.checked ? 1 : 0,
-      });
+      }, FETCH_TIMEOUT_LONG);
       if (!data.ok) throw new Error(data.error || 'Ошибка импорта');
-      toast(`Импортировано: ${data.title} (id ${data.game_id})`);
+      const vidInfo = data.videos ? `, видео: ${data.videos}` : '';
+      toast(`Импортировано: ${data.title} (id ${data.game_id}${vidInfo})`);
       homeCache = null;
       storeCache = [];
       if (data.status === 'published' && typeof gotoGame === 'function') {
@@ -4543,11 +4598,38 @@ function initAdminPanel() {
   $('#admin-publish')?.addEventListener('click', async () => {
     const id = +($('#admin-game-id')?.value || 0);
     if (!id) return;
+    const btn = $('#admin-publish');
+    if (btn) btn.disabled = true;
     try {
-      // save first
-      await $('#admin-save')?.click();
-      const res = await postJSON(`${SUBMIT_API}?action=publish`, { id });
-      if (!res.ok) throw new Error(res.error || 'Ошибка');
+      // Сначала сохраняем текущие поля формы
+      const fd = new FormData();
+      fd.append('csrf_token', window.CSRF_TOKEN || '');
+      fd.append('id', id);
+      fd.append('title', $('#admin-title')?.value || '');
+      fd.append('genre', $('#admin-genre')?.value || '');
+      fd.append('price', $('#admin-price')?.value || '0');
+      fd.append('short_description', $('#admin-short')?.value || '');
+      fd.append('description', $('#admin-desc')?.value || '');
+      fd.append('video_url', $('#admin-video')?.value || '');
+      fd.append('sys_req_min', $('#admin-sys-min')?.value || '');
+      fd.append('sys_req_rec', $('#admin-sys-rec')?.value || '');
+      fd.append('controllers', $('#admin-controllers')?.value || '');
+      fd.append('languages', $('#admin-languages')?.value || '');
+      fd.append('review_note', $('#admin-note')?.value || '');
+      fd.append('delete_media', '');
+      const cover = $('#admin-cover')?.files?.[0];
+      if (cover) fd.append('cover', cover);
+      const banner = $('#admin-banner')?.files?.[0];
+      if (banner) fd.append('banner', banner);
+      const shots = $('#admin-shots')?.files;
+      if (shots) for (let i = 0; i < shots.length; i++) fd.append('screenshots[]', shots[i]);
+
+      const saveRes = await fetch(`${SUBMIT_API}?action=admin_save`, { method: 'POST', body: fd });
+      const saveData = await saveRes.json();
+      if (!saveData.ok) throw new Error(saveData.error || 'Ошибка сохранения перед публикацией');
+
+      const res = await postJSON(`${SUBMIT_API}?action=publish`, { id }, FETCH_TIMEOUT_LONG);
+      if (!res.ok) throw new Error(res.error || 'Ошибка публикации');
       toast('Игра опубликована');
       homeCache = null;
       storeCache = [];
@@ -4555,6 +4637,7 @@ function initAdminPanel() {
       $('#admin-empty')?.classList.remove('hidden');
       loadAdminPending();
     } catch (err) { toast(err.message); }
+    finally { if (btn) btn.disabled = false; }
   });
 
   $('#admin-reject')?.addEventListener('click', async () => {
@@ -4564,7 +4647,7 @@ function initAdminPanel() {
       const res = await postJSON(`${SUBMIT_API}?action=reject`, {
         id,
         note: $('#admin-note')?.value || '',
-      });
+      }, FETCH_TIMEOUT_LONG);
       if (!res.ok) throw new Error(res.error || 'Ошибка');
       toast('Отклонено');
       $('#admin-game-form')?.classList.add('hidden');
@@ -4574,22 +4657,50 @@ function initAdminPanel() {
   });
 }
 
-// ---------- Галерея скриншотов на странице игры ----------
-// Клик по превью подменяет главный скриншот; клик по главному — лайтбокс.
+// ---------- Галерея: видео (трейлеры) + скриншоты ----------
+function setGalleryMain(wrap, type, src, thumb) {
+  const box = $('#gallery-main', wrap) || $('.gp-gallery-main', wrap);
+  if (!box) return;
+  // остановить предыдущее видео
+  const oldVid = $('#gallery-main-video', wrap);
+  if (oldVid) {
+    try { oldVid.pause(); } catch (e) {}
+  }
+  if (type === 'video') {
+    box.innerHTML = `<video id="gallery-main-video" src="${escapeHtml(src)}" controls playsinline preload="metadata" poster="${escapeHtml(thumb || '')}"></video>`;
+    const v = $('#gallery-main-video', wrap);
+    if (v) {
+      v.play().catch(() => {});
+    }
+  } else {
+    box.innerHTML = `<img id="gallery-main-img" src="${escapeHtml(src)}" alt="" />`;
+    const img = $('#gallery-main-img', wrap);
+    if (img) {
+      img.addEventListener('click', () => openLightbox(src));
+    }
+  }
+}
+
 function initGallery(wrap) {
-  const main = $('#gallery-main-img', wrap);
   $$('.gp-thumb', wrap).forEach(btn => {
     btn.addEventListener('click', () => {
       $$('.gp-thumb', wrap).forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      if (main && btn.dataset.src) main.src = btn.dataset.src;
+      setGalleryMain(wrap, btn.dataset.type || 'image', btn.dataset.src, btn.dataset.thumb || '');
     });
   });
-  if (main) {
-    main.addEventListener('click', () => {
-      if (main.src) openLightbox(main.src);
+  const mainImg = $('#gallery-main-img', wrap);
+  if (mainImg) {
+    mainImg.addEventListener('click', () => {
+      if (mainImg.src) openLightbox(mainImg.src);
     });
   }
+  // сайдбар «скрины сообщества»
+  $$('.gp-comm-shot', wrap).forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.src) openLightbox(btn.dataset.src);
+    });
+  });
 }
 
 // ---------- Лайтбокс ----------

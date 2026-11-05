@@ -6774,3 +6774,31 @@ body.client .content > .main {
 }
 .btn-danger:hover { background: rgba(200,50,50,0.35); }
 #gp-admin-edit { color: var(--accent); }
+
+/* ===== Gallery video (Steam trailers) ===== */
+.gp-gallery-main video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #0e0d0b;
+}
+.gp-thumb-video {
+  position: relative;
+}
+.gp-thumb-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  font-size: 1.1rem;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+.gp-thumb-video.active .gp-thumb-play,
+.gp-thumb-video:hover .gp-thumb-play {
+  background: rgba(0,0,0,0.2);
+}

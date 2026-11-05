@@ -123,17 +123,39 @@ try {
             exit;
         }
         $game['cover_src'] = !empty($game['cover_url']) ? $game['cover_url'] : ('media.php?type=cover&id=' . $game['id']);
-        // скрины из game_media
-        try {
-            $ms = $pdo->prepare("SELECT url FROM game_media WHERE game_id = ? AND kind = 'screenshot' ORDER BY sort_order, id");
-            $ms->execute([$id]);
-            $mediaUrls = array_column($ms->fetchAll(), 'url');
-            if ($mediaUrls) {
-                // merge with legacy screenshots below
-                $GLOBALS['_game_media_shots'] = $mediaUrls;
-            }
-        } catch (Throwable $e) {}
 
+        // видео + скрины из game_media
+        $videos = [];
+        $mediaUrls = [];
+        try {
+            $ms = $pdo->prepare("SELECT kind, url, thumb_url, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order, id");
+            $ms->execute([$id]);
+            foreach ($ms->fetchAll() as $row) {
+                if (($row['kind'] ?? '') === 'video') {
+                    $videos[] = [
+                        'url' => $row['url'],
+                        'thumbnail' => !empty($row['thumb_url']) ? $row['thumb_url'] : null,
+                    ];
+                } else {
+                    $mediaUrls[] = $row['url'];
+                }
+            }
+        } catch (Throwable $e) {
+            try {
+                $ms = $pdo->prepare("SELECT kind, url FROM game_media WHERE game_id = ? ORDER BY sort_order, id");
+                $ms->execute([$id]);
+                foreach ($ms->fetchAll() as $row) {
+                    if (($row['kind'] ?? '') === 'video') {
+                        $videos[] = ['url' => $row['url'], 'thumbnail' => null];
+                    } else {
+                        $mediaUrls[] = $row['url'];
+                    }
+                }
+            } catch (Throwable $e2) {}
+        }
+        if (!$videos && !empty($game['video_url'])) {
+            $videos[] = ['url' => $game['video_url'], 'thumbnail' => null];
+        }
 
         $screenshots = [];
         try {
@@ -141,9 +163,8 @@ try {
             $stmt->execute([$id]);
             $screenshots = array_column($stmt->fetchAll(), 'image_url');
         } catch (Throwable $e) {}
-        if (!empty($GLOBALS['_game_media_shots'])) {
-            $screenshots = array_values(array_unique(array_merge($GLOBALS['_game_media_shots'], $screenshots)));
-            unset($GLOBALS['_game_media_shots']);
+        if ($mediaUrls) {
+            $screenshots = array_values(array_unique(array_merge($mediaUrls, $screenshots)));
         }
         if (!$screenshots && !empty($game['cover_url'])) {
             $screenshots = [$game['cover_url']];
@@ -193,6 +214,7 @@ try {
             'ok' => true,
             'game' => $game,
             'screenshots' => $screenshots,
+            'videos' => $videos,
             'builds' => $builds,
             'comments' => $comments,
             'ratings_count' => (int)$ratingInfo['cnt'],

@@ -311,6 +311,11 @@ try {
         if (!empty($p['movies'][0]['mp4'])) $video = $p['movies'][0]['mp4'];
         elseif (!empty($p['movies'][0]['webm'])) $video = $p['movies'][0]['webm'];
 
+        // превью трейлеров
+        try {
+            $pdo->exec("ALTER TABLE game_media ADD COLUMN thumb_url VARCHAR(512) NULL DEFAULT NULL");
+        } catch (Throwable $e) {}
+
         $sysMin = json_encode(['notes' => $p['sys_req_min_text']], JSON_UNESCAPED_UNICODE);
         $sysRec = json_encode(['notes' => $p['sys_req_rec_text']], JSON_UNESCAPED_UNICODE);
         $langs = parseSteamLanguages($p['supported_languages'] ?? '');
@@ -357,6 +362,55 @@ try {
         $gameId = (int)$pdo->lastInsertId();
 
         $order = 0;
+        $videosSaved = 0;
+        $videoDir = $base . '/videos';
+        if (!is_dir($videoDir)) @mkdir($videoDir, 0775, true);
+
+        // Трейлеры Steam — ПЕРЕД скриншотами (как в магазине Steam)
+        foreach (array_slice($p['movies'] ?? [], 0, 3) as $mi => $movie) {
+            $mp4 = $movie['mp4'] ?? '';
+            $webm = $movie['webm'] ?? '';
+            $src = $mp4 !== '' ? $mp4 : $webm;
+            if ($src === '') continue;
+
+            // превью кадра трейлера скачиваем локально
+            $thumbLocal = null;
+            if (!empty($movie['thumbnail'])) {
+                $thumbLocal = saveRemoteImage($movie['thumbnail'], $shotDir, 'steam' . $appId . '_vidthumb' . $mi);
+            }
+
+            // пробуем скачать сам ролик (480p/max может быть тяжёлым — если не вышло, оставляем CDN)
+            $localVideo = null;
+            $ext = (stripos($src, '.webm') !== false) ? 'webm' : 'mp4';
+            $destName = 'steam' . $appId . '_vid' . $mi . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
+            $destFull = $videoDir . DIRECTORY_SEPARATOR . $destName;
+            if (httpDownload($src, $destFull, 90)) {
+                $sz = @filesize($destFull);
+                // отсекаем пустышки / слишком огромные (>120 МБ)
+                if ($sz !== false && $sz > 50 * 1024 && $sz < 120 * 1024 * 1024) {
+                    $localVideo = 'uploads/games/videos/' . $destName;
+                } else {
+                    @unlink($destFull);
+                }
+            }
+
+            $finalUrl = $localVideo ?: $src;
+            try {
+                // sort_order начинается с 0 — видео идут первыми
+                $pdo->prepare("INSERT INTO game_media (game_id, kind, url, thumb_url, sort_order) VALUES (?,?,?,?,?)")
+                    ->execute([$gameId, 'video', $finalUrl, $thumbLocal, $order++]);
+                $videosSaved++;
+            } catch (Throwable $e) {
+                // без thumb_url (старая схема)
+                try {
+                    $pdo->prepare("INSERT INTO game_media (game_id, kind, url, sort_order) VALUES (?,?,?,?)")
+                        ->execute([$gameId, 'video', $finalUrl, $order++]);
+                    $videosSaved++;
+                } catch (Throwable $e2) {}
+            }
+        }
+
+        // Скриншоты после видео
         foreach (array_slice($p['screenshots'], 0, 10) as $shotUrl) {
             $local = saveRemoteImage($shotUrl, $shotDir, 'steam' . $appId . '_shot' . $order);
             if (!$local) continue;
@@ -378,7 +432,8 @@ try {
             'status' => $status,
             'cover_url' => $coverUrl,
             'banner_url' => $bannerUrl,
-            'screenshots' => $order,
+            'screenshots' => max(0, $order - $videosSaved),
+            'videos' => $videosSaved,
             'steam_app_id' => $appId,
         ], JSON_UNESCAPED_UNICODE);
         exit;
