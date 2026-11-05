@@ -83,10 +83,11 @@ try {
         $stmt = $pdo->prepare("
             SELECT g.id, g.title, g.slug, g.short_description, g.description,
                    g.price, g.category, g.genre, g.tags, g.rating,
-                   g.cover_url, g.cover_emoji, g.cover_color,
+                   g.cover_url, g.banner_url, g.cover_emoji, g.cover_color,
                    g.developer_name, g.download_count, g.created_at, g.is_adult,
                    (SELECT COUNT(*) FROM comments c WHERE c.game_id = g.id) AS comments_count,
-                   (SELECT COUNT(*) FROM ratings r WHERE r.game_id = g.id) AS ratings_count
+                   (SELECT COUNT(*) FROM ratings r WHERE r.game_id = g.id) AS ratings_count,
+                   (SELECT COUNT(*) FROM library l WHERE l.game_id = g.id) AS players_count
             FROM games g
             WHERE $where
             ORDER BY g.created_at DESC
@@ -154,12 +155,32 @@ try {
         $builds = $stmt->fetchAll();
 
         $stmt = $pdo->prepare("
-            SELECT c.id, c.body, c.created_at, u.username, u.avatar, u.avatar_color, u.id AS user_id
-            FROM comments c JOIN users u ON u.id = c.user_id
-            WHERE c.game_id = ? ORDER BY c.created_at DESC LIMIT 50
+            SELECT c.id, c.body, c.created_at, c.parent_id, c.likes,
+                   u.username, u.avatar, u.avatar_color, u.avatar_url, u.banner_url, u.id AS user_id,
+                   (SELECT r.value FROM ratings r WHERE r.user_id = u.id AND r.game_id = c.game_id LIMIT 1) AS rating,
+                   (SELECT l.playtime_minutes FROM library l WHERE l.user_id = u.id AND l.game_id = c.game_id LIMIT 1) AS playtime_minutes
+            FROM comments c
+            JOIN users u ON u.id = c.user_id
+            WHERE c.game_id = ?
+            ORDER BY c.created_at ASC
+            LIMIT 200
         ");
         $stmt->execute([$id]);
         $comments = $stmt->fetchAll();
+        foreach ($comments as &$cm) {
+            $cm['parent_id'] = $cm['parent_id'] !== null ? (int)$cm['parent_id'] : null;
+            $cm['likes'] = (int)($cm['likes'] ?? 0);
+            $cm['dislikes'] = 0;
+            $cm['rating'] = $cm['rating'] !== null ? (int)$cm['rating'] : null;
+            $cm['playtime_minutes'] = $cm['playtime_minutes'] !== null ? (int)$cm['playtime_minutes'] : null;
+            if (!empty($cm['avatar_url'])) {
+                $cm['avatar_url'] = $cm['avatar_url'];
+            } else {
+                $cm['avatar_url'] = null;
+            }
+            $cm['profile_banner'] = !empty($cm['banner_url']) ? $cm['banner_url'] : null;
+        }
+        unset($cm);
 
         $stmt = $pdo->prepare("SELECT COUNT(*) AS cnt, AVG(value) AS avg_v FROM ratings WHERE game_id = ?");
         $stmt->execute([$id]);
@@ -329,7 +350,8 @@ try {
             ->execute([$gameId, (int)$user['id'], $text, $parentId]);
         $id = (int)$pdo->lastInsertId();
 
-        $stmt = $pdo->prepare("SELECT c.id, c.body, c.created_at, c.parent_id, c.likes, u.username, u.avatar, u.avatar_color, u.avatar_url, u.id AS user_id
+        $stmt = $pdo->prepare("SELECT c.id, c.body, c.created_at, c.parent_id, c.likes,
+            u.username, u.avatar, u.avatar_color, u.avatar_url, u.banner_url, u.id AS user_id
             FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?");
         $stmt->execute([$id]);
         echo json_encode(['ok' => true, 'comment' => $stmt->fetch()], JSON_UNESCAPED_UNICODE);

@@ -62,6 +62,26 @@ function isOffline(err) {
   return err && (err.name === 'AbortError' || err instanceof TypeError);
 }
 
+function gameCoverUrl(g) {
+  if (!g) return '';
+  if (g.cover_src) return g.cover_src;
+  if (g.cover_url) return g.cover_url;
+  if (g.id) return 'media.php?type=cover&id=' + g.id;
+  return '';
+}
+function gameHeroUrl(g) {
+  if (!g) return '';
+  // Реальная обложка/баннер важнее процедурного SVG
+  if (g.banner_url) return g.banner_url;
+  if (g.cover_url) return g.cover_url;
+  if (g.cover_src && !String(g.cover_src).includes('media.php?type=hero')) return g.cover_src;
+  if (g.id) return 'media.php?type=hero&id=' + g.id;
+  return '';
+}
+function formatStatNum(n) {
+  const v = parseInt(n, 10) || 0;
+  return v.toLocaleString('ru-RU');
+}
 function formatPrice(price) {
   const p = parseFloat(price);
   if (p === 0) return { text: 'Бесплатно', className: 'free' };
@@ -76,6 +96,39 @@ function formatSize(bytes) {
   return (b / 1024 / 1024 / 1024).toFixed(2) + ' ГБ';
 }
 
+
+function iconSvg(name, size=16) {
+  const s = size;
+  const common = `width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const map = {
+    star: `<svg ${common}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    clock: `<svg ${common}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    thumbsUp: `<svg ${common}><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>`,
+    thumbsDown: `<svg ${common}><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>`,
+    reply: `<svg ${common}><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>`,
+    trash: `<svg ${common}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+    heart: `<svg ${common}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg>`,
+    message: `<svg ${common}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+    download: `<svg ${common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    users: `<svg ${common}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    settings: `<svg ${common}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    plus: `<svg ${common}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+    pencil: `<svg ${common}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+  };
+  return map[name] || '';
+}
+
+function formatRelative(iso) {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (!t) return formatDate(iso);
+  const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (sec < 60) return 'только что';
+  if (sec < 3600) return Math.floor(sec / 60) + ' мин. назад';
+  if (sec < 86400) return Math.floor(sec / 3600) + ' ч. назад';
+  if (sec < 86400 * 7) return Math.floor(sec / 86400) + ' дн. назад';
+  return formatDate(iso);
+}
 function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(String(iso).replace(' ', 'T'));
@@ -330,24 +383,8 @@ async function loadHome() {
   renderHomeGrid();
 }
 
-function renderHomeHero() {
-  const hero = $('#home-hero');
-  if (!hero || !homeCache || !homeCache.length) return;
-  const game = homeCache.find(g => g.slug === 'lisiy-fonar') || homeCache[0];
-  const bg = $('#home-hero-bg');
-  bg.src = `media.php?type=hero&id=${game.id}`;
-  bg.alt = game.title || '';
-  $('#home-hero-title').textContent = game.title || '';
-  $('#home-hero-desc').textContent = game.short_description || game.description || '';
-  hero.classList.remove('hidden');
-  hero.onclick = () => gotoGame(game.id);
-}
-
-function renderHomeGrid() {
-  const grid = $('#home-grid');
-  if (!grid) return;
+function getHomeGamesSorted() {
   let games = [...(homeCache || [])];
-
   if (homeSearch) {
     const q = homeSearch.toLowerCase();
     games = games.filter(g =>
@@ -356,34 +393,86 @@ function renderHomeGrid() {
       (g.genre || '').toLowerCase().includes(q)
     );
   }
-
   if (homeSort === 'popular') {
     games.sort((a, b) => (parseInt(b.download_count, 10) || 0) - (parseInt(a.download_count, 10) || 0));
   } else if (homeSort === 'week') {
     games.sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
-  } // 'new' — порядок из API (сначала новые)
+  }
+  return games;
+}
 
-  games = games.slice(0, 6);
+function renderHomeHero() {
+  const hero = $('#home-hero');
+  if (!hero) return;
+  const list = getHomeGamesSorted();
+  if (!list.length) {
+    hero.classList.add('hidden');
+    hero.onclick = null;
+    return;
+  }
+  // Та же игра, что первая в сетке — та же обложка, что на карточке
+  const game = list[0];
+  const bg = $('#home-hero-bg');
+  // Как Hydra: libraryHeroImageUrl → у нас banner, иначе cover
+  const url = (game.banner_url || game.cover_url || game.cover_src || gameHeroUrl(game) || gameCoverUrl(game));
+  bg.removeAttribute('data-fallback');
+  bg.src = url;
+  bg.alt = game.title || '';
+  bg.onerror = () => {
+    if (bg.dataset.fallback === '1') return;
+    bg.dataset.fallback = '1';
+    if (game.id) bg.src = 'media.php?type=cover&id=' + game.id;
+  };
+  $('#home-hero-title').textContent = game.title || '';
+  const desc = (game.short_description || game.description || '').trim();
+  const descEl = $('#home-hero-desc');
+  if (descEl) {
+    descEl.textContent = desc;
+    descEl.style.display = desc ? '' : 'none';
+  }
+  hero.classList.remove('hidden');
+  hero.onclick = () => gotoGame(game.id);
+}
+
+function renderHomeGrid() {
+  const grid = $('#home-grid');
+  if (!grid) return;
+  let games = getHomeGamesSorted().slice(0, 12);
   if (!games.length) {
-    grid.innerHTML = '<div class="loading">В каталоге пока пусто.</div>';
+    grid.innerHTML = '<div class="loading">В каталоге пока нет игр.<br><small>Нажми «+» сверху, чтобы отправить игру на модерацию.</small></div>';
     return;
   }
 
-  grid.innerHTML = games.map(g => `
-    <article class="home-card" data-id="${g.id}">
+  grid.innerHTML = games.map(g => {
+    const cover = escapeHtml(gameCoverUrl(g));
+    const author = escapeHtml(g.developer_name || g.developer || '');
+    const sub = author || (parseFloat(g.price) > 0 ? (parseFloat(g.price).toFixed(0) + ' ₽') : 'Бесплатно');
+    const dl = formatStatNum(g.download_count);
+    const players = formatStatNum(g.players_count ?? g.ratings_count ?? 0);
+    const rating = (parseFloat(g.rating) || 0).toFixed(1);
+    return `
+    <button type="button" class="home-card" data-id="${g.id}">
       <div class="home-card-cover">
-        <img src="${escapeHtml(g.cover_src || ('media.php?type=cover&id=' + g.id))}" alt="${escapeHtml(g.title)}" loading="lazy" />
+        <img src="${cover}" alt="${escapeHtml(g.title)}" loading="lazy" />
       </div>
+      <div class="home-card-shade"></div>
       <div class="home-card-info">
         <div class="home-card-title">${escapeHtml(g.title)}</div>
-        <div class="home-card-sub">${escapeHtml(g.developer_name || '')}${g.genre ? ' · ' + escapeHtml(g.genre) : ''}</div>
+        <div class="home-card-sub">${sub}</div>
+        <div class="home-card-stats">
+          <span title="Скачивания"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 19h14"/></svg>${dl}</span>
+          <span title="В библиотеках"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${players}</span>
+          <span title="Оценка"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>${rating}</span>
+        </div>
       </div>
-    </article>`).join('');
+    </button>`;
+  }).join('');
 
   $$('.home-card', grid).forEach(card => {
     card.addEventListener('click', () => gotoGame(card.dataset.id));
   });
 }
+
 
 function initHomeControls() {
   $$('#home-pills .home-pill[data-hsort]').forEach(pill => {
@@ -740,7 +829,7 @@ async function loadWorkshop() {
     workshopCache = data.games || [];
 
     if (!workshopCache.length) {
-      grid.innerHTML = '<div class="loading">В мастерской пока пусто.</div>';
+      grid.innerHTML = '<div class="loading">В мастерской пока пусто.<br><small>Ассеты появятся после публикации.</small></div>';
       return;
     }
 
@@ -890,64 +979,62 @@ function renderGamePage(wrap, data) {
   const shots = data.screenshots || [];
   const authorized = data.viewer && data.viewer.authorized;
   const cover = g.cover_src || g.cover_url || '';
-  const hero = g.banner_url || cover || (`media.php?type=hero&id=${g.id}`);
+  const hero = g.banner_url || g.cover_url || cover || (`media.php?type=hero&id=${g.id}`);
   const gallery = shots.length ? shots : (cover ? [cover] : []);
+  const descHtml = (g.description || 'Описание отсутствует.')
+    .split(/\n+/).map(p => `<p>${escapeHtml(p)}</p>`).join('');
+  const releaseLabel = g.created_at
+    ? ('Выпущено ' + formatDate(g.created_at))
+    : '';
+  const publisher = g.developer_name || g.developer || '';
+
+  const actionLeft = g.owned
+    ? `<div class="gp-playtime">В библиотеке${g.playtime_minutes ? ' · ' + formatPlaytime(g.playtime_minutes) : ''}</div>
+       <div class="gp-last-play">${g.last_played ? 'Последний запуск: ' + formatDate(g.last_played) : ''}</div>`
+    : `<div class="gp-playtime">Нет доступных источников</div>`;
+
+  const actionBtns = g.owned
+    ? `<button type="button" class="gp-bar-btn primary" id="btn-buy-game">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+         Скачать
+       </button>
+       <button type="button" class="gp-bar-btn icon" id="gp-like" title="В избранное">${iconSvg('heart',16)}</button>
+       <button type="button" class="gp-bar-btn icon" id="gp-settings" title="Настройки">${iconSvg('settings',16)}</button>
+       ${viewer && viewer.is_admin ? `<button type="button" class="gp-bar-btn icon" id="gp-admin-edit" title="Редактировать">${iconSvg('pencil',16)}</button>` : ''}`
+    : `${price.className === 'paid' ? `<span class="gp-price">${escapeHtml(price.text)}</span>` : ''}
+       <button type="button" class="gp-bar-btn primary" id="btn-buy-game">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+         Добавить в библиотеку
+       </button>`;
 
   wrap.innerHTML = `
     <div class="gp">
       <div class="gp-hero">
-        <img class="gp-hero-bg" src="${escapeHtml(hero)}" alt="" onerror="this.style.opacity=0.3" />
+        <img class="gp-hero-bg" src="${escapeHtml(hero)}" alt="" onerror="this.style.opacity=0.35" />
         <div class="gp-hero-grad"></div>
         <div class="gp-hero-content">
           <h1 class="gp-title">${escapeHtml(g.title)}</h1>
         </div>
         <div class="gp-actionbar">
-          <div class="gp-action-left">
-            ${g.owned
-              ? `<div class="gp-playtime">В библиотеке${g.playtime_minutes ? ` · ${formatPlaytime(g.playtime_minutes)}` : ''}</div>
-                 <div class="gp-last-play">${g.last_played ? 'Последний запуск: ' + formatDate(g.last_played) : ''}</div>`
-              : `<div class="gp-playtime">Игры ещё нет в библиотеке</div>`}
-          </div>
-          <div class="gp-action-btns">
-            ${g.owned ? `
-              <button type="button" class="gp-bar-btn primary" id="btn-buy-game">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Скачать
-              </button>
-              <button type="button" class="gp-bar-btn" id="gp-like" title="В избранное">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              </button>
-              <button type="button" class="gp-bar-btn" id="gp-pin" title="Закрепить">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1V4H8v2h1v4.76z"/></svg>
-              </button>
-              <button type="button" class="gp-bar-btn" id="gp-settings" title="Настройки">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
-              </button>
-            ` : `
-              <button type="button" class="gp-bar-btn primary" id="btn-buy-game">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                ${price.className === 'free' ? 'Добавить в библиотеку' : `Купить · ${price.text}`}
-              </button>
-            `}
-          </div>
+          <div class="gp-action-left">${actionLeft}</div>
+          <div class="gp-action-btns">${actionBtns}</div>
         </div>
-      </div>
-      <p class="game-buy-note" id="buy-note"></p>
-
-      <div class="gp-meta-bar">
-        <div>
-          <div class="gp-meta-line">Добавлена ${formatDate(g.created_at)}</div>
-          <div class="gp-meta-sub">Разработчик ${escapeHtml(g.developer_name || g.developer || 'Unknown')}</div>
-        </div>
-        ${g.genre ? `<span class="tag genre">${escapeHtml(g.genre)}</span>` : ''}
       </div>
 
       <div class="gp-layout">
         <div class="gp-main">
+          <div class="gp-meta-card">
+            ${releaseLabel ? `<p class="gp-meta-strong">${escapeHtml(releaseLabel)}</p>` : ''}
+            ${publisher ? `<p class="gp-meta-muted">Издатель ${escapeHtml(publisher)}</p>` : ''}
+            ${!releaseLabel && !publisher ? `<p class="gp-meta-muted">${escapeHtml(g.genre || 'Игра')}</p>` : ''}
+          </div>
+
           ${gallery.length ? `
           <div class="gp-gallery">
-            <div class="gp-gallery-main">
-              <img id="gallery-main-img" src="${escapeHtml(gallery[0])}" alt="" />
+            <div class="gp-gallery-viewport">
+              <div class="gp-gallery-main">
+                <img id="gallery-main-img" src="${escapeHtml(gallery[0])}" alt="" />
+              </div>
             </div>
             <div class="gp-gallery-thumbs">
               ${gallery.map((src, i) => `
@@ -957,76 +1044,111 @@ function renderGamePage(wrap, data) {
             </div>
           </div>` : ''}
 
-          <div class="gp-section">
-            <h2 class="gp-section-title">Об игре</h2>
-            <div class="gp-description">
-              ${(g.description || 'Описание отсутствует.').split(/\n+/).map(p => `<p>${escapeHtml(p)}</p>`).join('')}
-            </div>
-            ${tags.length ? `<div class="game-tags" style="margin-top:12px">${tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
-          </div>
+          <h2 class="gp-block-title">Об игре</h2>
+          <div class="gp-description gp-description--collapsed" id="gp-description">${descHtml}</div>
+          <button type="button" class="gp-desc-toggle" id="gp-desc-toggle">Показать больше</button>
+          ${tags.length ? `<div class="game-tags gp-tags">${tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
 
-          <div class="gp-section">
-            <h2 class="gp-section-title">Сборки и файлы</h2>
+          <div class="gp-section gp-section-builds">
+            <h2 class="gp-block-title">Сборки и файлы</h2>
             <div id="game-builds">${renderBuildsList(data.builds || [], g)}</div>
           </div>
 
-          <div class="gp-section" id="gp-reviews">
-            <div class="gp-reviews-head">
-              <h2 class="gp-section-title">Отзывы <span class="gp-badge" id="comments-count">${(data.comments||[]).length}</span></h2>
-              <div class="gp-sort">
-                <button type="button" class="gp-sort-btn active" data-sort="new">Сначала новые</button>
-                <button type="button" class="gp-sort-btn" data-sort="old">Сначала старые</button>
-              </div>
-            </div>
+          <div class="gp-similar-wrap">
+            <h2 class="gp-block-title">Похожие игры</h2>
+            <div id="gp-similar" class="gp-similar-grid"><div class="loading">Загрузка...</div></div>
+          </div>
+
+          <div class="gp-reviews-section" id="gp-reviews">
             ${authorized ? `
-            <div class="gp-review-form" id="comment-form-wrap">
-              <div class="gp-review-form-title">Оставить отзыв</div>
+            <div class="gp-review-form-wrap" id="comment-form-wrap">
+              <h2 class="gp-leave-title">Оставить отзыв</h2>
               <form class="comment-form" id="comment-form">
+                <div id="comment-error" class="gp-comment-error hidden"></div>
                 <input type="hidden" id="comment-parent-id" value="" />
                 <div class="gp-reply-hint hidden" id="reply-hint">
                   Ответ на комментарий <button type="button" id="reply-cancel">Отменить</button>
                 </div>
-                <textarea id="comment-input" class="comment-input" maxlength="1000" rows="4" placeholder="Поделитесь впечатлениями..." required></textarea>
-                <div class="comment-form-row">
-                  <span class="comment-hint"><span id="comment-len">0</span>/1000</span>
-                  <button type="submit" class="btn-primary">Отправить</button>
+                <div class="gp-editor">
+                  <div class="gp-editor-toolbar">
+                    <button type="button" class="gp-fmt" data-fmt="bold" title="Жирный"><b>B</b></button>
+                    <button type="button" class="gp-fmt" data-fmt="italic" title="Курсив"><i>I</i></button>
+                    <button type="button" class="gp-fmt" data-fmt="underline" title="Подчёркнутый"><u>U</u></button>
+                    <span class="gp-editor-count"><span id="comment-len">0</span>/1000</span>
+                  </div>
+                  <textarea id="comment-input" class="comment-input" maxlength="1000" rows="5" placeholder="" required></textarea>
                 </div>
-                <p class="comment-error hidden" id="comment-error"></p>
+                <div class="comment-form-row">
+                  <div class="rate-stars" id="rate-stars">
+                    ${[1,2,3,4,5].map(v => `<button type="button" class="rate-star ${g.user_rating && v <= g.user_rating ? 'filled' : ''}" data-value="${v}">★</button>`).join('')}
+                  </div>
+                  <button type="submit" class="gp-submit-review" id="comment-submit">Отправить</button>
+                </div>
               </form>
-            </div>` : '<p class="comment-login-note">Войди, чтобы оставить отзыв.</p>'}
-            <div id="comments-list" class="gp-comments-list"></div>
-          </div>
+            </div>
+            <div class="gp-reviews-separator"></div>
+            ` : `<p class="gp-login-hint">Войдите, чтобы оставить отзыв</p><div class="gp-reviews-separator"></div>`}
 
-          <div class="gp-section">
-            <h2 class="gp-section-title">Похожие игры</h2>
-            <div class="gp-similar-grid" id="gp-similar-grid"><div class="loading">Загрузка...</div></div>
+            <div class="gp-reviews-list-header">
+              <div class="gp-reviews-title-group">
+                <h2 class="gp-reviews-title">Отзывы</h2>
+                <span class="gp-reviews-badge" id="comments-count">${(data.comments||[]).length}</span>
+              </div>
+            </div>
+            <div class="gp-sort-options">
+              <button type="button" class="gp-sort-opt active" data-sort="new">▾ Сначала новые</button>
+              <span class="gp-sort-sep">|</span>
+              <button type="button" class="gp-sort-opt" data-sort="score">▴ Высший балл</button>
+              <span class="gp-sort-sep">|</span>
+              <button type="button" class="gp-sort-opt" data-sort="popular">${iconSvg('thumbsUp',14)} Самые популярные</button>
+            </div>
+            <div id="comments-list" class="gp-comments"></div>
           </div>
         </div>
 
         <aside class="gp-aside">
-          <div class="game-collapsible">
-            <button type="button" class="game-collapsible-head">Статистика <span class="chev">▾</span></button>
-            <div class="game-collapsible-body">
-              <div class="gp-stat-row"><span>⬇ Загрузки</span><b>${Number(g.download_count || 0).toLocaleString('ru-RU')}</b></div>
-              <div class="gp-stat-row"><span>💬 Отзывы</span><b>${(data.comments||[]).length}</b></div>
-              <div class="gp-stat-row"><span>★ Оценка</span><b class="game-page-rating">${starsHtml(g.rating, data.ratings_count)}</b></div>
+          <div class="gp-side-card">
+            <button type="button" class="gp-side-head">Достижения 0/0 <span class="chev">▾</span></button>
+            <div class="gp-side-body">
+              <div class="gp-ach-warn">⚠ Достижения для этой игры пока не настроены.</div>
+              <div class="gp-ach-empty">Список достижений появится после публикации данных разработчиком.</div>
             </div>
           </div>
-          ${authorized ? `
-          <div class="game-collapsible">
-            <button type="button" class="game-collapsible-head">Твоя оценка <span class="chev">▾</span></button>
-            <div class="game-collapsible-body">
-              <div class="rate-stars" id="rate-stars">
-                ${[1,2,3,4,5].map(v => `<button type="button" class="rate-star ${g.user_rating && v <= g.user_rating ? 'filled' : ''}" data-value="${v}">★</button>`).join('')}
-              </div>
+
+          <div class="gp-side-card">
+            <button type="button" class="gp-side-head">Статистика <span class="chev">▾</span></button>
+            <div class="gp-side-body gp-stats-body">
+              <div class="gp-stat-row"><span class="gp-stat-ico">${iconSvg('download',14)}</span><span>Загрузки</span><b>${formatStatNum(g.download_count)}</b></div>
+              <div class="gp-stat-row"><span class="gp-stat-ico">${iconSvg('users',14)}</span><span>Активные игроки</span><b>${formatStatNum(g.players_count ?? g.ratings_count ?? 0)}</b></div>
+              <div class="gp-stat-row"><span class="gp-stat-ico">${iconSvg('star',14)}</span><span>Оценка</span><b>${(parseFloat(g.rating) || 0).toFixed(1)}</b></div>
             </div>
-          </div>` : ''}
+          </div>
+
+          <div class="gp-side-card">
+            <button type="button" class="gp-side-head">Скриншоты сообщества <span class="chev">▾</span></button>
+            <div class="gp-side-body">
+              ${gallery.length ? `
+                <div class="gp-comm-shots">
+                  ${gallery.slice(0, 3).map(src => `
+                    <button type="button" class="gp-comm-shot" data-src="${escapeHtml(src)}">
+                      <img src="${escapeHtml(src)}" alt="" loading="lazy" />
+                      <span class="gp-comm-meta">${iconSvg('heart',12)} 0 · ${iconSvg('message',12)} 0</span>
+                    </button>`).join('')}
+                </div>
+                <button type="button" class="gp-side-more" id="gp-comm-more">Показать все</button>
+              ` : `<div class="gp-ach-empty">Пока нет скриншотов сообщества</div>`}
+            </div>
+          </div>
+
+          <div class="gp-side-card">
+            <button type="button" class="gp-side-head">Поддержка контроллера <span class="chev">▾</span></button>
+            <div class="gp-side-body gp-ctrl-body">
+              ${renderControllerSupport(g.controllers)}
+            </div>
+          </div>
+
           ${typeof renderSysReqBlock === 'function' ? renderSysReqBlock(g.sys_req_min, g.sys_req_rec) : ''}
           ${typeof renderLangBlock === 'function' ? renderLangBlock(g.languages) : ''}
-          <div class="game-collapsible">
-            <button type="button" class="game-collapsible-head">Скриншоты сообщества <span class="chev">▾</span></button>
-            <div class="game-collapsible-body"><div class="gp-community-empty">Для этой игры пока нет скриншотов сообщества</div></div>
-          </div>
         </aside>
       </div>
     </div>
@@ -1036,20 +1158,84 @@ function renderGamePage(wrap, data) {
   if (typeof initGameCollapsibles === 'function') initGameCollapsibles(wrap);
   initBuyButton(wrap, g);
   initRateStars(wrap, g);
-  renderCommentsThreaded(data.comments || [], data.viewer);
+  renderCommentsThreaded(data.comments || [], data.viewer, g.id);
   initCommentForm(g, data.viewer);
   initBuildButtons(wrap, g);
   initReviewSort(data.comments || [], data.viewer);
   loadSimilarGames(g);
 
+  // description toggle
+  const desc = $('#gp-description');
+  const tog = $('#gp-desc-toggle');
+  if (desc && tog) {
+    const needsToggle = desc.scrollHeight > 320;
+    if (!needsToggle) {
+      desc.classList.remove('gp-description--collapsed');
+      tog.classList.add('hidden');
+    } else {
+      tog.addEventListener('click', () => {
+        const open = desc.classList.toggle('gp-description--collapsed');
+        // toggle returns new state of class: true if now has collapsed
+        tog.textContent = open ? 'Показать больше' : 'Показать меньше';
+      });
+    }
+  }
+
+  // side card collapse
+  $$('.gp-side-head', wrap).forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.parentElement.classList.toggle('collapsed');
+    });
+  });
+
   $('#gp-like')?.addEventListener('click', () => toast('Избранное скоро появится'));
-  $('#gp-pin')?.addEventListener('click', () => toast('Закрепление — из профиля / библиотеки'));
   $('#gp-settings')?.addEventListener('click', () => toast('Настройки запуска скоро'));
+  $$('.gp-comm-shot', wrap).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const img = $('#gallery-main-img');
+      if (img && btn.dataset.src) img.src = btn.dataset.src;
+    });
+  });
+  $('#gp-comm-more')?.addEventListener('click', () => {
+    const img = $('#gallery-main-img');
+    if (img) img.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
-function renderCommentsThreaded(comments, viewer) {
+function renderControllerSupport(raw) {
+  const s = String(raw || '').toLowerCase();
+  const hasX = /xbox|xinput|controller|gamepad|full/.test(s) || s.includes('xbox');
+  const hasP = /playstation|dualshock|dualsense|ps4|ps5|\bps\b/.test(s);
+  const hasAny = hasX || hasP || (s && s !== 'none' && s !== '0');
+  if (!hasAny && !s) {
+    return `<div class="gp-ctrl-none">Нет данных о поддержке контроллера</div>`;
+  }
+  const full = /full|полная|complete/.test(s) || (hasX && hasP) || hasAny;
+  return `
+    <div class="gp-ctrl-icons">
+      <span class="gp-ctrl-ico" title="Xbox">$<svg class="gp-brand-logo" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M4.102 21.033C6.211 22.881 8.977 24 12 24c3.026 0 5.792-1.119 7.898-2.967 1.877-1.912-4.356-9.104-7.899-9.104-3.54 0-9.776 7.193-7.897 9.104zm9.102-19.16c-.282-.408-.549-.645-.736-.766a1.036 1.036 0 0 0-.213-.105c.016.015.15.117.285.297.116.155.247.38.373.67L12 3.73l-.971-1.762c.126-.29.257-.515.373-.67.135-.18.269-.282.285-.297a1.036 1.036 0 0 0-.213.105c-.187.121-.454.358-.736.767C9.713 3.306 8.5 5.327 8.5 8.253c0 1.54.393 3.18 1.223 4.528.825 1.34 1.95 2.293 2.277 2.293s1.452-.953 2.277-2.293c.83-1.348 1.223-2.989 1.223-4.528 0-2.926-1.213-4.947-2.238-6.379z"/></svg></span>
+      <span class="gp-ctrl-ico" title="PlayStation">$<svg class="gp-brand-logo" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M8.984 2.596v17.547l2.802.961V8.064c0-.674.306-1.109.768-1.109.512 0 .795.435.795 1.109v6.166c2.414 1.163 4.278 0 4.278-3.163 0-3.248-1.864-4.471-4.278-3.308V2.596c5.09-.831 9.651 1.395 9.651 6.53 0 5.396-4.01 8.217-9.651 6.98V24l-9.984-3.418V0l5.619 1.928v.668z"/></svg></span>
+    </div>
+    <div class="gp-ctrl-badge ${full ? 'full' : 'partial'}">${full ? 'ПОЛНАЯ ПОДДЕРЖКА' : 'ЧАСТИЧНАЯ ПОДДЕРЖКА'}</div>
+    <p class="gp-ctrl-note">${full ? 'Отлично работает с контроллерами Xbox и PlayStation.' : (escapeHtml(raw) || 'Поддержка контроллера заявлена разработчиком.')}</p>`;
+}
+
+function renderCommentsThreaded(comments, viewer, gameId) {
   const box = $('#comments-list');
   if (!box) return;
+
+  // скрыть/показать форму корневого отзыва
+  const formWrap = $('#comment-form-wrap');
+  const uid = viewer && viewer.user_id ? +viewer.user_id : null;
+  const myRoot = uid ? (comments || []).find(c => +c.user_id === uid && !(c.parent_id > 0)) : null;
+  if (formWrap) {
+    formWrap.classList.toggle('hidden', !!myRoot);
+    const sep = formWrap.nextElementSibling;
+    if (sep && sep.classList.contains('gp-reviews-separator')) {
+      sep.classList.toggle('hidden', !!myRoot);
+    }
+  }
+
   if (!comments || !comments.length) {
     box.innerHTML = `
       <div class="gp-empty-reviews">
@@ -1061,75 +1247,194 @@ function renderCommentsThreaded(comments, viewer) {
   const byParent = {};
   const roots = [];
   comments.forEach(c => {
-    const pid = c.parent_id ? +c.parent_id : 0;
+    const pid = c.parent_id != null && +c.parent_id > 0 ? +c.parent_id : 0;
     if (!pid) roots.push(c);
     else {
       if (!byParent[pid]) byParent[pid] = [];
       byParent[pid].push(c);
     }
   });
+  roots.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  Object.keys(byParent).forEach(k => {
+    byParent[k].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  });
+
   const renderOne = (c, depth) => {
-    const avStyle = c.avatar_url
+    const hasCustomAv = !!c.avatar_url;
+    const avStyle = hasCustomAv
       ? `background-image:url('${escapeHtml(c.avatar_url)}');background-size:cover;background-position:center;`
-      : `background:${escapeHtml(c.avatar_color || '#ef5b2c')}`;
-    const avText = c.avatar_url ? '' : escapeHtml((c.avatar || c.username || '?').toString().slice(0, 2));
+      : '';
     const kids = byParent[c.id] || [];
+    const rating = (c.rating != null && c.rating !== '') ? c.rating : ((c.user_rating != null && c.user_rating !== '') ? c.user_rating : null);
+    const playH = (c.playtime_hours != null && c.playtime_hours !== '')
+      ? c.playtime_hours
+      : (c.playtime_minutes != null && +c.playtime_minutes > 0 ? Math.max(1, Math.round(+c.playtime_minutes / 60)) : null);
+    const likes = c.likes || c.like_count || 0;
+    const dislikes = c.dislikes || c.dislike_count || 0;
+    const banner = c.profile_banner || c.banner_url || '';
+    const bannerStyle = banner
+      ? `background-image:url('${escapeHtml(banner)}');background-size:cover;background-position:center;`
+      : '';
+    const showBanner = !!banner;
+    const isMine = uid && +c.user_id === uid;
+    const isRoot = !(c.parent_id > 0);
+
     return `
-      <div class="gp-comment ${depth ? 'is-reply' : ''}" data-id="${c.id}" style="${depth ? `margin-left:${Math.min(depth, 3) * 28}px` : ''}">
-        <div class="gp-comment-av" style="${avStyle}">${avText}</div>
-        <div class="gp-comment-body">
-          <div class="gp-comment-top">
-            <span class="gp-comment-user">${escapeHtml(c.username)}</span>
-            <span class="gp-comment-time">${escapeHtml(formatDateTime(c.created_at))}</span>
+      <div class="gp-review ${depth ? 'is-reply' : ''} ${showBanner ? 'has-banner' : ''}" data-id="${c.id}">
+        <div class="gp-review-main">
+          <div class="gp-review-headcard ${showBanner ? 'with-banner' : ''}">
+            ${showBanner ? `<div class="gp-review-banner" style="${bannerStyle}"></div>` : ''}
+            <div class="gp-review-headcard-inner">
+              <div class="gp-review-av ${hasCustomAv ? 'has-img' : 'is-placeholder'}" style="${avStyle}">
+                ${hasCustomAv ? '' : iconSvg('users', 18)}
+              </div>
+              <div class="gp-review-userblock">
+                <div class="gp-review-name-row">
+                  <button type="button" class="gp-review-name" data-profile-user="${escapeHtml(c.username)}" data-profile-id="${c.user_id || ''}">${escapeHtml(c.username)}</button>
+                </div>
+                <div class="gp-review-meta-row">
+                  ${rating != null ? `<span class="gp-review-score">${iconSvg('star',12)} ${escapeHtml(String(rating))}/5</span>` : ''}
+                  ${playH != null ? `<span class="gp-review-playtime">${iconSvg('clock',12)} ${playH} часов</span>` : ''}
+                </div>
+              </div>
+              <span class="gp-review-time">${escapeHtml(formatRelative(c.created_at))}</span>
+            </div>
           </div>
-          <div class="gp-comment-text">${escapeHtml(c.body)}</div>
-          <div class="gp-comment-actions">
-            ${viewer && viewer.authorized ? `<button type="button" class="gp-reply-btn" data-reply="${c.id}" data-user="${escapeHtml(c.username)}">Ответить</button>` : ''}
+          <div class="gp-review-content">
+            <div class="gp-review-text">${escapeHtml(c.body)}</div>
+            <div class="gp-review-actions">
+              <button type="button" class="gp-vote" data-vote="up" data-id="${c.id}" title="Нравится">${iconSvg('thumbsUp',14)} <span>${likes}</span></button>
+              <button type="button" class="gp-vote" data-vote="down" data-id="${c.id}" title="Не нравится">${iconSvg('thumbsDown',14)} <span>${dislikes}</span></button>
+              ${viewer && viewer.authorized ? `<button type="button" class="gp-reply-btn" data-reply="${c.id}" data-user="${escapeHtml(c.username)}">${iconSvg('reply',14)} Ответить</button>` : ''}
+              ${isMine && isRoot ? `<button type="button" class="gp-del-btn" data-del="${c.id}">${iconSvg('trash',14)} Удалить отзыв</button>` : ''}
+              ${isMine && !isRoot ? `<button type="button" class="gp-del-btn" data-del="${c.id}">${iconSvg('trash',14)} Удалить</button>` : ''}
+            </div>
+            <div class="gp-inline-reply hidden" data-inline-for="${c.id}"></div>
           </div>
-          ${kids.map(k => renderOne(k, depth + 1)).join('')}
         </div>
+        ${kids.length ? `
+          <div class="gp-review-replies">
+            ${kids.map(k => renderOne(k, depth + 1)).join('')}
+          </div>` : ''}
       </div>`;
   };
+
   box.innerHTML = roots.map(c => renderOne(c, 0)).join('');
+
+  // vote stubs
+  $$('.gp-vote', box).forEach(btn => {
+    btn.addEventListener('click', () => toast('Голосование скоро'));
+  });
+
+  // inline reply
   $$('.gp-reply-btn', box).forEach(btn => {
     btn.addEventListener('click', () => {
-      const hid = $('#comment-parent-id');
-      const hint = $('#reply-hint');
-      if (hid) hid.value = btn.dataset.reply;
-      if (hint) {
-        hint.classList.remove('hidden');
-        hint.childNodes[0].textContent = `Ответ для ${btn.dataset.user} `;
-      }
-      $('#comment-input')?.focus();
-      $('#comment-form-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const id = btn.dataset.reply;
+      // close other inlines
+      $$('.gp-inline-reply', box).forEach(el => {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+      });
+      const slot = box.querySelector(`.gp-inline-reply[data-inline-for="${id}"]`);
+      if (!slot) return;
+      slot.classList.remove('hidden');
+      slot.innerHTML = `
+        <div class="gp-inline-reply-box">
+          <textarea class="gp-inline-input" maxlength="1000" rows="3" placeholder="Написать ответ..."></textarea>
+          <div class="gp-inline-actions">
+            <button type="button" class="gp-inline-cancel">Отмена</button>
+            <button type="button" class="gp-inline-send">Отправить</button>
+          </div>
+        </div>`;
+      const ta = slot.querySelector('.gp-inline-input');
+      ta?.focus();
+      slot.querySelector('.gp-inline-cancel')?.addEventListener('click', () => {
+        slot.classList.add('hidden');
+        slot.innerHTML = '';
+      });
+      slot.querySelector('.gp-inline-send')?.addEventListener('click', async () => {
+        const text = (ta?.value || '').trim();
+        if (!text) { toast('Напишите текст ответа'); return; }
+        const sendBtn = slot.querySelector('.gp-inline-send');
+        if (sendBtn) sendBtn.disabled = true;
+        try {
+          const gid = gameId || (currentGame && currentGame.game && currentGame.game.id);
+          const data = await postJSON(`${API_BASE}?action=comment`, {
+            game_id: gid,
+            body: text,
+            parent_id: +id
+          });
+          if (!data.ok) throw new Error(data.error || 'Не удалось отправить');
+          const page = await fetchJSON(`${API_BASE}?action=get&id=${gid}`);
+          if (page.ok) {
+            renderCommentsThreaded(page.comments || [], page.viewer || viewer, gid);
+            const count = $('#comments-count');
+            if (count) count.textContent = (page.comments || []).length;
+          }
+          toast('Ответ опубликован');
+        } catch (err) {
+          toast(err.message || 'Ошибка');
+          if (sendBtn) sendBtn.disabled = false;
+        }
+      });
     });
   });
-  $('#reply-cancel')?.addEventListener('click', () => {
-    const hid = $('#comment-parent-id');
-    if (hid) hid.value = '';
-    $('#reply-hint')?.classList.add('hidden');
+
+  // delete
+  $$('.gp-del-btn', box).forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Удалить?')) return;
+      try {
+        const data = await postJSON(`${API_BASE}?action=delete_comment`, { comment_id: +btn.dataset.del });
+        if (!data.ok) throw new Error(data.error || 'Не удалось удалить');
+        const gid = gameId || (currentGame && currentGame.game && currentGame.game.id);
+        const page = await fetchJSON(`${API_BASE}?action=get&id=${gid}`);
+        if (page.ok) {
+          renderCommentsThreaded(page.comments || [], page.viewer || viewer, gid);
+          const count = $('#comments-count');
+          if (count) count.textContent = (page.comments || []).length;
+        }
+        toast('Удалено');
+      } catch (err) {
+        toast(err.message || 'Ошибка');
+      }
+    });
+  });
+
+  // ник → профиль
+  $$('.gp-review-name[data-profile-user]', box).forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const uname = btn.dataset.profileUser;
+      const id = btn.dataset.profileId ? +btn.dataset.profileId : null;
+      if (typeof openUserProfile === 'function') openUserProfile(uname, id);
+      else toast('Профиль: ' + uname);
+    });
   });
 }
 
 function initReviewSort(comments, viewer) {
-  $$('.gp-sort-btn').forEach(btn => {
+  const sortBtns = () => $$('.gp-sort-opt');
+  sortBtns().forEach(btn => {
+    if (btn.dataset.sortBound === '1') return;
+    btn.dataset.sortBound = '1';
     btn.addEventListener('click', () => {
-      $$('.gp-sort-btn').forEach(b => b.classList.remove('active'));
+      sortBtns().forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const list = [...(comments || [])];
-      if (btn.dataset.sort === 'new') list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-      else list.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+      const mode = btn.dataset.sort;
+      if (mode === 'new') list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      else if (mode === 'old') list.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+      else if (mode === 'score') list.sort((a,b) => (b.rating||b.user_rating||0) - (a.rating||a.user_rating||0) || new Date(b.created_at) - new Date(a.created_at));
+      else if (mode === 'popular') list.sort((a,b) => ((b.likes||0)-(b.dislikes||0)) - ((a.likes||0)-(a.dislikes||0)) || new Date(b.created_at) - new Date(a.created_at));
       renderCommentsThreaded(list, viewer);
     });
-  });
-  $('#comment-input')?.addEventListener('input', () => {
-    const el = $('#comment-len');
-    if (el) el.textContent = String(($('#comment-input').value || '').length);
   });
 }
 
 async function loadSimilarGames(game) {
-  const grid = $('#gp-similar-grid');
+  const grid = $('#gp-similar') || $('#gp-similar-grid');
   if (!grid) return;
   try {
     const data = await fetchJSON(`${API_BASE}?action=list&category=game`);
@@ -1145,9 +1450,8 @@ async function loadSimilarGames(game) {
       return;
     }
     grid.innerHTML = list.map(g => `
-      <button type="button" class="gp-similar-card" data-id="${g.id}">
-        <img src="${escapeHtml(g.cover_src || g.cover_url || '')}" alt="" />
-        <span>${escapeHtml(g.title)}</span>
+      <button type="button" class="gp-similar-card" data-id="${g.id}" title="${escapeHtml(g.title)}">
+        <img src="${escapeHtml(g.cover_src || g.cover_url || ('media.php?type=cover&id=' + g.id))}" alt="${escapeHtml(g.title)}" loading="lazy" />
       </button>`).join('');
     $$('.gp-similar-card', grid).forEach(card => {
       card.addEventListener('click', () => gotoGame(card.dataset.id));
@@ -1329,44 +1633,181 @@ function createCommentEl(c, viewer) {
   return el;
 }
 
+
+function openAdminGameEditModal(g) {
+  let modal = document.getElementById('admin-game-edit-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'admin-game-edit-modal';
+    modal.className = 'modal-overlay hidden';
+    modal.innerHTML = `
+      <div class="modal-card admin-edit-card" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h2>Редактирование карточки</h2>
+          <button type="button" class="modal-close" id="admin-edit-close" aria-label="Закрыть">×</button>
+        </div>
+        <div class="modal-body">
+          <label class="settings-label"><span>Название</span><input class="auth-input" id="age-title" /></label>
+          <label class="settings-label"><span>Жанр</span><input class="auth-input" id="age-genre" /></label>
+          <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="age-price" type="number" min="0" step="1" /></label>
+          <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="age-short" /></label>
+          <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="age-desc" rows="6"></textarea></label>
+          <label class="settings-label full"><span>Видео URL</span><input class="auth-input" id="age-video" /></label>
+          <label class="settings-label"><span>Новая обложка</span><input type="file" id="age-cover" accept="image/*" /></label>
+          <label class="settings-label"><span>Новый баннер</span><input type="file" id="age-banner" accept="image/*" /></label>
+          <div id="age-error" class="gp-comment-error hidden"></div>
+        </div>
+        <div class="modal-foot admin-edit-foot">
+          <button type="button" class="btn-danger" id="age-delete">Удалить карточку</button>
+          <div class="admin-edit-foot-right">
+            <button type="button" class="btn-ghost" id="age-cancel">Отмена</button>
+            <button type="button" class="auth-submit" id="age-save">Сохранить</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+    modal.querySelector('#admin-edit-close')?.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.querySelector('#age-cancel')?.addEventListener('click', () => modal.classList.add('hidden'));
+  }
+  $('#age-title').value = g.title || '';
+  $('#age-genre').value = g.genre || '';
+  $('#age-price').value = g.price || 0;
+  $('#age-short').value = g.short_description || '';
+  $('#age-desc').value = g.description || '';
+  $('#age-video').value = g.video_url || '';
+  const err = $('#age-error');
+  if (err) { err.classList.add('hidden'); err.textContent = ''; }
+  modal.dataset.gameId = String(g.id);
+  modal.classList.remove('hidden');
+
+  const saveBtn = $('#age-save');
+  const delBtn = $('#age-delete');
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      const id = modal.dataset.gameId;
+      const fd = new FormData();
+      fd.append('csrf_token', window.CSRF_TOKEN || '');
+      fd.append('id', id);
+      fd.append('title', $('#age-title')?.value || '');
+      fd.append('genre', $('#age-genre')?.value || '');
+      fd.append('price', $('#age-price')?.value || '0');
+      fd.append('short_description', $('#age-short')?.value || '');
+      fd.append('description', $('#age-desc')?.value || '');
+      fd.append('video_url', $('#age-video')?.value || '');
+      fd.append('sys_req_min', g.sys_req_min || '');
+      fd.append('sys_req_rec', g.sys_req_rec || '');
+      fd.append('controllers', g.controllers || '');
+      fd.append('languages', typeof g.languages === 'string' ? g.languages : JSON.stringify(g.languages || []));
+      fd.append('review_note', '');
+      fd.append('delete_media', '');
+      const cover = $('#age-cover')?.files?.[0];
+      if (cover) fd.append('cover', cover);
+      const banner = $('#age-banner')?.files?.[0];
+      if (banner) fd.append('banner', banner);
+      saveBtn.disabled = true;
+      try {
+        const res = await fetch(`${SUBMIT_API}?action=admin_save`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Ошибка сохранения');
+        toast('Сохранено');
+        modal.classList.add('hidden');
+        homeCache = null;
+        storeCache = [];
+        loadGamePage(+id);
+      } catch (e) {
+        if (err) { err.textContent = e.message || 'Ошибка'; err.classList.remove('hidden'); }
+        toast(e.message || 'Ошибка');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    };
+  }
+  if (delBtn) {
+    delBtn.onclick = async () => {
+      if (!confirm('Удалить карточку игры полностью? Это нельзя отменить.')) return;
+      if (!confirm('Точно удалить? Комментарии, медиа и запись в каталоге будут стерты.')) return;
+      delBtn.disabled = true;
+      try {
+        const data = await postJSON(`${SUBMIT_API}?action=delete_game`, { id: +modal.dataset.gameId });
+        if (!data.ok) throw new Error(data.error || 'Не удалось удалить');
+        toast('Игра удалена');
+        modal.classList.add('hidden');
+        homeCache = null;
+        storeCache = [];
+        if (typeof gotoView === 'function') gotoView('home');
+        else showView('home');
+      } catch (e) {
+        toast(e.message || 'Ошибка удаления');
+      } finally {
+        delBtn.disabled = false;
+      }
+    };
+  }
+}
+
+function bindAdminGameEdit(g, viewer) {
+  const btn = $('#gp-admin-edit');
+  if (!btn || !viewer?.is_admin) return;
+  btn.addEventListener('click', () => openAdminGameEditModal(g));
+}
+
 function initCommentForm(g, viewer) {
   const form = $('#comment-form');
-  if (!form) return;
+  if (!form || form.dataset.bound === '1') return;
+  form.dataset.bound = '1';
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = $('#comment-input');
-    const errBox = $('#comment-error');
+    if (!input) return;
+    let errBox = $('#comment-error');
+    if (!errBox) {
+      errBox = document.createElement('div');
+      errBox.id = 'comment-error';
+      errBox.className = 'gp-comment-error hidden';
+      form.insertBefore(errBox, form.firstChild);
+    }
     const btn = form.querySelector('button[type="submit"]');
-    const parentEl = $('#comment-parent-id');
-    const parentId = parentEl && parentEl.value ? +parentEl.value : null;
+    const text = (input.value || '').trim();
+    if (!text) {
+      errBox.textContent = 'Напишите текст отзыва';
+      errBox.classList.remove('hidden');
+      return;
+    }
     errBox.classList.add('hidden');
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
-      const payload = { game_id: g.id, body: input.value.trim() };
-      if (parentId) payload.parent_id = parentId;
-      const data = await postJSON(`${API_BASE}?action=comment`, payload);
+      // корневой отзыв — без parent_id
+      const data = await postJSON(`${API_BASE}?action=comment`, { game_id: g.id, body: text });
       if (!data.ok) throw new Error(data.error || 'Не удалось отправить');
-      // reload comments from page
       const page = await fetchJSON(`${API_BASE}?action=get&id=${g.id}`);
       if (page.ok) {
-        renderCommentsThreaded(page.comments || [], page.viewer || viewer);
+        renderCommentsThreaded(page.comments || [], page.viewer || viewer, g.id);
         const count = $('#comments-count');
         if (count) count.textContent = (page.comments || []).length;
-        initReviewSort(page.comments || [], page.viewer || viewer);
       }
       input.value = '';
-      if (parentEl) parentEl.value = '';
-      $('#reply-hint')?.classList.add('hidden');
       const len = $('#comment-len');
       if (len) len.textContent = '0';
-      toast(parentId ? 'Ответ опубликован' : 'Отзыв опубликован');
+      toast('Отзыв опубликован');
     } catch (err) {
-      errBox.textContent = err.message || 'Ошибка';
+      console.error(err);
+      errBox.textContent = err.message || 'Ошибка отправки';
       errBox.classList.remove('hidden');
+      toast(err.message || 'Не удалось отправить отзыв');
     } finally {
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   });
+
+  const input = $('#comment-input');
+  if (input && !input.dataset.lenBound) {
+    input.dataset.lenBound = '1';
+    input.addEventListener('input', () => {
+      const el = $('#comment-len');
+      if (el) el.textContent = String((input.value || '').length);
+    });
+  }
 }
 
 // ============================================================
@@ -3637,6 +4078,7 @@ async function openGamePicker() {
 // ============================================================
 //  ЗАГРУЗКА ИГР + АДМИН-МОДЕРАЦИЯ
 // ============================================================
+const STEAM_API = 'api/steam_import.php';
 const SUBMIT_API = 'api/submit.php';
 
 const SYSREQ_LABELS = {
@@ -3741,13 +4183,13 @@ function renderSysReqBlock(minRaw, recRaw) {
     const items = Object.keys(SYSREQ_LABELS).filter(k => obj[k]).map(k =>
       `<li><b>${SYSREQ_LABELS[k]}:</b> ${escapeHtml(obj[k])}</li>`
     ).join('');
-    if (!items) return `<p class="chat-empty-sub">Нет данных</p>`;
-    return `<ul class="sysreq-list"><li><b>${title}</b></li>${items}</ul>`;
+    if (!items) return `<p class="gp-ach-empty">Нет данных</p>`;
+    return `<ul class="sysreq-list">${items}</ul>`;
   };
   return `
-    <div class="game-collapsible" id="game-sysreq">
-      <button type="button" class="game-collapsible-head">Системные требования <span class="chev">▾</span></button>
-      <div class="game-collapsible-body">
+    <div class="gp-side-card" id="game-sysreq">
+      <button type="button" class="gp-side-head">Системные требования <span class="chev">▾</span></button>
+      <div class="gp-side-body">
         <div class="sysreq-tabs">
           <button type="button" class="sysreq-tab active" data-tab="min">Минимальные</button>
           <button type="button" class="sysreq-tab" data-tab="rec">Рекомендованные</button>
@@ -3767,9 +4209,9 @@ function renderLangBlock(raw) {
       <td class="${r.audio ? 'ok' : 'no'}">${r.audio ? '✓' : '✕'}</td>
     </tr>`).join('');
   return `
-    <div class="game-collapsible" id="game-langs">
-      <button type="button" class="game-collapsible-head">Язык <span class="chev">▾</span></button>
-      <div class="game-collapsible-body">
+    <div class="gp-side-card" id="game-langs">
+      <button type="button" class="gp-side-head">Язык <span class="chev">▾</span></button>
+      <div class="gp-side-body">
         <table class="lang-display">
           <thead><tr><th>Язык</th><th>Субтитры</th><th>Аудио</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -3783,7 +4225,7 @@ function initGameCollapsibles(wrap) {
   });
   $$('.sysreq-tab', wrap).forEach(tab => {
     tab.addEventListener('click', () => {
-      const body = tab.closest('.game-collapsible-body');
+      const body = tab.closest('.gp-side-body') || tab.closest('.game-collapsible-body');
       if (!body) return;
       $$('.sysreq-tab', body).forEach(t => t.classList.toggle('active', t === tab));
       $$('.sysreq-pane', body).forEach(p => p.classList.toggle('hidden', p.dataset.pane !== tab.dataset.tab));
@@ -3795,20 +4237,37 @@ function initGameCollapsibles(wrap) {
 let adminDeleteMedia = [];
 
 function initSubmitGame() {
-  const addBtn = $('#btn-add-game');
-  if (addBtn) addBtn.addEventListener('click', () => openSubmitRules());
+  // Делегирование: работает даже если кнопку перерисуют и если другие init упали раньше
+  if (!window.__submitGameDelegated) {
+    window.__submitGameDelegated = true;
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest && e.target.closest('#btn-add-game');
+      if (btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openSubmitRules();
+      }
+    });
+  }
 
   const agree = $('#submit-agree');
   const next = $('#submit-rules-next');
-  if (agree && next) {
+  if (agree && next && !next.dataset.bound) {
+    next.dataset.bound = '1';
     agree.addEventListener('change', () => { next.disabled = !agree.checked; });
     next.addEventListener('click', () => {
       $('#submit-rules-modal')?.classList.add('hidden');
-      $('#submit-form-modal')?.classList.remove('hidden');
+      const formModal = $('#submit-form-modal');
+      if (formModal) {
+        try { renderLangTable('#sg-lang-table', []); } catch (err) { console.warn(err); }
+        formModal.classList.remove('hidden');
+      }
     });
   }
 
   $$('[data-close]').forEach(el => {
+    if (el.dataset.closeBound) return;
+    el.dataset.closeBound = '1';
     el.addEventListener('click', () => {
       const k = el.dataset.close;
       if (k === 'rules') $('#submit-rules-modal')?.classList.add('hidden');
@@ -3817,17 +4276,31 @@ function initSubmitGame() {
     });
   });
 
-  $('#submit-game-send')?.addEventListener('click', submitGameForm);
+  const send = $('#submit-game-send');
+  if (send && !send.dataset.bound) {
+    send.dataset.bound = '1';
+    send.addEventListener('click', submitGameForm);
+  }
 }
 
 function openSubmitRules() {
-  const agree = $('#submit-agree');
+  const modal = document.getElementById('submit-rules-modal');
+  if (!modal) {
+    console.error('submit-rules-modal не найден в HTML. Обнови index.php');
+    alert('Модалка добавления игры не найдена. Нужен актуальный index.php');
+    return;
+  }
+  const agree = document.getElementById('submit-agree');
   if (agree) agree.checked = false;
-  const next = $('#submit-rules-next');
+  const next = document.getElementById('submit-rules-next');
   if (next) next.disabled = true;
-  renderLangTable('#sg-lang-table', []);
-  $('#submit-rules-modal')?.classList.remove('hidden');
+  modal.classList.remove('hidden');
+  // язык-таблицу готовим заранее, но ошибка не должна блокировать окно
+  try { renderLangTable('#sg-lang-table', []); } catch (err) { console.warn(err); }
 }
+
+// Глобальный хук на случай inline onclick
+window.openSubmitRules = openSubmitRules;
 
 async function submitGameForm() {
   const btn = $('#submit-game-send');
@@ -3866,7 +4339,101 @@ async function submitGameForm() {
   }
 }
 
+
+function initAdminUI() {
+  const view = $('#view-admin');
+  if (!view || view.dataset.boundAdmin === '1') return;
+  view.dataset.boundAdmin = '1';
+
+  $$('.settings-nav-btn[data-atab]', view).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.atab;
+      $$('.settings-nav-btn[data-atab]', view).forEach(b => b.classList.toggle('active', b === btn));
+      $$('.settings-pane', view).forEach(p => {
+        p.classList.toggle('hidden', p.id !== 'admin-pane-' + tab);
+      });
+      if (tab === 'moderation') loadAdminPending();
+    });
+  });
+
+  const showErr = (msg) => {
+    const el = $('#steam-import-error');
+    if (!el) return;
+    if (!msg) { el.classList.add('hidden'); el.textContent = ''; return; }
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  };
+
+  $('#steam-preview-btn')?.addEventListener('click', async () => {
+    const url = ($('#steam-url')?.value || '').trim();
+    showErr('');
+    $('#steam-preview')?.classList.add('hidden');
+    if (!url) { showErr('Вставь ссылку или AppID'); return; }
+    const btn = $('#steam-preview-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Загрузка...'; }
+    try {
+      const data = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`);
+      if (!data.ok) throw new Error(data.error || 'Ошибка');
+      const p = data.preview || {};
+      const banner = $('#steam-preview-banner');
+      const cover = $('#steam-preview-cover');
+      if (banner) banner.src = p.header_image || p.background || '';
+      if (cover) cover.src = p.capsule_image || p.header_image || '';
+      const title = $('#steam-preview-title');
+      if (title) title.textContent = p.title || '';
+      const meta = $('#steam-preview-meta');
+      if (meta) meta.textContent = [p.developer, p.genre, p.release_date, p.is_free ? 'Бесплатно' : ''].filter(Boolean).join(' · ');
+      const short = $('#steam-preview-short');
+      if (short) short.textContent = p.short_description || '';
+      const shots = $('#steam-preview-shots');
+      if (shots) {
+        shots.innerHTML = (p.screenshots || []).slice(0, 8).map(src =>
+          `<img src="${escapeHtml(src)}" alt="" loading="lazy" />`
+        ).join('');
+      }
+      $('#steam-preview')?.classList.remove('hidden');
+      toast('Данные Steam получены');
+    } catch (e) {
+      showErr(e.message || 'Не удалось получить данные');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Проверить'; }
+    }
+  });
+
+  $('#steam-import-btn')?.addEventListener('click', async () => {
+    const url = ($('#steam-url')?.value || '').trim();
+    showErr('');
+    if (!url) { showErr('Вставь ссылку или AppID'); return; }
+    const btn = $('#steam-import-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Импорт...'; }
+    try {
+      const data = await postJSON(`${STEAM_API}?action=import`, {
+        url,
+        publish: $('#steam-publish')?.checked ? 1 : 0,
+      });
+      if (!data.ok) throw new Error(data.error || 'Ошибка импорта');
+      toast(`Импортировано: ${data.title} (id ${data.game_id})`);
+      homeCache = null;
+      storeCache = [];
+      if (data.status === 'published' && typeof gotoGame === 'function') {
+        gotoGame(data.game_id);
+      } else {
+        $$('.settings-nav-btn[data-atab]', view).forEach(b => b.classList.toggle('active', b.dataset.atab === 'moderation'));
+        $$('.settings-pane', view).forEach(p => p.classList.toggle('hidden', p.id !== 'admin-pane-moderation'));
+        loadAdminPending();
+      }
+    } catch (e) {
+      showErr(e.message || 'Ошибка импорта');
+      toast(e.message || 'Ошибка импорта');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Импортировать в CATio'; }
+    }
+  });
+}
+
 async function loadAdminPending() {
+  try { initAdminUI(); } catch (e) {}
+
   const list = $('#admin-pending-list');
   if (!list) return;
   list.innerHTML = '<div class="loading">Загрузка...</div>';
@@ -3938,6 +4505,7 @@ async function openAdminGame(id) {
 
 function initAdminPanel() {
   if (!$('#view-admin')) return;
+  try { initAdminUI(); } catch (e) {}
   // load when opening admin view - hook showView
   $('#admin-save')?.addEventListener('click', async () => {
     const id = $('#admin-game-id')?.value;
@@ -4058,24 +4626,27 @@ function initLightbox() {
 
 // Patch showView to load admin list
 document.addEventListener('DOMContentLoaded', () => {
-  initWebNav();
-  initClientNav();
-  initAvatarMenu();
-  initStoreControls();
-  initLibraryControls();
-  initSettingsView();
-  initLightbox();
-  initHomeControls();
-  initFriendsUI();
-  initChatUI();
-  initChatExtras();
-  initNotificationsUI();
-  initSubmitGame();
-  initAdminPanel();
-  initSideLibrary();
-  initContentHead();
-  updateDownloadsBadge();
-  loadSideLibrary();
+  // Сначала кнопка «+», чтобы сбой других init её не убил
+  try { initSubmitGame(); } catch (e) { console.error('initSubmitGame', e); }
+
+  const safe = (name, fn) => { try { fn(); } catch (e) { console.error(name, e); } };
+  safe('initWebNav', initWebNav);
+  safe('initClientNav', initClientNav);
+  safe('initAvatarMenu', initAvatarMenu);
+  safe('initStoreControls', initStoreControls);
+  safe('initLibraryControls', initLibraryControls);
+  safe('initSettingsView', initSettingsView);
+  safe('initLightbox', initLightbox);
+  safe('initHomeControls', initHomeControls);
+  safe('initFriendsUI', initFriendsUI);
+  safe('initChatUI', initChatUI);
+  safe('initChatExtras', initChatExtras);
+  safe('initNotificationsUI', initNotificationsUI);
+  safe('initAdminPanel', initAdminPanel);
+  safe('initSideLibrary', initSideLibrary);
+  safe('initContentHead', initContentHead);
+  safe('updateDownloadsBadge', updateDownloadsBadge);
+  safe('loadSideLibrary', loadSideLibrary);
 
   // Неавторизованным всегда показываем auth, даже если в URL другой view
   let view = (window.FORCE_AUTH_VIEW && $('#view-auth')) ? 'auth' : getViewFromUrl();

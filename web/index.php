@@ -56,7 +56,10 @@ if ($isAuthorized) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CATio</title>
   <link rel="icon" type="image/x-icon" href="logo.ico" />
-  <link rel="stylesheet" href="css/style.css" />
+  <?php $assetVer = (string)max(@filemtime(__DIR__ . '/css/style.css') ?: 0, @filemtime(__DIR__ . '/js/app.js') ?: 0); ?>
+  <link rel="stylesheet" href="css/style.css?v=<?php echo $assetVer; ?>" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <?php if ($isClient): ?>
   <style>.topbar{display:none!important}body{margin:0;background:#12110e}</style>
@@ -180,13 +183,15 @@ if ($isAuthorized) {
       <?php if ($isAuthorized): ?>
       <!-- Блок над вкладкой: назад + название + поиск по вкладке (как в Hydra) -->
       <header class="content-head">
-        <button type="button" class="head-back" id="head-back" title="Назад">←</button>
+        <div class="content-head-inner">
+<button type="button" class="head-back" id="head-back" title="Назад">←</button>
         <h1 class="head-title" id="head-title">Главная</h1>
         <div class="head-search" id="head-search">
           <input type="text" id="head-search-input" placeholder="Поиск" aria-label="Поиск по вкладке" />
-          <button type="button" class="head-add-game" id="btn-add-game" title="Добавить игру">
+          <button type="button" class="head-add-game" id="btn-add-game" title="Добавить игру" onclick="if(window.openSubmitRules){openSubmitRules();}else{alert('Скрипт ещё не загрузился');}">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
+        </div>
         </div>
       </header>
       <?php endif; ?>
@@ -683,72 +688,103 @@ if ($isAuthorized) {
       </section>
       <?php if ($isAuthorized && ($user['role'] ?? '') === 'admin'): ?>
       <section id="view-admin" class="view <?php echo $currentView === 'admin' ? 'active' : ''; ?>">
-        <div class="admin-layout">
-          <div class="admin-list-panel">
-            <h2 class="settings-title">На модерации</h2>
-            <div id="admin-pending-list" class="admin-pending-list">
-              <div class="loading">Загрузка...</div>
-            </div>
-          </div>
-          <div class="admin-edit-panel" id="admin-edit-panel">
-            <div class="admin-placeholder" id="admin-empty">
-              <p class="chat-empty-sub">Выберите игру слева для просмотра и публикации</p>
-            </div>
-            <form class="submit-form hidden" id="admin-game-form">
-              <input type="hidden" id="admin-game-id" value="" />
-              <div class="submit-grid">
-                <label class="settings-label"><span>Название</span><input class="auth-input" id="admin-title" required /></label>
-                <label class="settings-label"><span>Жанр</span><input class="auth-input" id="admin-genre" /></label>
-                <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="admin-price" type="number" min="0" step="1" value="0" /></label>
-                <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="admin-short" /></label>
-                <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="admin-desc" rows="5"></textarea></label>
-                <div class="settings-label full">
-                  <span>Системные требования — минимальные</span>
-                  <div class="sysreq-fields" id="admin-sys-min-fields">
-                    <input class="auth-input" data-k="os" placeholder="ОС" />
-                    <input class="auth-input" data-k="cpu" placeholder="Процессор" />
-                    <input class="auth-input" data-k="ram" placeholder="ОЗУ" />
-                    <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
-                    <input class="auth-input" data-k="directx" placeholder="DirectX" />
-                    <input class="auth-input" data-k="storage" placeholder="Место на диске" />
-                    <input class="auth-input" data-k="sound" placeholder="Звук" />
-                    <input class="auth-input" data-k="other" placeholder="Дополнительно" />
+        <div class="settings-layout admin-settings-layout">
+          <aside class="settings-nav" id="admin-nav">
+            <button type="button" class="settings-nav-btn active" data-atab="moderation">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Модерация
+            </button>
+            <button type="button" class="settings-nav-btn" data-atab="import">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Загрузка игр
+            </button>
+          </aside>
+
+          <div class="settings-main">
+            <div class="settings-pane" id="admin-pane-moderation">
+              <h2 class="settings-title">Модерация</h2>
+              <p class="settings-desc">Игры, отправленные пользователями на проверку.</p>
+              <div class="admin-layout">
+                <div class="admin-list-panel">
+                  <div id="admin-pending-list" class="admin-pending-list">
+                    <div class="loading">Загрузка...</div>
                   </div>
                 </div>
-                <div class="settings-label full">
-                  <span>Системные требования — рекомендуемые</span>
-                  <div class="sysreq-fields" id="admin-sys-rec-fields">
-                    <input class="auth-input" data-k="os" placeholder="ОС" />
-                    <input class="auth-input" data-k="cpu" placeholder="Процессор" />
-                    <input class="auth-input" data-k="ram" placeholder="ОЗУ" />
-                    <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
-                    <input class="auth-input" data-k="directx" placeholder="DirectX" />
-                    <input class="auth-input" data-k="storage" placeholder="Место на диске" />
-                    <input class="auth-input" data-k="sound" placeholder="Звук" />
-                    <input class="auth-input" data-k="other" placeholder="Дополнительно" />
+                <div class="admin-edit-panel" id="admin-edit-panel">
+                  <div class="admin-placeholder" id="admin-empty">
+                    <p>Выберите игру слева</p>
                   </div>
+                  <form class="submit-form hidden" id="admin-game-form">
+                    <input type="hidden" id="admin-game-id" value="" />
+                    <div class="settings-grid">
+                      <label class="settings-label"><span>Название</span><input class="auth-input" id="admin-title" required /></label>
+                      <label class="settings-label"><span>Жанр</span><input class="auth-input" id="admin-genre" /></label>
+                      <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="admin-price" type="number" min="0" step="1" value="0" /></label>
+                      <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="admin-short" /></label>
+                      <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="admin-desc" rows="5"></textarea></label>
+                    </div>
+                    <div class="settings-block">
+                      <h3 class="settings-subtitle">Системные требования</h3>
+                      <div class="sysreq-fields" id="admin-sys-min-fields"></div>
+                      <div class="sysreq-fields" id="admin-sys-rec-fields"></div>
+                    </div>
+                    <div class="settings-grid">
+                      <label class="settings-label"><span>Контроллеры</span><input class="auth-input" id="admin-controllers" placeholder="xbox,playstation" /></label>
+                      <label class="settings-label full"><span>Видео (URL)</span><input class="auth-input" id="admin-video" /></label>
+                    </div>
+                    <div class="settings-block">
+                      <h3 class="settings-subtitle">Языки</h3>
+                      <div class="lang-table" id="admin-lang-table"></div>
+                    </div>
+                    <div class="settings-grid">
+                      <label class="settings-label"><span>Новая обложка</span><input type="file" id="admin-cover" accept="image/*" /></label>
+                      <label class="settings-label"><span>Новый баннер</span><input type="file" id="admin-banner" accept="image/*" /></label>
+                      <label class="settings-label full"><span>Добавить скриншоты</span><input type="file" id="admin-shots" accept="image/*" multiple /></label>
+                      <label class="settings-label full"><span>Заметка модератора</span><textarea class="auth-input settings-textarea" id="admin-note" rows="2"></textarea></label>
+                    </div>
+                    <div class="settings-actions">
+                      <button type="button" class="auth-submit" id="admin-save">Сохранить</button>
+                      <button type="button" class="auth-submit" id="admin-publish">Опубликовать</button>
+                      <button type="button" class="btn-ghost" id="admin-reject">Отклонить</button>
+                    </div>
+                  </form>
                 </div>
-                <label class="settings-label"><span>Контроллеры</span><input class="auth-input" id="admin-controllers" placeholder="xbox,playstation" /></label>
-                <div class="settings-label full">
-                  <span>Языки</span>
-                  <div class="lang-table" id="admin-lang-table">
-                    <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
-                  </div>
-                </div>
-                <label class="settings-label full"><span>Видео (YouTube URL)</span><input class="auth-input" id="admin-video" /></label>
-                <label class="settings-label"><span>Новая обложка</span><input type="file" id="admin-cover" accept="image/*" /></label>
-                <label class="settings-label"><span>Новый баннер</span><input type="file" id="admin-banner" accept="image/*" /></label>
-                <label class="settings-label full"><span>Добавить скриншоты</span><input type="file" id="admin-shots" accept="image/*" multiple /></label>
-                <div class="full" id="admin-media-list"></div>
-                <label class="settings-check full"><input type="checkbox" id="admin-adult" /> Контент 18+</label>
-                <label class="settings-label full"><span>Заметка модератора</span><input class="auth-input" id="admin-note" /></label>
               </div>
-              <div class="admin-actions">
-                <button type="button" class="auth-submit" id="admin-save">Сохранить правки</button>
-                <button type="button" class="auth-submit" id="admin-publish" style="background:#2a8f4a">Опубликовать</button>
-                <button type="button" class="hp-btn-logout" id="admin-reject">Отклонить</button>
+            </div>
+
+            <div class="settings-pane hidden" id="admin-pane-import">
+              <h2 class="settings-title">Загрузка игр</h2>
+              <p class="settings-desc">Вставь ссылку на страницу Steam Store — подтянем название, описание, шапку, обложку, скриншоты и трейлер.</p>
+              <div class="settings-block steam-import-box">
+                <label class="settings-label full">
+                  <span>Ссылка Steam или AppID</span>
+                  <div class="steam-import-row">
+                    <input class="auth-input" id="steam-url" placeholder="https://store.steampowered.com/app/730/..." />
+                    <button type="button" class="auth-submit" id="steam-preview-btn">Проверить</button>
+                  </div>
+                </label>
+                <p class="settings-hint">Примеры: <code>https://store.steampowered.com/app/570</code> или просто <code>570</code></p>
+                <div id="steam-import-error" class="gp-comment-error hidden"></div>
               </div>
-            </form>
+              <div id="steam-preview" class="steam-preview hidden">
+                <div class="steam-preview-hero">
+                  <img id="steam-preview-banner" src="" alt="" />
+                  <div class="steam-preview-hero-info">
+                    <img id="steam-preview-cover" class="steam-preview-cover" src="" alt="" />
+                    <div>
+                      <h3 id="steam-preview-title"></h3>
+                      <p id="steam-preview-meta" class="settings-hint"></p>
+                    </div>
+                  </div>
+                </div>
+                <p id="steam-preview-short" class="steam-preview-short"></p>
+                <div id="steam-preview-shots" class="steam-preview-shots"></div>
+                <div class="settings-actions">
+                  <label class="settings-check"><input type="checkbox" id="steam-publish" checked /> Сразу опубликовать</label>
+                  <button type="button" class="auth-submit" id="steam-import-btn">Импортировать в CATio</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -962,7 +998,7 @@ function socialAuth(provider) {
   setTimeout(push, 2000);
 })();
 </script>
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 
   <!-- ===== МОДАЛКА ДРУЗЕЙ ===== -->
   <div class="friends-modal hidden" id="friends-modal">

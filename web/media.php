@@ -43,16 +43,56 @@ if ($id > 0 && $type !== 'shot') {
     if (serveLocalImage($id, $kinds)) {
         exit;
     }
+
+    // Реальная обложка из БД (uploads/...), не процедурный SVG
+    $pdo = getDB();
+    $stmt = $pdo->prepare("SELECT title, genre, category, cover_emoji, cover_color, cover_url, banner_url FROM games WHERE id = ?");
+    $stmt->execute([$id]);
+    $game = $stmt->fetch() ?: null;
+    if ($game) {
+        $candidates = [];
+        if ($type === 'hero') {
+            if (!empty($game['banner_url'])) $candidates[] = $game['banner_url'];
+            if (!empty($game['cover_url'])) $candidates[] = $game['cover_url'];
+        } else {
+            if (!empty($game['cover_url'])) $candidates[] = $game['cover_url'];
+            if (!empty($game['banner_url'])) $candidates[] = $game['banner_url'];
+        }
+        foreach ($candidates as $url) {
+            $url = str_replace('\\', '/', $url);
+            // относительный путь от web/
+            if (preg_match('#^https?://#i', $url)) {
+                header('Location: ' . $url, true, 302);
+                exit;
+            }
+            $local = __DIR__ . '/' . ltrim($url, '/');
+            if (is_file($local)) {
+                $ext = strtolower(pathinfo($local, PATHINFO_EXTENSION));
+                $mimeMap = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif'];
+                if (isset($mimeMap[$ext])) {
+                    header('Content-Type: ' . $mimeMap[$ext]);
+                    header('Cache-Control: public, max-age=3600');
+                    header('X-Content-Type-Options: nosniff');
+                    readfile($local);
+                    exit;
+                }
+            }
+        }
+    }
+} else {
+    $game = null;
 }
 
 header('Content-Type: image/svg+xml; charset=utf-8');
 header('Cache-Control: public, max-age=86400');
 header('X-Content-Type-Options: nosniff');
 
-$pdo = getDB();
-$stmt = $pdo->prepare("SELECT title, genre, category, cover_emoji, cover_color FROM games WHERE id = ?");
-$stmt->execute([$id]);
-$game = $stmt->fetch();
+if (!$game) {
+    $pdo = getDB();
+    $stmt = $pdo->prepare("SELECT title, genre, category, cover_emoji, cover_color, cover_url, banner_url FROM games WHERE id = ?");
+    $stmt->execute([$id]);
+    $game = $stmt->fetch();
+}
 
 if (!$game) {
     $game = ['title' => 'CATio', 'genre' => '', 'category' => 'game', 'cover_emoji' => '🐈', 'cover_color' => '#ef5b2c'];

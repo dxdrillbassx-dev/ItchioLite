@@ -339,6 +339,63 @@ try {
 
         default:
             http_response_code(400);
+
+        case 'delete_game':
+            if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false]); break; }
+            $admin = requireAdminS();
+            $body = jsonBodyS();
+            if (!verifyCsrfToken($body['csrf_token'] ?? '')) {
+                http_response_code(403);
+                echo json_encode(['ok'=>false,'error'=>'CSRF'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $id = (int)($body['id'] ?? 0);
+            if ($id <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Нет id'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $st = $pdo->prepare("SELECT cover_url, banner_url FROM games WHERE id = ?");
+            $st->execute([$id]);
+            $game = $st->fetch();
+            if (!$game) {
+                http_response_code(404);
+                echo json_encode(['ok'=>false,'error'=>'Игра не найдена'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            // media files (best-effort)
+            $urls = [];
+            try {
+                $m = $pdo->prepare("SELECT url FROM game_media WHERE game_id = ?");
+                $m->execute([$id]);
+                foreach ($m->fetchAll() as $row) $urls[] = $row['url'];
+            } catch (Throwable $e) {}
+            try {
+                $m = $pdo->prepare("SELECT image_url AS url FROM game_screenshots WHERE game_id = ?");
+                $m->execute([$id]);
+                foreach ($m->fetchAll() as $row) $urls[] = $row['url'];
+            } catch (Throwable $e) {}
+            if (!empty($game['cover_url'])) $urls[] = $game['cover_url'];
+            if (!empty($game['banner_url'])) $urls[] = $game['banner_url'];
+
+            try { $pdo->prepare("DELETE FROM game_media WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
+            try { $pdo->prepare("DELETE FROM game_screenshots WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
+            try { $pdo->prepare("DELETE FROM game_builds WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
+            try { $pdo->prepare("DELETE FROM comments WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
+            try { $pdo->prepare("DELETE FROM ratings WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
+            try { $pdo->prepare("DELETE FROM library WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
+            $pdo->prepare("DELETE FROM games WHERE id = ?")->execute([$id]);
+
+            $root = dirname(__DIR__) . '/';
+            foreach ($urls as $u) {
+                if (!$u || preg_match('~^https?://~i', $u)) continue;
+                $path = $root . ltrim(str_replace(['\\','..'], ['/',''], $u), '/');
+                if (is_file($path)) @unlink($path);
+            }
+            echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+            break;
+
+
             echo json_encode(['ok'=>false,'error'=>'Unknown action'], JSON_UNESCAPED_UNICODE);
     }
 } catch (Throwable $e) {
