@@ -6802,3 +6802,16 @@ body.client .content > .main {
 .gp-thumb-video:hover .gp-thumb-play {
   background: rgba(0,0,0,0.2);
 }
+
+/* ============================================================
+   КЛИЕНТ: главная / профиль / страница игры —
+   растягиваем содержимое на 20px влево, вправо и вверх
+   ============================================================ */
+body.client #view-home,
+body.client #view-game {
+  margin: -22px -22px 0; /* top | left/right | bottom */
+}
+
+body.client #view-profile {
+  margin: -8px -8px 0;
+}
