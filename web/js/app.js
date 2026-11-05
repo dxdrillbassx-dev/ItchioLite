@@ -4006,6 +4006,56 @@ function initAdminPanel() {
   });
 }
 
+// ---------- Галерея скриншотов на странице игры ----------
+// Клик по превью подменяет главный скриншот; клик по главному — лайтбокс.
+function initGallery(wrap) {
+  const main = $('#gallery-main-img', wrap);
+  $$('.gp-thumb', wrap).forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.gp-thumb', wrap).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (main && btn.dataset.src) main.src = btn.dataset.src;
+    });
+  });
+  if (main) {
+    main.addEventListener('click', () => {
+      if (main.src) openLightbox(main.src);
+    });
+  }
+}
+
+// ---------- Лайтбокс ----------
+let lightboxEl = null;
+function ensureLightbox() {
+  if (lightboxEl) return lightboxEl;
+  lightboxEl = document.createElement('div');
+  lightboxEl.className = 'lightbox hidden';
+  lightboxEl.innerHTML = `
+    <div class="lightbox-backdrop"></div>
+    <img class="lightbox-img" src="" alt="" />
+    <button type="button" class="lightbox-close" title="Закрыть">×</button>`;
+  document.body.appendChild(lightboxEl);
+  const close = () => lightboxEl && lightboxEl.classList.add('hidden');
+  $('.lightbox-backdrop', lightboxEl).addEventListener('click', close);
+  $('.lightbox-close', lightboxEl).addEventListener('click', close);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close();
+  });
+  return lightboxEl;
+}
+
+function openLightbox(src) {
+  if (!src) return;
+  const lb = ensureLightbox();
+  const img = $('.lightbox-img', lb);
+  if (img) img.src = src;
+  lb.classList.remove('hidden');
+}
+
+function initLightbox() {
+  ensureLightbox();
+}
+
 // Patch showView to load admin list
 document.addEventListener('DOMContentLoaded', () => {
   initWebNav();
