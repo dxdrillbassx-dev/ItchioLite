@@ -48,6 +48,7 @@ function userPublicRow(array $u): array {
         'created_at' => $u['created_at'] ?? null,
         'is_banned' => (int)($u['is_banned'] ?? 0),
         'is_online' => false,
+        'friend_code' => $u['friend_code'] ?? '',
     ];
 }
 function relationBetween(PDO $pdo, int $me, int $other): string {
@@ -69,7 +70,8 @@ function fetchUserLibrary(PDO $pdo, int $uid): array {
                g.cover_url, g.banner_url, g.icon_url, g.cover_emoji, g.cover_color,
                g.developer_name, g.download_count,
                l.added_at, l.last_played, l.playtime_minutes, l.is_pinned, l.pinned_order,
-               COALESCE(l.is_liked, 0) AS is_liked, l.liked_at
+               COALESCE(l.is_liked, 0) AS is_liked, l.liked_at,
+               COALESCE(l.ach_unlocked, 0) AS ach_unlocked, COALESCE(NULLIF(l.ach_total, 0), g.ach_count, 0) AS ach_total, g.steam_appid
         FROM library l
         JOIN games g ON g.id = l.game_id
         WHERE l.user_id = ?
@@ -83,6 +85,8 @@ function fetchUserLibrary(PDO $pdo, int $uid): array {
         $g['is_pinned'] = (int)($g['is_pinned'] ?? 0);
         $g['is_liked'] = (int)($g['is_liked'] ?? 0);
         $g['playtime_minutes'] = (int)($g['playtime_minutes'] ?? 0);
+        $g['ach_unlocked'] = (int)($g['ach_unlocked'] ?? 0);
+        $g['ach_total'] = (int)($g['ach_total'] ?? 0);
     }
     unset($g);
     return $games;
@@ -218,15 +222,22 @@ try {
         }
 
         case 'search': {
-            requireUserF();
+            $me = requireUserF();
             $q = trim($_GET['q'] ?? '');
             if (mb_strlen($q) < 1) {
                 echo json_encode(['ok' => true, 'users' => []], JSON_UNESCAPED_UNICODE);
                 break;
             }
-            $st = $pdo->prepare("SELECT * FROM users WHERE username LIKE ? AND COALESCE(is_banned,0) = 0 ORDER BY username LIMIT 20");
-            $st->execute(['%' . $q . '%']);
-            echo json_encode(['ok' => true, 'users' => array_map('userPublicRow', $st->fetchAll())], JSON_UNESCAPED_UNICODE);
+            $st = $pdo->prepare("SELECT * FROM users WHERE (username LIKE ? OR friend_code LIKE ?) AND COALESCE(is_banned,0) = 0 AND id != ? ORDER BY username LIMIT 20");
+            $like = '%' . $q . '%';
+            $st->execute([$like, $like, (int)$me['id']]);
+            $users = [];
+            foreach ($st->fetchAll() as $row) {
+                $u = userPublicRow($row);
+                $u['relation'] = relationBetween($pdo, (int)$me['id'], (int)$row['id']);
+                $users[] = $u;
+            }
+            echo json_encode(['ok' => true, 'users' => $users], JSON_UNESCAPED_UNICODE);
             break;
         }
 

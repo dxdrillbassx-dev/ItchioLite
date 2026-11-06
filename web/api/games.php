@@ -1,4 +1,7 @@
 <?php
+foreach ([__DIR__ . '/../config.php', __DIR__ . '/config.php'] as $_cfg) {
+    if (is_file($_cfg)) { require_once $_cfg; break; }
+}
 // CATio — API каталога, игр, библиотеки, покупок, комментариев и скачиваний
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -10,6 +13,224 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/../auth.php';
+
+function httpGetRaw(string $url, int $timeout = 20): ?string {
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CATio/1.0',
+            CURLOPT_HTTPHEADER => ['Accept-Language: ru-RU,ru;q=0.9,en;q=0.8'],
+        ]);
+        $raw = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($raw === false || $code >= 400) return null;
+        return $raw;
+    }
+    $ctx = stream_context_create([
+        'http' => ['timeout' => $timeout, 'header' => "User-Agent: CATio/1.0\r\nAccept-Language: ru,en\r\n"],
+        'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+    ]);
+    $raw = @file_get_contents($url, false, $ctx);
+    return $raw === false ? null : $raw;
+}
+
+function syncGameAchievementsFromSteam(PDO $pdo, int $gameId, int $appId): int {
+    if ($appId <= 0) return 0;
+
+    $percents = [];
+    $schema = [];
+
+    // 1) Community page (русские имена + иконки) — основной источник без API-ключа
+    $html = httpGetRaw("https://steamcommunity.com/stats/{$appId}/achievements/?l=russian");
+    if (!$html || stripos($html, 'achieveRow') === false) {
+        $html = httpGetRaw("https://steamcommunity.com/stats/{$appId}/achievements/?l=english");
+    }
+    if ($html && stripos($html, 'achieveRow') !== false) {
+        $parts = preg_split('/class="[^"]*achieveRow[^"]*"/i', $html);
+        array_shift($parts);
+        foreach ($parts as $i => $chunk) {
+            $icon = '';
+            $name = '';
+            $desc = '';
+            $pct = 0.0;
+            if (preg_match('/<img[^>]+src="([^"]+)"/i', $chunk, $m)) {
+                $icon = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+            }
+            if (preg_match('/<h3[^>]*>([\s\S]*?)<\/h3>/i', $chunk, $m)) {
+                $name = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            }
+            if (preg_match('/<h5[^>]*>([\s\S]*?)<\/h5>/i', $chunk, $m)) {
+                $desc = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            }
+            if (preg_match('/achievePercent[^>]*>([\d.,]+)/i', $chunk, $m)) {
+                $pct = (float)str_replace(',', '.', $m[1]);
+            }
+            if ($name === '' && $icon === '') continue;
+            $api = 'sc_' . $i;
+            $schema[$api] = [
+                'display_name' => $name !== '' ? $name : ('Achievement ' . ($i + 1)),
+                'description' => $desc,
+                'icon_url' => $icon,
+                'icon_gray_url' => $icon,
+                'is_hidden' => 0,
+                'sort_order' => $i,
+                'percent' => $pct,
+            ];
+        }
+    }
+
+    // 2) Schema API (если есть ключ или вдруг отвечает) — нормальные api_name + gray icons
+    $key = '';
+    if (defined('STEAM_WEB_API_KEY')) $key = (string)constant('STEAM_WEB_API_KEY');
+    if ($key === '' && defined('STEAM_API_KEY')) $key = (string)constant('STEAM_API_KEY');
+    $schemaUrls = [];
+    if ($key !== '') {
+        $schemaUrls[] = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=" . urlencode($key) . "&appid={$appId}&l=russian";
+        $schemaUrls[] = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=" . urlencode($key) . "&appid={$appId}&l=english";
+    }
+    foreach ($schemaUrls as $url) {
+        $raw = httpGetRaw($url, 12);
+        if (!$raw) continue;
+        $json = json_decode($raw, true);
+        $achs = $json['game']['availableGameStats']['achievements'] ?? null;
+        if (!is_array($achs) || !count($achs)) continue;
+        $schema = [];
+        foreach ($achs as $i => $a) {
+            $name = $a['name'] ?? '';
+            if ($name === '') continue;
+            $icon = $a['icon'] ?? '';
+            $icongray = $a['icongray'] ?? '';
+            if ($icon && !preg_match('#^https?://#i', $icon)) {
+                $icon = 'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/' . $appId . '/' . $icon;
+            }
+            if ($icongray && !preg_match('#^https?://#i', $icongray)) {
+                $icongray = 'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/' . $appId . '/' . $icongray;
+            }
+            $schema[$name] = [
+                'display_name' => $a['displayName'] ?? $name,
+                'description' => $a['description'] ?? '',
+                'icon_url' => $icon,
+                'icon_gray_url' => $icongray ?: $icon,
+                'is_hidden' => !empty($a['hidden']) ? 1 : 0,
+                'sort_order' => $i,
+                'percent' => 0.0,
+            ];
+        }
+        break;
+    }
+
+    // 3) Global percentages (api_name → %)
+    $raw = httpGetRaw("https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=" . $appId, 12);
+    if ($raw) {
+        $json = json_decode($raw, true);
+        foreach (($json['achievementpercentages']['achievements'] ?? []) as $row) {
+            if (empty($row['name'])) continue;
+            $percents[$row['name']] = (float)($row['percent'] ?? 0);
+        }
+    }
+    // merge percents into schema by api_name; if schema empty build from percents
+    if ($schema) {
+        foreach ($schema as $k => &$a) {
+            if (isset($percents[$k])) $a['percent'] = $percents[$k];
+        }
+        unset($a);
+    } elseif ($percents) {
+        $i = 0;
+        foreach ($percents as $name => $pct) {
+            $schema[$name] = [
+                'display_name' => $name,
+                'description' => '',
+                'icon_url' => '',
+                'icon_gray_url' => '',
+                'is_hidden' => 0,
+                'sort_order' => $i++,
+                'percent' => $pct,
+            ];
+        }
+    }
+
+    if (!$schema) return 0;
+
+    // Скачать иконки локально (раз навсегда)
+    $iconDir = dirname(__DIR__) . '/uploads/achievements/' . $gameId;
+    if (!is_dir($iconDir)) @mkdir($iconDir, 0775, true);
+
+    $downloadIcon = function(string $url, string $dest) {
+        if ($url === '' || is_file($dest) && filesize($dest) > 100) return is_file($dest);
+        if (!preg_match('#^https?://#i', $url)) return false;
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => 15,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 CATio/1.0',
+            ]);
+            $bin = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($bin && $code < 400 && strlen($bin) > 50) {
+                file_put_contents($dest, $bin);
+                return true;
+            }
+        }
+        return false;
+    };
+
+    $pdo->prepare("DELETE FROM game_achievements WHERE game_id = ?")->execute([$gameId]);
+    $ins = $pdo->prepare("INSERT INTO game_achievements
+        (game_id, api_name, display_name, description, icon_url, icon_gray_url, percent, is_hidden, sort_order)
+        VALUES (?,?,?,?,?,?,?,?,?)");
+    $n = 0;
+    foreach ($schema as $apiName => $a) {
+        $safe = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $apiName);
+        $localColor = '';
+        $localGray = '';
+        if (!empty($a['icon_url'])) {
+            $dest = $iconDir . '/' . $safe . '.jpg';
+            if ($downloadIcon($a['icon_url'], $dest)) {
+                $localColor = 'uploads/achievements/' . $gameId . '/' . $safe . '.jpg';
+            } else {
+                $localColor = $a['icon_url'];
+            }
+        }
+        if (!empty($a['icon_gray_url'])) {
+            $dest = $iconDir . '/' . $safe . '_gray.jpg';
+            if ($downloadIcon($a['icon_gray_url'], $dest)) {
+                $localGray = 'uploads/achievements/' . $gameId . '/' . $safe . '_gray.jpg';
+            } else {
+                $localGray = $a['icon_gray_url'];
+            }
+        }
+        if ($localGray === '' && $localColor !== '') $localGray = $localColor;
+
+        $ins->execute([
+            $gameId,
+            mb_substr($apiName, 0, 128),
+            mb_substr($a['display_name'], 0, 255),
+            mb_substr($a['description'] ?? '', 0, 512),
+            mb_substr($localColor, 0, 512),
+            mb_substr($localGray, 0, 512),
+            (float)($a['percent'] ?? 0),
+            (int)($a['is_hidden'] ?? 0),
+            (int)($a['sort_order'] ?? $n),
+        ]);
+        $n++;
+    }
+    try {
+        $pdo->prepare("UPDATE games SET ach_count = ?, steam_appid = ? WHERE id = ?")->execute([$n, $appId, $gameId]);
+        // обновить library.ach_total для всех владельцев
+        $pdo->prepare("UPDATE library SET ach_total = ? WHERE game_id = ?")->execute([$n, $gameId]);
+    } catch (Throwable $e) {}
+    return $n;
+}
+
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
@@ -371,6 +592,320 @@ try {
     }
 
     // ===== БИБЛИОТЕКА (реальная, по пользователю) =====
+    
+    
+    // ===== Список достижений игры (Steam schema + % + иконки) =====
+    
+    // ===== SteamGridDB assets =====
+    if ($method === 'GET' && $action === 'sgdb_assets') {
+        $user = requireAuth();
+        if (($user['role'] ?? '') !== 'admin' && empty($user['is_admin'])) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Только для админов'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $appId = (int)($_GET['appid'] ?? 0);
+        if ($appId <= 0 && !empty($_GET['url'])) {
+            if (preg_match('/(\d{3,10})/', (string)$_GET['url'], $m)) $appId = (int)$m[1];
+        }
+        if ($appId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'AppID'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $key = '';
+        if (defined('STEAMGRIDDB_API_KEY')) $key = (string)STEAMGRIDDB_API_KEY;
+        if ($key === '' && defined('SGDB_API_KEY')) $key = (string)SGDB_API_KEY;
+        if ($key === '') {
+            foreach ([__DIR__ . '/../config.php', __DIR__ . '/config.php'] as $cfg) {
+                if (!is_file($cfg)) continue;
+                $txt = @file_get_contents($cfg);
+                if ($txt && preg_match("/define\\(\\s*'STEAMGRIDDB_API_KEY'\\s*,\\s*'([^']+)'\\s*\\)/", $txt, $mm)) {
+                    $key = $mm[1];
+                    break;
+                }
+            }
+        }
+        if ($key === '') {
+            echo json_encode(['ok' => false, 'error' => 'Нет STEAMGRIDDB_API_KEY', 'need_key' => true], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $type = strtolower(trim((string)($_GET['type'] ?? 'icons')));
+        $map = ['icon' => 'icons', 'icons' => 'icons', 'logo' => 'logos', 'logos' => 'logos',
+                'banner' => 'heroes', 'heroes' => 'heroes', 'cover' => 'grids', 'grids' => 'grids', 'grid' => 'grids'];
+        $endpoint = $map[$type] ?? 'icons';
+        $sgdbGet = function(string $path) use ($key): ?array {
+            $url = 'https://www.steamgriddb.com/api/v2/' . ltrim($path, '/');
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => 25,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $key, 'Accept: application/json'],
+            ]);
+            $raw = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if (!$raw || $code >= 400) return null;
+            $j = json_decode($raw, true);
+            return is_array($j) ? $j : null;
+        };
+        $json = $sgdbGet($endpoint . '/steam/' . $appId);
+        if (!$json || empty($json['success'])) {
+            $g = $sgdbGet('games/steam/' . $appId);
+            $gid = $g['data']['id'] ?? null;
+            if ($gid) $json = $sgdbGet($endpoint . '/game/' . (int)$gid);
+        }
+        $out = [];
+        foreach (($json['data'] ?? []) as $r) {
+            $url = $r['url'] ?? '';
+            if ($url === '') continue;
+            $out[] = [
+                'url' => $url,
+                'thumb' => $r['thumb'] ?? $url,
+                'style' => (string)($r['style'] ?? ''),
+                'score' => (int)($r['score'] ?? 0),
+                'width' => (int)($r['width'] ?? 0),
+                'height' => (int)($r['height'] ?? 0),
+            ];
+            if (count($out) >= 40) break;
+        }
+        echo json_encode(['ok' => true, 'appid' => $appId, 'type' => $type, 'assets' => $out, 'count' => count($out)], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($method === 'POST' && $action === 'update_assets') {
+        $user = requireAuth();
+        if (($user['role'] ?? '') !== 'admin' && empty($user['is_admin'])) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Только для админов'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $body = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($body)) $body = $_POST;
+        if (!verifyCsrfToken($body['csrf_token'] ?? '')) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'CSRF'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $gameId = (int)($body['game_id'] ?? 0);
+        if ($gameId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'game_id'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $st = $pdo->prepare("SELECT id FROM games WHERE id = ?");
+        $st->execute([$gameId]);
+        if (!$st->fetch()) {
+            echo json_encode(['ok' => false, 'error' => 'Игра не найдена'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $base = dirname(__DIR__) . '/uploads/games';
+        $coversDir = dirname(__DIR__) . '/covers';
+        if (!is_dir($coversDir)) @mkdir($coversDir, 0775, true);
+        $dirs = [
+            'icon' => $base . '/icons',
+            'cover' => $base . '/covers',
+            'banner' => $base . '/banners',
+            'logo' => $base . '/logos',
+        ];
+        foreach ($dirs as $d) { if (!is_dir($d)) @mkdir($d, 0775, true); }
+        $download = function(string $url, string $dir, string $prefix) {
+            if ($url === '' || !preg_match('#^https?://#i', $url)) return null;
+            $ext = 'jpg';
+            $path = parse_url($url, PHP_URL_PATH) ?? '';
+            if (preg_match('~\.(png|jpe?g|webp|gif)$~i', $path, $m)) $ext = strtolower($m[1] === 'jpeg' ? 'jpg' : $m[1]);
+            $name = $prefix . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+            $full = rtrim($dir, '/\\') . '/' . $name;
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30, CURLOPT_SSL_VERIFYPEER => false]);
+            $bin = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if (!$bin || $code >= 400 || strlen($bin) < 100) return null;
+            file_put_contents($full, $bin);
+            return 'uploads/games/' . basename($dir) . '/' . $name;
+        };
+        $fields = [];
+        $params = [];
+        $iconUrl = trim((string)($body['icon_url'] ?? ''));
+        $coverUrl = trim((string)($body['cover_url'] ?? ''));
+        $bannerUrl = trim((string)($body['banner_url'] ?? ''));
+        $logoUrl = trim((string)($body['logo_url'] ?? ''));
+        if ($iconUrl !== '') {
+            $local = $download($iconUrl, $dirs['icon'], 'g' . $gameId . '_icon');
+            if ($local) {
+                $fields[] = 'icon_url = ?'; $params[] = $local;
+                $src = dirname(__DIR__) . '/' . $local;
+                if (is_file($src)) @copy($src, $coversDir . '/appicon_' . $gameId . '.jpg');
+                else {
+                    $ch = curl_init($iconUrl);
+                    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30, CURLOPT_SSL_VERIFYPEER => false]);
+                    $bin = curl_exec($ch); curl_close($ch);
+                    if ($bin) file_put_contents($coversDir . '/appicon_' . $gameId . '.jpg', $bin);
+                }
+            }
+        }
+        if ($coverUrl !== '') {
+            $local = $download($coverUrl, $dirs['cover'], 'g' . $gameId . '_cover');
+            if ($local) { $fields[] = 'cover_url = ?'; $params[] = $local; }
+        }
+        if ($bannerUrl !== '') {
+            $local = $download($bannerUrl, $dirs['banner'], 'g' . $gameId . '_banner');
+            if ($local) { $fields[] = 'banner_url = ?'; $params[] = $local; }
+        }
+        if ($logoUrl !== '') {
+            $local = $download($logoUrl, $dirs['logo'], 'g' . $gameId . '_logo');
+            if ($local) {
+                try { ensureColumn($pdo, 'games', 'logo_url', "VARCHAR(512) NULL"); } catch (Throwable $e) {}
+                $fields[] = 'logo_url = ?'; $params[] = $local;
+            }
+        }
+        if ($fields) {
+            $params[] = $gameId;
+            $pdo->prepare("UPDATE games SET " . implode(', ', $fields) . " WHERE id = ?")->execute($params);
+        }
+        echo json_encode(['ok' => true, 'game_id' => $gameId], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+
+    if ($method === 'GET' && $action === 'achievements') {
+        $gameId = (int)($_GET['id'] ?? 0);
+        if ($gameId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'id'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $st = $pdo->prepare("SELECT id, title, slug, steam_appid, ach_count FROM games WHERE id = ?");
+        $st->execute([$gameId]);
+        $game = $st->fetch();
+        if (!$game) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Игра не найдена'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $appId = (int)($game['steam_appid'] ?? 0);
+        if ($appId <= 0 && !empty($game['slug']) && preg_match('/-s(\d{3,10})$/', $game['slug'], $m)) {
+            $appId = (int)$m[1];
+            try { $pdo->prepare("UPDATE games SET steam_appid = ? WHERE id = ?")->execute([$appId, $gameId]); } catch (Throwable $e) {}
+        }
+
+        $force = !empty($_GET['refresh']);
+        $cntSt = $pdo->prepare("SELECT COUNT(*) FROM game_achievements WHERE game_id = ?");
+        $cntSt->execute([$gameId]);
+        $cnt = (int)$cntSt->fetchColumn();
+        // синк только если пусто / refresh / данные битые (нет иконок)
+        $needSync = $force || $cnt === 0;
+        if (!$needSync && $cnt > 0) {
+            $bad = (int)$pdo->query("SELECT COUNT(*) FROM game_achievements WHERE game_id = ".(int)$gameId." AND (icon_url IS NULL OR icon_url = '')")->fetchColumn();
+            if ($bad === $cnt) $needSync = true;
+        }
+        if ($appId > 0 && $needSync) {
+            @set_time_limit(120);
+            syncGameAchievementsFromSteam($pdo, $gameId, $appId);
+        }
+
+        $st = $pdo->prepare("SELECT api_name, display_name, description, icon_url, icon_gray_url, percent, is_hidden, sort_order
+            FROM game_achievements WHERE game_id = ? ORDER BY is_hidden ASC, percent DESC, sort_order ASC, id ASC");
+        $st->execute([$gameId]);
+        $list = $st->fetchAll();
+        foreach ($list as &$a) {
+            $a['percent'] = (float)$a['percent'];
+            $a['is_hidden'] = (int)$a['is_hidden'];
+            $a['unlocked'] = 0; // без привязки Steam-аккаунта
+        }
+        unset($a);
+        $total = count($list);
+        try {
+            $pdo->prepare("UPDATE games SET ach_count = ? WHERE id = ?")->execute([$total, $gameId]);
+        } catch (Throwable $e) {}
+
+        echo json_encode([
+            'ok' => true,
+            'game_id' => $gameId,
+            'title' => $game['title'],
+            'steam_appid' => $appId,
+            'total' => $total,
+            'unlocked' => 0,
+            'achievements' => $list,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // ===== Синхронизация ачивок из Steam (публичный API, без ключа) =====
+    if ($method === 'POST' && $action === 'sync_steam_achievements') {
+        $user = requireAuth();
+        $body = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        if (!verifyCsrfToken($body['csrf_token'] ?? '')) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'CSRF'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $uid = (int)$user['id'];
+        $onlyGameId = isset($body['game_id']) ? (int)$body['game_id'] : 0;
+
+        // helper inline
+        $fetchAch = function(int $appId) {
+            $url = "https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=" . $appId;
+            if (function_exists('curl_init')) {
+                $ch = curl_init($url);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 15,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_USERAGENT => 'CATio/1.0',
+                ]);
+                $raw = curl_exec($ch);
+                curl_close($ch);
+            } else {
+                $raw = @file_get_contents($url);
+            }
+            if ($raw === false || $raw === null) return 0;
+            $json = json_decode($raw, true);
+            $list = $json['achievementpercentages']['achievements'] ?? null;
+            return is_array($list) ? count($list) : 0;
+        };
+
+        $sql = "
+            SELECT g.id, g.slug, g.steam_appid, g.ach_count, l.ach_total
+            FROM library l
+            JOIN games g ON g.id = l.game_id
+            WHERE l.user_id = ?
+        ";
+        $params = [$uid];
+        if ($onlyGameId > 0) {
+            $sql .= " AND g.id = ?";
+            $params[] = $onlyGameId;
+        }
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        $rows = $st->fetchAll();
+        $updated = 0;
+        foreach ($rows as $row) {
+            $appId = (int)($row['steam_appid'] ?? 0);
+            if ($appId <= 0 && !empty($row['slug']) && preg_match('/-s(\d{3,10})$/', $row['slug'], $m)) {
+                $appId = (int)$m[1];
+            }
+            if ($appId <= 0) continue;
+
+            // всегда обновляем appid если нашли
+            if (empty($row['steam_appid']) && $appId > 0) {
+                try { $pdo->prepare("UPDATE games SET steam_appid = ? WHERE id = ?")->execute([$appId, $row['id']]); } catch (Throwable $e) {}
+            }
+
+            $count = $fetchAch($appId);
+            try {
+                $pdo->prepare("UPDATE games SET ach_count = ?, steam_appid = ? WHERE id = ?")->execute([$count, $appId, $row['id']]);
+                // в library: total = schema count, unlocked не трогаем (нет привязки Steam-аккаунта)
+                $pdo->prepare("UPDATE library SET ach_total = ? WHERE user_id = ? AND game_id = ?")
+                    ->execute([$count, $uid, $row['id']]);
+                $updated++;
+            } catch (Throwable $e) {}
+        }
+        echo json_encode(['ok' => true, 'updated' => $updated], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($method === 'GET' && $action === 'library') {
         $user = requireAuth();
         $stmt = $pdo->prepare("
@@ -378,7 +913,7 @@ try {
                    g.price, g.category, g.genre, g.tags, g.rating,
                    g.cover_url, g.banner_url, g.icon_url, g.cover_emoji, g.cover_color,
                    g.developer_name, g.download_count,
-                   l.added_at, l.last_played, l.playtime_minutes, l.is_pinned, l.pinned_order,
+                   l.added_at, l.last_played, l.playtime_minutes, l.is_pinned, l.pinned_order, COALESCE(l.ach_unlocked,0) AS ach_unlocked, COALESCE(NULLIF(l.ach_total,0), g.ach_count, 0) AS ach_total, g.steam_appid, g.ach_count AS game_ach_count,
                    COALESCE(l.is_liked, 0) AS is_liked, l.liked_at,
                    (SELECT COUNT(*) FROM game_builds b WHERE b.game_id = g.id) AS builds_count,
                    (SELECT GROUP_CONCAT(DISTINCT b.platform) FROM game_builds b WHERE b.game_id = g.id) AS platforms
@@ -392,11 +927,12 @@ try {
         foreach ($games as &$g) {
             $g['owned'] = true;
             $g['cover_src'] = !empty($g['cover_url']) ? $g['cover_url'] : ('media.php?type=cover&id=' . $g['id']);
-            $g['icon_src'] = !empty($g['icon_url'])
-                ? $g['icon_url']
-                : ('media.php?type=icon&id=' . $g['id']);
+            // всегда через media.php?type=icon — там Steam library_600x900 / client-style
+            $g['icon_src'] = 'media.php?type=icon&id=' . $g['id'];
             $g['playtime_minutes'] = (int)($g['playtime_minutes'] ?? 0);
             $g['is_pinned'] = (int)($g['is_pinned'] ?? 0);
+            $g['ach_unlocked'] = (int)($g['ach_unlocked'] ?? 0);
+            $g['ach_total'] = (int)($g['ach_total'] ?? 0);
             $g['is_liked'] = (int)($g['is_liked'] ?? 0);
             $g['liked'] = (bool)$g['is_liked'];
         }

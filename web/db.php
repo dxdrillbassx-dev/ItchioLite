@@ -61,6 +61,10 @@ function getDB() {
         ensureColumn($pdo, 'users', 'avatar_url', "VARCHAR(512) NOT NULL DEFAULT ''");
         ensureColumn($pdo, 'users', 'banner_pos', "VARCHAR(32) NOT NULL DEFAULT '50% 50%'");
         ensureColumn($pdo, 'users', 'banner_zoom', "DECIMAL(4,2) NOT NULL DEFAULT 1.00");
+        ensureColumn($pdo, 'users', 'friend_code', "VARCHAR(8) NOT NULL DEFAULT ''");
+        try {
+            $pdo->exec("CREATE UNIQUE INDEX idx_users_friend_code ON users (friend_code)");
+        } catch (Throwable $e) { /* already exists or empty duplicates */ }
 
         // Сессии
         // ВАЖНО: expires_at — TIMESTAMP NULL. Явный NOT NULL без DEFAULT даёт
@@ -164,6 +168,28 @@ function getDB() {
         
         ensureColumn($pdo, 'library', 'pinned_order', "INT NOT NULL DEFAULT 0");
         ensureColumn($pdo, 'library', 'is_liked', "TINYINT(1) NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'library', 'ach_unlocked', "INT UNSIGNED NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'library', 'ach_total', "INT UNSIGNED NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'games', 'steam_appid', "INT UNSIGNED NULL DEFAULT NULL");
+        ensureColumn($pdo, 'games', 'ach_count', "INT UNSIGNED NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'games', 'logo_url', "VARCHAR(512) NULL");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS game_achievements (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            game_id INT UNSIGNED NOT NULL,
+            api_name VARCHAR(128) NOT NULL,
+            display_name VARCHAR(255) NOT NULL DEFAULT '',
+            description VARCHAR(512) NOT NULL DEFAULT '',
+            icon_url VARCHAR(512) NOT NULL DEFAULT '',
+            icon_gray_url VARCHAR(512) NOT NULL DEFAULT '',
+            percent DECIMAL(6,2) NOT NULL DEFAULT 0,
+            is_hidden TINYINT(1) NOT NULL DEFAULT 0,
+            sort_order INT NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_game_api (game_id, api_name),
+            KEY idx_ga_game (game_id),
+            CONSTRAINT fk_ga_game FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        try { $pdo->exec("CREATE INDEX idx_games_steam_appid ON games (steam_appid)"); } catch (Throwable $e) {}
         ensureColumn($pdo, 'library', 'liked_at', "TIMESTAMP NULL DEFAULT NULL");
 
         // Ban fields

@@ -209,11 +209,13 @@ const VIEW_TITLES = {
   community: 'Мастерская',
   library: 'Библиотека',
   downloads: 'Загрузки',
+  notifications: 'Уведомления',
   profile: 'Профиль',
   settings: 'Настройки',
   admin: 'Админка',
   game: 'Страница игры',
   auth: 'Вход',
+  achievements: 'Достижения',
 };
 let prevView = 'home';
 
@@ -231,6 +233,9 @@ function syncUrl(view, gameId) {
 }
 
 function showView(name, gameId, opts) {
+  document.body.classList.toggle('auth-open', name === 'auth');
+  document.body.classList.toggle('guest', name === 'auth' && !(window.AUTH_STATE && window.AUTH_STATE.authorized));
+
   // Библиотека живёт только в десктоп-клиенте
   if (name === 'library' && !window.IS_CLIENT) name = 'home';
 
@@ -250,7 +255,7 @@ function showView(name, gameId, opts) {
   // Поиск в шапке есть не во всех вкладках
   const headSearch = $('#head-search');
   if (headSearch) {
-    headSearch.style.display = (name === 'game' || name === 'auth' || name === 'settings') ? 'none' : '';
+    headSearch.style.display = (name === 'game' || name === 'auth' || name === 'settings' || name === 'achievements') ? 'none' : '';
   }
 
   const main = $('.main');
@@ -263,6 +268,7 @@ function showView(name, gameId, opts) {
   if (name === 'store') loadStore();
   if (name === 'library') loadLibrary();
   if (name === 'community') loadWorkshop();
+  if (name === 'notifications') loadNotifications();
   if (name === 'downloads') renderDownloadsView();
   if (name === 'profile') {
     if (opts && opts.foreign) {
@@ -447,6 +453,19 @@ function renderHomeHero() {
     descEl.textContent = desc;
     descEl.style.display = desc ? '' : 'none';
   }
+  const logoEl = $('#home-hero-logo');
+  if (logoEl) {
+    const logoUrl = game.logo_url || '';
+    if (logoUrl) {
+      logoEl.src = logoUrl;
+      logoEl.classList.remove('hidden');
+      logoEl.onerror = () => logoEl.classList.add('hidden');
+    } else {
+      logoEl.removeAttribute('src');
+      logoEl.classList.add('hidden');
+    }
+  }
+  // title hide if logo present? keep both for now
   hero.classList.remove('hidden');
   hero.onclick = () => gotoGame(game.id);
 }
@@ -553,6 +572,8 @@ async function loadSideLibrary() {
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     sideLibCache = data.library || [];
     renderSideLibrary();
+    // фоном подтянуть число ачивок из Steam (если ещё 0)
+    syncSteamAchievementsLazy(sideLibCache);
   } catch (err) {
     // не затираем кэш при сетевой ошибке, если уже что-то было
     if (!sideLibCache || !sideLibCache.length) {
@@ -590,6 +611,67 @@ function sideLibRemoveOptimistic(gameId) {
   sideLibCache = sideLibCache.filter(g => +g.id !== +gameId);
   renderSideLibrary();
   loadSideLibrary();
+}
+
+
+let steamAchSyncing = false;
+async function syncSteamAchievementsLazy(games) {
+  // временно отключено — сильно грузит
+  return;
+  if (steamAchSyncing) return;
+  const list = Array.isArray(games) ? games : [];
+  const need = list.filter(g => {
+    const total = parseInt(g.ach_total, 10) || 0;
+    const app = g.steam_appid || (g.slug && /-s\d{3,10}$/.test(g.slug));
+    return total === 0 && app;
+  });
+  if (!need.length) return;
+  steamAchSyncing = true;
+  try {
+    const res = await postJSON(`${API_BASE}?action=sync_steam_achievements`, {});
+    if (res && res.ok && res.updated > 0) {
+      // обновить кэш сайдбара и профиль
+      try {
+        const data = await fetchJSON(`${API_BASE}?action=library`);
+        if (data.ok) {
+          sideLibCache = data.library || [];
+          renderSideLibrary($('#side-lib-search')?.value || '');
+          if (typeof profileLibraryCache !== 'undefined' && profileLibraryCache) {
+            // merge ach fields into profile cards
+            const map = {};
+            sideLibCache.forEach(g => { map[g.id] = g; });
+            profileLibraryCache.forEach(g => {
+              if (map[g.id]) {
+                g.ach_total = map[g.id].ach_total;
+                g.ach_unlocked = map[g.id].ach_unlocked;
+              }
+            });
+            if (typeof renderProfileLibrary === 'function') renderProfileLibrary();
+            else if (typeof applyProfileLibraryFilter === 'function') applyProfileLibraryFilter();
+            else {
+              // soft re-render pinned/library if functions exist
+              const pinned = profileLibraryCache.filter(g => +g.is_pinned);
+              const rest = profileLibraryCache.filter(g => !+g.is_pinned);
+              const pinnedBox = $('#hp-pinned-games');
+              const libBox = $('#hp-library-games');
+              if (pinnedBox && pinned.length) pinnedBox.innerHTML = pinned.map(g => gameCardHtml(g)).join('');
+              if (libBox) libBox.innerHTML = rest.map(g => gameCardHtml(g)).join('');
+              $$('.hp-game-card').forEach(card => {
+                card.addEventListener('click', (e) => {
+                  if (e.target.closest('.hp-game-pin')) return;
+                  gotoGame(card.dataset.id);
+                });
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    // тихо — Steam может быть недоступен
+  } finally {
+    steamAchSyncing = false;
+  }
 }
 
 function renderSideLibrary(filter) {
@@ -631,11 +713,11 @@ function renderSideLibrary(filter) {
   }
 
   list.innerHTML = games.map(g => {
-    const icon = g.icon_src || g.icon_url || g.cover_url || g.cover_src || (g.id ? ('media.php?type=icon&id=' + g.id) : '');
+    const icon = g.id ? ('media.php?type=icon&id=' + g.id + '&v=' + (window.__iconBust || Date.now())) : (g.icon_src || g.icon_url || g.cover_url || g.cover_src || '');
     const liked = !!(+g.is_liked || g.liked);
     return `
     <button type="button" class="side-lib-item ${liked ? 'liked' : ''}" data-id="${g.id}">
-      <img src="${escapeHtml(icon)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='media.php?type=icon&id=${g.id}'" />
+      <img src="${escapeHtml(icon)}" alt="" loading="lazy" onerror="this.style.opacity='0.35'" />
       <span class="side-lib-name">${escapeHtml(g.title)}</span>
       ${liked ? '<span class="side-lib-heart" title="В избранном">♥</span>' : ''}
     </button>`;
@@ -1146,6 +1228,151 @@ async function loadGamePage(id) {
 }
 
 
+
+const achCache = {};
+
+function renderAchSidebar(gameId, gameTitle, data) {
+  const head = $('#gp-ach-head');
+  const body = $('#gp-ach-body');
+  if (!body) return;
+  const list = data.achievements || [];
+  const total = data.total || list.length;
+  const unlocked = data.unlocked || 0;
+  if (head) head.innerHTML = `Достижения ${unlocked}/${total} <span class="chev">▾</span>`;
+  if (!list.length) {
+    body.innerHTML = '<div class="gp-ach-empty">У этой игры нет достижений</div>';
+    return;
+  }
+  const preview = list.filter(a => !+a.is_hidden).slice(0, 5);
+  body.innerHTML = `
+    <div class="gp-ach-list">
+      ${preview.map(a => {
+        const icon = a.icon_gray_url || a.icon_url || '';
+        const name = (+a.is_hidden && !a.unlocked) ? 'Скрытое достижение' : (a.display_name || a.api_name);
+        return `<div class="gp-ach-row">
+          <div class="gp-ach-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : ''}</div>
+          <div class="gp-ach-meta"><div class="gp-ach-name">${escapeHtml(name)}</div></div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button type="button" class="gp-side-more" id="gp-ach-all">Просмотреть все достижения</button>`;
+  $('#gp-ach-all')?.addEventListener('click', () => openGameAchievementsPage(gameId, gameTitle || data.title));
+}
+
+async function loadGameAchievementsSidebar(gameId, gameTitle) {
+  if (achCache[gameId]) {
+    renderAchSidebar(gameId, gameTitle, achCache[gameId]);
+    return;
+  }
+  const head = $('#gp-ach-head');
+  const body = $('#gp-ach-body');
+  if (!body) return;
+  try {
+    const data = await fetchJSON(`${API_BASE}?action=achievements&id=${gameId}`);
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    achCache[gameId] = data;
+    renderAchSidebar(gameId, gameTitle, data);
+  } catch (err) {
+    body.innerHTML = `<div class="gp-ach-empty">${escapeHtml(err.message || 'Не удалось загрузить')}</div>`;
+  }
+}
+
+async function openGameAchievementsPage(gameId, gameTitle) {
+  showView('achievements', null, { soft: true });
+  const wrap = $('#achievements-page');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="loading">Загрузка достижений...</div>';
+  try {
+    const data = await fetchJSON(`${API_BASE}?action=achievements&id=${gameId}`);
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    const list = data.achievements || [];
+    const total = data.total || list.length;
+    const unlocked = data.unlocked || 0;
+    const pct = total ? Math.round((unlocked / total) * 100) : 0;
+    const title = gameTitle || data.title || 'Игра';
+
+    wrap.innerHTML = `
+      <div class="ach-page">
+        <div class="ach-page-top">
+          <button type="button" class="ach-back" id="ach-back">← ${escapeHtml(title)}</button>
+        </div>
+        <div class="ach-hero" style="background-image:url('media.php?type=hero&id=${gameId}')">
+          <div class="ach-hero-fade"></div>
+          <div class="ach-hero-content">
+            <div class="ach-hero-user">
+              <div class="ach-progress-line">
+                <span class="ach-progress-ico">🏆</span>
+                <span>${unlocked} / ${total}</span>
+              </div>
+              <div class="ach-progress-bar"><span style="width:${pct}%"></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="ach-toolbar">
+          <input type="search" class="ach-search" id="ach-search" placeholder="Поиск достижений" autocomplete="off" />
+          <select class="ach-filter" id="ach-filter">
+            <option value="all">Все достижения</option>
+            <option value="locked">Не получены</option>
+            <option value="hidden">Скрытые</option>
+          </select>
+          <select class="ach-sort" id="ach-sort">
+            <option value="common">Самые распространённые</option>
+            <option value="rare">Самые редкие</option>
+            <option value="name">По имени</option>
+          </select>
+        </div>
+        <div class="ach-list" id="ach-list"></div>
+      </div>`;
+
+    const render = () => {
+      const q = ($('#ach-search')?.value || '').trim().toLowerCase();
+      const filter = $('#ach-filter')?.value || 'all';
+      const sort = $('#ach-sort')?.value || 'common';
+      let rows = [...list];
+      if (q) rows = rows.filter(a =>
+        (a.display_name || '').toLowerCase().includes(q) ||
+        (a.description || '').toLowerCase().includes(q)
+      );
+      if (filter === 'locked') rows = rows.filter(a => !a.unlocked);
+      if (filter === 'hidden') rows = rows.filter(a => a.is_hidden);
+      if (sort === 'common') rows.sort((a, b) => b.percent - a.percent);
+      if (sort === 'rare') rows.sort((a, b) => a.percent - b.percent);
+      if (sort === 'name') rows.sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '', 'ru'));
+
+      const box = $('#ach-list');
+      if (!box) return;
+      if (!rows.length) {
+        box.innerHTML = '<div class="gp-ach-empty">Ничего не найдено</div>';
+        return;
+      }
+      box.innerHTML = rows.map(a => {
+        const locked = !a.unlocked;
+        const name = a.is_hidden && locked ? 'Скрытое достижение' : (a.display_name || a.api_name);
+        const desc = a.is_hidden && locked ? 'Нажмите, чтобы открыть' : (a.description || '');
+        const icon = locked ? (a.icon_gray_url || a.icon_url) : (a.icon_url || a.icon_gray_url);
+        const p = (a.percent || 0).toFixed(1).replace(/\.0$/, '') + '%';
+        return `<div class="ach-row ${locked ? 'locked' : 'unlocked'}" data-hidden="${a.is_hidden ? 1 : 0}">
+          <div class="ach-row-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="" loading="lazy" />` : '<span class="ach-row-placeholder"></span>'}</div>
+          <div class="ach-row-body">
+            <div class="ach-row-name">${escapeHtml(name)}</div>
+            <div class="ach-row-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="ach-row-pct">${escapeHtml(p)}</div>
+        </div>`;
+      }).join('');
+    };
+
+    $('#ach-back')?.addEventListener('click', () => gotoGame(gameId));
+    $('#ach-search')?.addEventListener('input', render);
+    $('#ach-filter')?.addEventListener('change', render);
+    $('#ach-sort')?.addEventListener('change', render);
+    render();
+  } catch (err) {
+    wrap.innerHTML = `<div class="hp-empty">${escapeHtml(err.message || 'Ошибка')}</div>`;
+  }
+}
+
+
 function renderGamePage(wrap, data) {
   const g = data.game;
   const price = formatPrice(g.price);
@@ -1199,7 +1426,7 @@ function renderGamePage(wrap, data) {
     : `<div class="gp-playtime">${hasBuilds ? 'Доступна для добавления' : 'Нет файлов для скачивания'}</div>`;
 
   const adminEditBtn = viewer && viewer.is_admin
-    ? `<button type="button" class="gp-bar-btn icon" id="gp-admin-edit" title="Редактировать">${iconSvg('pencil',16)}</button>`
+    ? `<button type="button" class="gp-bar-btn icon" id="gp-admin-edit" title="Редактировать текст">${iconSvg('pencil',16)}</button>`
     : '';
 
   const dlDisabled = !hasBuilds ? ' disabled aria-disabled="true"' : '';
@@ -1228,7 +1455,8 @@ function renderGamePage(wrap, data) {
         <img class="gp-hero-bg" src="${escapeHtml(hero)}" alt="" onerror="this.style.opacity=0.35" />
         <div class="gp-hero-grad"></div>
         <div class="gp-hero-content">
-          <h1 class="gp-title">${escapeHtml(g.title)}</h1>
+          ${g.logo_url ? `<img class="gp-hero-logo" src="${escapeHtml(g.logo_url)}" alt="" onerror="this.style.display='none'" />` : ''}
+          <h1 class="gp-title${g.logo_url ? ' gp-title-with-logo' : ''}">${escapeHtml(g.title)}</h1>
         </div>
         <div class="gp-actionbar">
           <div class="gp-action-left">${actionLeft}</div>
@@ -1249,7 +1477,7 @@ function renderGamePage(wrap, data) {
             <div class="gp-gallery-viewport">
               <div class="gp-gallery-main" id="gallery-main">
                 ${gallery[0].type === 'video'
-                  ? `<video id="gallery-main-video" src="${escapeHtml(gallery[0].src)}" controls playsinline preload="metadata" poster="${escapeHtml(gallery[0].thumb || '')}"></video>`
+                  ? `<video id="gallery-main-video" src="${escapeHtml(gallery[0].src)}" controls playsinline preload="metadata" muted poster="${escapeHtml(gallery[0].thumb || '')}"></video>`
                   : `<img id="gallery-main-img" src="${escapeHtml(gallery[0].src)}" alt="" />`}
               </div>
             </div>
@@ -1326,11 +1554,10 @@ function renderGamePage(wrap, data) {
         </div>
 
         <aside class="gp-aside">
-          <div class="gp-side-card">
-            <button type="button" class="gp-side-head">Достижения 0/0 <span class="chev">▾</span></button>
-            <div class="gp-side-body">
-              <div class="gp-ach-warn">⚠ Достижения для этой игры пока не настроены.</div>
-              <div class="gp-ach-empty">Список достижений появится после публикации данных разработчиком.</div>
+          <div class="gp-side-card collapsed" id="gp-ach-card" data-game-id="${g.id}">
+            <button type="button" class="gp-side-head" id="gp-ach-head">Достижения <span class="chev">▾</span></button>
+            <div class="gp-side-body" id="gp-ach-body">
+              <div class="gp-ach-empty">В разработке</div>
             </div>
           </div>
 
@@ -1374,6 +1601,7 @@ function renderGamePage(wrap, data) {
   `;
 
   wrap._galleryItems = gallery;
+  wrap._gameData = g;
   initGallery(wrap);
   // корректно показать первый элемент (YouTube iframe / https video)
   if (gallery.length && gallery[0].type === 'video') {
@@ -1418,6 +1646,7 @@ function renderGamePage(wrap, data) {
   }
 
   // side card collapse
+  // achievements временно отключены (нагрузка)
   $$('.gp-side-head', wrap).forEach(btn => {
     btn.addEventListener('click', () => {
       btn.parentElement.classList.toggle('collapsed');
@@ -1478,7 +1707,15 @@ function renderGamePage(wrap, data) {
       }
     });
   }
-  $('#gp-settings')?.addEventListener('click', () => toast('Настройки запуска скоро'));
+  $('#gp-settings')?.addEventListener('click', () => {
+    const isAdmin = !!(window.AUTH_STATE && window.AUTH_STATE.user &&
+      (window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin));
+    if (isAdmin && wrap._gameData) {
+      openGameAssetsModal(wrap._gameData);
+    } else {
+      toast('Настройки запуска скоро');
+    }
+  });
   $$('.gp-comm-shot', wrap).forEach(btn => {
     btn.addEventListener('click', () => {
       const img = $('#gallery-main-img');
@@ -2045,7 +2282,7 @@ function openAdminGameEditModal(g) {
         const res = await fetch(`${SUBMIT_API}?action=admin_save`, { method: 'POST', body: fd });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Ошибка сохранения');
-        toast('Сохранено');
+        toast('Сохранено для всех');
         modal.classList.add('hidden');
         homeCache = null;
         storeCache = [];
@@ -2084,9 +2321,72 @@ function openAdminGameEditModal(g) {
 
 function bindAdminGameEdit(g, viewer) {
   const btn = $('#gp-admin-edit');
-  if (!btn || !viewer?.is_admin) return;
-  btn.addEventListener('click', () => openAdminGameEditModal(g));
+  if (btn && viewer?.is_admin) {
+    btn.addEventListener('click', () => openAdminGameEditModal(g));
+  }
 }
+
+/** Открыть модалку оформления (как Hydra) для конкретной игры */
+function openGameAssetsModal(g) {
+  const modal = document.getElementById('steam-import-modal');
+  if (!modal) {
+    toast('Модалка не найдена');
+    return;
+  }
+  let appId = parseInt(g.steam_appid, 10) || 0;
+  if (!appId && g.slug) {
+    const m = String(g.slug).match(/-s(\d{3,10})$/);
+    if (m) appId = parseInt(m[1], 10);
+  }
+  if (!appId) {
+    toast('У игры нет Steam AppID — SteamGridDB недоступен');
+    return;
+  }
+
+  window.__steamEditMode = true;
+  window.__steamEditGameId = Number(g.id);
+  window.__steamAppId = appId;
+  if (typeof window.setSteamAppId === 'function') window.setSteamAppId(appId);
+
+  const title = document.getElementById('sgdb-modal-title');
+  if (title) title.textContent = g.title || 'Игра';
+  const it = document.getElementById('sgdb-info-title');
+  if (it) it.textContent = g.title || '—';
+  const ia = document.getElementById('sgdb-info-appid');
+  if (ia) ia.textContent = String(appId);
+  const iid = document.getElementById('sgdb-info-id');
+  if (iid) iid.textContent = String(g.id);
+
+  modal.querySelectorAll('.sgdb-nav-btn').forEach(b => {
+    b.style.display = '';
+    b.classList.toggle('active', b.dataset.sgdbTab === 'assets');
+  });
+  modal.querySelectorAll('.sgdb-pane').forEach(p => {
+    p.classList.toggle('active', p.dataset.sgdbPane === 'assets');
+  });
+  modal.querySelectorAll('.sgdb-asset-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.assetType === 'icons');
+  });
+
+  // Предупреждение только обычным пользователям; админ меняет глобально для всех
+  const warn = modal.querySelector('.sgdb-warn');
+  if (warn) {
+    const auth = window.AUTH_STATE || {};
+    const u = auth.user || auth || {};
+    const isAdmin = u.role === 'admin' || u.is_admin === true || u.is_admin === 1 || u.is_admin === '1'
+      || auth.role === 'admin';
+    warn.style.display = isAdmin ? 'none' : '';
+  }
+
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  setTimeout(() => {
+    if (typeof window.loadSgdbAssetsGlobal === 'function') window.loadSgdbAssetsGlobal('icons');
+    else document.querySelector('.sgdb-asset-tab[data-asset-type="icons"]')?.click();
+  }, 40);
+}
+
+
 
 function initCommentForm(g, viewer) {
   const form = $('#comment-form');
@@ -2625,21 +2925,28 @@ function formatPlaytime(minutes) {
 
 function formatPlaytimeShort(minutes) {
   const m = parseInt(minutes, 10) || 0;
-  if (m < 1) return '0 мин';
-  if (m < 60) return m + ' мин';
+  if (m < 1) return '0м';
+  if (m < 60) return m + 'м';
   const h = Math.floor(m / 60);
-  const rem = m % 60;
-  if (rem === 0) return h + ' ч';
-  return `${h} ч ${rem} мин`;
+  // только часы, без минут рядом
+  return h + 'ч';
 }
 
 function gameCardHtml(g, { showPin = true } = {}) {
   const mins = parseInt(g.playtime_minutes, 10) || 0;
   const timeLabel = formatPlaytimeShort(mins);
   const pinned = !!+g.is_pinned;
+  const achU = parseInt(g.ach_unlocked, 10) || 0;
+  const achT = parseInt(g.ach_total, 10) || 0;
+  const hasAch = achT > 0;
+  const pct = hasAch ? Math.min(100, Math.round((achU / achT) * 100)) : 0;
+  const achLeft = hasAch
+    ? `<span class="hp-game-ach-count"><svg class="hp-game-ach-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h12v2a4 4 0 0 1-4 4h-1v2.26A6.5 6.5 0 0 1 16.5 20H15a3 3 0 0 0-6 0H7.5A6.5 6.5 0 0 1 11 12.26V10H10a4 4 0 0 1-4-4V4zm2 2v.5A2 2 0 0 0 10 8.5h4A2 2 0 0 0 16 6.5V6H8z"/></svg>${achU}/${achT}</span>`
+    : `<span class="hp-game-ach-count muted">Нет ачивок</span>`;
+  const cover = g.cover_src || g.cover_url || (`media.php?type=cover&id=${g.id}`);
   return `
     <div class="hp-game-card" data-id="${g.id}" data-title="${escapeHtml((g.title || '').toLowerCase())}">
-      <img src="media.php?type=cover&id=${g.id}" alt="${escapeHtml(g.title)}" loading="lazy" />
+      <img src="${escapeHtml(cover)}" alt="${escapeHtml(g.title)}" loading="lazy" />
       <span class="hp-game-time">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         ${escapeHtml(timeLabel)}
@@ -2647,11 +2954,100 @@ function gameCardHtml(g, { showPin = true } = {}) {
       ${showPin ? `<button type="button" class="hp-game-pin ${pinned ? 'pinned' : ''}" data-id="${g.id}" data-pinned="${pinned ? 1 : 0}" title="${pinned ? 'Открепить' : 'Закрепить'}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="${pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
       </button>` : ''}
+      <div class="hp-game-ach">
+        <div class="hp-game-ach-row">
+          ${achLeft}
+          <span class="hp-game-ach-pct">${pct}%</span>
+        </div>
+        <div class="hp-game-ach-bar"><span style="width:${pct}%"></span></div>
+      </div>
     </div>`;
+}
+
+function friendCodeBtnHtml(code, { compact = false } = {}) {
+  const c = String(code || '').trim();
+  if (!c) return '';
+  return `<button type="button" class="friend-code-btn${compact ? ' is-compact' : ''}" data-code="${escapeHtml(c)}" title="Скопировать код друга">
+    <svg class="friend-code-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <rect x="9" y="9" width="13" height="13" rx="2"/>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </svg>
+    <span class="friend-code-text">${escapeHtml(c)}</span>
+  </button>`;
+}
+
+function bindFriendCodeButtons(root) {
+  const nodes = root && root.querySelectorAll
+    ? root.querySelectorAll('.friend-code-btn')
+    : document.querySelectorAll('.friend-code-btn');
+  nodes.forEach(btn => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const code = btn.dataset.code || '';
+      if (!code) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        toast('Код друга скопирован');
+      } catch (err) {
+        const ta = document.createElement('textarea');
+        ta.value = code;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); toast('Код друга скопирован'); } catch (e2) { toast(code); }
+        ta.remove();
+      }
+    });
+  });
+}
+
+
+function renderProfileFriendCode(code) {
+  const name = $('#hp-username');
+  if (!name) return;
+  const info = $('#hp-user-info') || name.parentElement;
+  if (!info) return;
+  let row = info.querySelector('.hp-name-row');
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'hp-name-row';
+    name.parentNode.insertBefore(row, name);
+    row.appendChild(name);
+  }
+  row.querySelectorAll('.friend-code-btn').forEach(el => el.remove());
+  if (code) {
+    row.insertAdjacentHTML('beforeend', friendCodeBtnHtml(code));
+    bindFriendCodeButtons(row);
+  }
+}
+
+function getMyFriendCode() {
+  return (window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.friend_code) || '';
+}
+
+function initBottomBar() {
+  const dl = document.getElementById('bottom-bar-dl');
+  if (dl && !dl.dataset.bound) {
+    dl.dataset.bound = '1';
+    dl.addEventListener('click', () => {
+      if (typeof showView === 'function') showView('downloads');
+      else if (typeof gotoView === 'function') gotoView('downloads');
+    });
+  }
+  updateBottomBarVersion();
+}
+function updateBottomBarVersion() {
+  const el = document.querySelector('.bottom-bar-ver');
+  if (!el) return;
+  const code = getMyFriendCode();
+  el.textContent = code ? `${code} — v0.0.1` : 'CATio — v0.0.1';
 }
 
 async function loadProfile() {
   viewingUserId = null;
+  setTimeout(() => renderProfileFriendCode(getMyFriendCode()), 0);
   // restore own toolbar if was viewing foreign profile
   const toolbar = $('.hp-toolbar');
   if (toolbar && !toolbar.querySelector('#btn-edit-profile')) {
@@ -3504,9 +3900,12 @@ function openFriendsModal() {
   const modal = $('#friends-modal');
   if (!modal) return;
   modal.classList.remove('hidden');
+  setFriendsAddMode(false);
   loadFriendsList();
   const menu = $('#user-menu');
+  const btn = $('#avatar-btn');
   if (menu) menu.classList.add('hidden');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
 function closeFriendsModal() {
@@ -3516,26 +3915,139 @@ function closeFriendsModal() {
   if (results) { results.classList.add('hidden'); results.innerHTML = ''; }
   const search = $('#friends-search');
   if (search) search.value = '';
+  setFriendsAddMode(false);
+}
+
+let friendsSearchTimer = null;
+let friendsListCache = null;
+let friendsAddMode = false;
+let friendsCodeUser = null;
+
+function filterFriendsLocal(q) {
+  const box = $('#friends-search-results');
+  if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
+  const query = (q || '').trim().toLowerCase();
+  $$('.friends-row').forEach(row => {
+    if (row.closest('#friends-search-results') || row.closest('#friends-code-found')) return;
+    const name = (row.dataset.username || '').toLowerCase();
+    row.style.display = (!query || name.includes(query)) ? '' : 'none';
+  });
+}
+
+async function lookupFriendCode(code) {
+  const found = $('#friends-code-found');
+  const btnReq = $('#friends-code-request');
+  const btnProf = $('#friends-code-profile');
+  friendsCodeUser = null;
+  if (btnReq) {
+    btnReq.disabled = true;
+    btnReq.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg> Отправить заявку`;
+  }
+  if (btnProf) btnProf.disabled = true;
+  if (found) { found.classList.add('hidden'); found.innerHTML = ''; }
+
+  const q = String(code || '').trim();
+  if (q.length < 2) return;
+
+  try {
+    const data = await fetchJSON(`${FRIENDS_API}?action=search&q=${encodeURIComponent(q)}`);
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    let u = (data.users || []).find(x => String(x.friend_code || '').toLowerCase() === q.toLowerCase());
+    if (!u && (data.users || []).length === 1) u = data.users[0];
+    if (!u) {
+      if (found) {
+        found.innerHTML = '<div class="friends-empty" style="padding:8px 0">Никого не найдено</div>';
+        found.classList.remove('hidden');
+      }
+      return;
+    }
+    friendsCodeUser = u;
+    if (found) {
+      found.innerHTML = `
+        <div class="friends-row-avatar" style="${friendAvatarStyle(u)}">${friendAvatarText(u)}</div>
+        <div class="friends-row-info">
+          <div class="friends-row-name">${escapeHtml(u.username)}</div>
+          <div class="friends-row-status">${u.is_online ? 'В сети' : 'Не в сети'}${u.friend_code ? ' · ' + escapeHtml(u.friend_code) : ''}</div>
+        </div>`;
+      found.classList.remove('hidden');
+    }
+    if (btnProf) btnProf.disabled = false;
+    if (btnReq) {
+      const rel = u.relation || 'none';
+      if (rel === 'friends') {
+        btnReq.textContent = 'Уже в друзьях';
+        btnReq.disabled = true;
+      } else if (rel === 'outgoing') {
+        btnReq.textContent = 'Заявка отправлена';
+        btnReq.disabled = true;
+      } else {
+        btnReq.disabled = false;
+      }
+    }
+  } catch (err) {
+    toast(err.message || 'Ошибка поиска');
+  }
+}
+
+async function searchFriends(q) {
+  if (friendsAddMode) await lookupFriendCode(q);
+  else filterFriendsLocal(q);
+}
+
+function setFriendsAddMode(on) {
+  friendsAddMode = !!on;
+  const btn = $('#friends-add-btn');
+  const input = $('#friends-search');
+  const panel = $('#friends-code-panel');
+  const results = $('#friends-search-results');
+  if (btn) {
+    btn.classList.toggle('is-active', friendsAddMode);
+    btn.setAttribute('aria-pressed', friendsAddMode ? 'true' : 'false');
+  }
+  if (input) {
+    input.placeholder = friendsAddMode ? 'Введите код друга' : 'Поиск друзей';
+    if (!friendsAddMode) input.value = '';
+  }
+  if (panel) panel.classList.toggle('hidden', !friendsAddMode);
+  if (results) { results.classList.add('hidden'); results.innerHTML = ''; }
+  friendsCodeUser = null;
+  const found = $('#friends-code-found');
+  if (found) { found.classList.add('hidden'); found.innerHTML = ''; }
+  const btnReq = $('#friends-code-request');
+  const btnProf = $('#friends-code-profile');
+  if (btnReq) {
+    btnReq.disabled = true;
+    btnReq.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg> Отправить заявку`;
+  }
+  if (btnProf) btnProf.disabled = true;
+  filterFriendsLocal('');
+  if (friendsAddMode && input) setTimeout(() => input.focus(), 30);
 }
 
 async function loadFriendsList() {
   try {
     const data = await fetchJSON(`${FRIENDS_API}?action=list`);
+    friendsListCache = data;
     if (!data.ok) throw new Error(data.error || 'Ошибка');
 
-    // me
     const meBox = $('#friends-me');
     if (meBox && data.me) {
       const me = data.me;
+      if (me.friend_code && window.AUTH_STATE?.user) window.AUTH_STATE.user.friend_code = me.friend_code;
+      updateBottomBarVersion();
       meBox.innerHTML = `
         <div class="friends-me-avatar" style="${friendAvatarStyle(me)}">
           ${friendAvatarText(me)}
           <span class="online-dot"></span>
         </div>
         <div class="friends-me-info">
-          <div class="friends-me-name">${escapeHtml(me.username)}</div>
+          <div class="friends-me-name-row">
+            <div class="friends-me-name">${escapeHtml(me.username)}</div>
+            ${friendCodeBtnHtml(me.friend_code || getMyFriendCode())}
+          </div>
           <div class="friends-me-status">В сети</div>
         </div>`;
+      bindFriendCodeButtons(meBox);
     }
 
     const renderList = (el, list, mode) => {
@@ -3550,13 +4062,15 @@ async function loadFriendsList() {
           actions = `
             <button type="button" class="friends-icon-btn accept" data-act="accept" data-id="${u.id}" title="Принять">✓</button>
             <button type="button" class="friends-icon-btn decline" data-act="decline" data-id="${u.id}" title="Отклонить">✕</button>`;
+        } else if (mode === 'online' || mode === 'offline') {
+          actions = `
+            <button type="button" class="friends-icon-btn" data-act="message" data-id="${u.id}" data-username="${escapeHtml(u.username)}" title="Написать">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </button>`;
         } else {
           actions = `
-            <button type="button" class="friends-icon-btn" data-act="message" data-id="${u.id}" data-username="${escapeHtml(u.username)}" title="Сообщение">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            </button>
             <button type="button" class="friends-icon-btn" data-act="profile" data-id="${u.id}" data-username="${escapeHtml(u.username)}" title="Профиль">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </button>`;
         }
         const status = mode === 'online' || u.is_online
@@ -3622,90 +4136,26 @@ async function loadFriendsList() {
       if (incSec) incSec.style.display = 'none';
     }
 
+    const online = (data.online || data.friends || []).filter(u => u.is_online);
+    const offline = (data.friends || []).filter(u => !u.is_online);
+    // if API marks none online, still show all friends under offline
+    const onlineList = online.length ? online : [];
+    const offlineList = offline.length ? offline : (data.friends || []).filter(u => !onlineList.find(o => o.id === u.id));
+
     const onCount = $('#friends-online-count');
     const offCount = $('#friends-offline-count');
-    if (onCount) onCount.textContent = (data.online || []).length;
-    if (offCount) offCount.textContent = (data.offline || []).length;
-    renderList($('#friends-online'), data.online || [], 'online');
-    renderList($('#friends-offline'), data.offline || [], 'offline');
+    if (onCount) onCount.textContent = onlineList.length;
+    if (offCount) offCount.textContent = offlineList.length;
+    renderList($('#friends-online'), onlineList, 'online');
+    renderList($('#friends-offline'), offlineList, 'offline');
+
+    // re-apply local filter if any
+    if (!friendsAddMode) {
+      const q = $('#friends-search')?.value || '';
+      if (q.trim()) filterFriendsLocal(q);
+    }
   } catch (err) {
     toast(err.message || 'Не удалось загрузить друзей');
-  }
-}
-
-let friendsSearchTimer = null;
-async function searchFriends(q) {
-  const box = $('#friends-search-results');
-  if (!box) return;
-  if (!q || q.length < 1) {
-    box.classList.add('hidden');
-    box.innerHTML = '';
-    return;
-  }
-  try {
-    const data = await fetchJSON(`${FRIENDS_API}?action=search&q=${encodeURIComponent(q)}`);
-    if (!data.ok) throw new Error(data.error || 'Ошибка');
-    if (!data.users.length) {
-      box.innerHTML = '<div class="friends-empty">Никого не найдено</div>';
-      box.classList.remove('hidden');
-      return;
-    }
-    box.innerHTML = data.users.map(u => {
-      let btn = '';
-      if (u.relation === 'none') {
-        btn = `<button type="button" class="friends-icon-btn accept" data-act="add" data-id="${u.id}" title="Добавить">+</button>`;
-      } else if (u.relation === 'friends') {
-        btn = `<span class="friends-row-status">Друг</span>`;
-      } else if (u.relation === 'outgoing') {
-        btn = `<span class="friends-row-status">Заявка</span>`;
-      } else if (u.relation === 'incoming') {
-        btn = `<button type="button" class="friends-icon-btn accept" data-act="accept" data-id="${u.id}" title="Принять">✓</button>`;
-      }
-      return `
-        <div class="friends-row" data-id="${u.id}" data-username="${escapeHtml(u.username)}">
-          <div class="friends-row-avatar" style="${friendAvatarStyle(u)}">${friendAvatarText(u)}</div>
-          <div class="friends-row-info">
-            <div class="friends-row-name">${escapeHtml(u.username)}</div>
-            <div class="friends-row-status">${u.is_online ? 'В сети' : 'Не в сети'}</div>
-          </div>
-          <div class="friends-row-actions">${btn}</div>
-        </div>`;
-    }).join('');
-    box.classList.remove('hidden');
-
-    $$('.friends-row', box).forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('[data-act]')) return;
-        openUserProfile(row.dataset.username, row.dataset.id);
-      });
-    });
-    $$('[data-act]', box).forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const act = btn.dataset.act;
-        const id = +btn.dataset.id;
-        try {
-          if (act === 'add') {
-            const res = await postJSON(`${FRIENDS_API}?action=request`, { user_id: id });
-            if (!res.ok) throw new Error(res.error || 'Ошибка');
-            toast('Заявка отправлена');
-            searchFriends($('#friends-search')?.value || '');
-            loadFriendsList();
-          } else if (act === 'accept') {
-            const res = await postJSON(`${FRIENDS_API}?action=respond`, { user_id: id, accept: 1 });
-            if (!res.ok) throw new Error(res.error || 'Ошибка');
-            toast('Заявка принята');
-            searchFriends($('#friends-search')?.value || '');
-            loadFriendsList();
-          }
-        } catch (err) {
-          toast(err.message || 'Ошибка');
-        }
-      });
-    });
-  } catch (err) {
-    box.innerHTML = `<div class="friends-empty">${escapeHtml(err.message)}</div>`;
-    box.classList.remove('hidden');
   }
 }
 
@@ -3713,7 +4163,17 @@ function initFriendsUI() {
   $$('.menu-friends-btn').forEach(btn => {
     btn.addEventListener('click', () => openFriendsModal());
   });
-  // also single querySelector fallback
+  function openNotificationsPage() {
+    $$('#user-menu').forEach(m => m.classList.add('hidden'));
+    $$('#avatar-btn').forEach(b => b.setAttribute('aria-expanded', 'false'));
+    gotoView('notifications');
+  }
+  $$('#menu-notifications, .menu-notifications-btn').forEach(btn => {
+    btn.addEventListener('click', openNotificationsPage);
+  });
+  const bottomDl = $('#bottom-dl-btn');
+  if (bottomDl) bottomDl.addEventListener('click', () => gotoView('downloads'));
+
   const close = $('#friends-close');
   if (close) close.addEventListener('click', closeFriendsModal);
   const backdrop = $('#friends-backdrop');
@@ -3725,20 +4185,36 @@ function initFriendsUI() {
       clearTimeout(friendsSearchTimer);
       friendsSearchTimer = setTimeout(() => searchFriends(search.value.trim()), 250);
     });
+    search.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && friendsAddMode) {
+        e.preventDefault();
+        lookupFriendCode(search.value.trim());
+      }
+    });
   }
 
   const addBtn = $('#friends-add-btn');
-  if (addBtn) {
-    addBtn.addEventListener('click', () => {
-      const s = $('#friends-search');
-      if (s) { s.focus(); s.placeholder = 'Введите ник друга...'; }
-    });
-  }
+  if (addBtn) addBtn.addEventListener('click', () => setFriendsAddMode(!friendsAddMode));
+
+  $('#friends-code-request')?.addEventListener('click', async () => {
+    if (!friendsCodeUser) return;
+    try {
+      const res = await postJSON(`${FRIENDS_API}?action=request`, { user_id: friendsCodeUser.id });
+      if (!res.ok) throw new Error(res.error || 'Ошибка');
+      toast('Заявка отправлена');
+      lookupFriendCode($('#friends-search')?.value || '');
+      loadFriendsList();
+    } catch (err) {
+      toast(err.message || 'Ошибка');
+    }
+  });
+  $('#friends-code-profile')?.addEventListener('click', () => {
+    if (!friendsCodeUser) return;
+    openUserProfile(friendsCodeUser.username, friendsCodeUser.id);
+  });
 
   $$('.friends-section-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      btn.classList.toggle('open');
-    });
+    btn.addEventListener('click', () => btn.classList.toggle('open'));
   });
 }
 
@@ -3912,6 +4388,7 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
   }
   const uname = $('#hp-username');
   if (uname) uname.textContent = p.username;
+  renderProfileFriendCode(p.friend_code || '');
   setProfileRoleBadge(p);
 
   // hide own-only controls
@@ -4067,7 +4544,7 @@ function openChat(userId, username) {
   const input = $('#chat-input');
   if (input) {
     input.value = '';
-    input.placeholder = `Сообщение ${username || ''}`.trim();
+    input.placeholder = `Сообщение ${username || ''}…`.trim();
     setTimeout(() => input.focus(), 50);
   }
   loadChatThread();
@@ -4105,7 +4582,13 @@ async function loadChatThread(silent) {
     const statusEl = $('#chat-peer-status');
     if (statusEl && peer) statusEl.textContent = peer.is_online ? 'В сети' : 'Не в сети';
     const hint = $('#chat-offline-hint');
-    if (hint) hint.classList.toggle('hidden', !!(peer && peer.is_online));
+    if (hint) {
+      const online = !!(peer && peer.is_online);
+      hint.classList.toggle('hidden', online);
+      if (!online && peer) {
+        hint.textContent = `${peer.username} не в сети — увидит сообщения позже.`;
+      }
+    }
 
     renderChatMessages(data.messages || []);
   } catch (err) {
@@ -4113,49 +4596,130 @@ async function loadChatThread(silent) {
   }
 }
 
+function chatCoverUrl(gameId) {
+  const id = String(gameId || '').replace(/[^0-9]/g, '');
+  if (!id) return '';
+  // сначала из кэша библиотеки / стора
+  try {
+    const pools = [];
+    if (typeof libraryCache !== 'undefined' && Array.isArray(libraryCache)) pools.push(...libraryCache);
+    if (typeof storeCache !== 'undefined' && Array.isArray(storeCache)) pools.push(...storeCache);
+    if (typeof homeCache !== 'undefined' && homeCache) {
+      pools.push(...(homeCache.featured || []), ...(homeCache.games || []));
+    }
+    const g = pools.find(x => String(x.id) === id);
+    if (g) {
+      const u = g.cover_src || g.cover_url || g.icon_url || g.banner_url;
+      if (u) return resolveChatImageUrl(u);
+    }
+  } catch (e) {}
+  return resolveChatImageUrl('media.php?type=cover&id=' + id);
+}
+
+function resolveChatImageUrl(raw) {
+  let url = String(raw || '').trim();
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url) || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  url = url.replace(/^\/+/, '');
+  try {
+    // абсолютный URL от текущей страницы (важно для webview)
+    return new URL(url, window.location.href).href;
+  } catch (e) {
+    return url;
+  }
+}
+
 function renderChatMessages(messages) {
   const box = $('#chat-messages');
   if (!box) return;
-  const empty = $('#chat-empty');
+  const peerName = ($('#chat-peer-name')?.textContent || 'другу').trim();
   if (!messages.length) {
     box.innerHTML = `
       <div class="chat-empty" id="chat-empty">
         <div class="chat-empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
         <div class="chat-empty-title">Пока нет сообщений</div>
-        <div class="chat-empty-sub">Напишите первыми</div>
+        <div class="chat-empty-sub">Напишите ${escapeHtml(peerName)}</div>
       </div>`;
     return;
   }
   const wasBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+
   box.innerHTML = messages.map(m => {
     const time = formatDateTime(m.created_at);
     const cls = m.mine ? 'mine' : 'theirs';
-    let inner = '';
-    if (m.body && m.body.startsWith('[image]')) {
-      const url = m.body.slice(7);
-      inner = `<img class="chat-msg-image" src="${escapeHtml(url)}" alt="" loading="lazy" /><span class="chat-bubble-time">${escapeHtml(time)}</span>`;
-      return `<div class="chat-bubble special ${cls}">${inner}</div>`;
+    const body = String(m.body || '').trim();
+
+    // ---- IMAGE / DRAWING ----
+    const imgMatch = body.match(/^\[image\](.+)$/i);
+    if (imgMatch || body.startsWith('[image]')) {
+      const raw = imgMatch ? imgMatch[1].trim() : body.slice(7).trim();
+      const url = resolveChatImageUrl(raw);
+      return `<div class="chat-attach ${cls}" data-type="image">
+        <div class="chat-attach-media">
+          ${url
+            ? `<img src="${escapeHtml(url)}" alt="Изображение" loading="lazy" class="chat-attach-img" data-fallback="1" />`
+            : `<div class="chat-attach-broken">🖼 Нет файла</div>`}
+        </div>
+        <div class="chat-attach-foot"><span>Изображение</span><span class="chat-attach-time">${escapeHtml(time)}</span></div>
+      </div>`;
     }
-    if (m.body && m.body.startsWith('[game:')) {
-      const mid = m.body.match(/^\[game:(\d+)\](.*)$/);
-      const gid = mid ? mid[1] : '';
-      const title = mid ? mid[2] : 'Игра';
-      inner = `<div class="chat-msg-game" data-game-id="${gid}">
-        <img src="media.php?type=cover&id=${gid}" alt="" />
-        <div><div class="chat-msg-game-title">${escapeHtml(title)}</div><div class="chat-msg-game-sub">Игра из библиотеки</div></div>
-      </div><span class="chat-bubble-time" style="padding:0 10px 8px;display:block">${escapeHtml(time)}</span>`;
-      return `<div class="chat-bubble special ${cls}">${inner}</div>`;
+
+    // ---- GAME SHARE ----
+    const gameMatch = body.match(/^\[game:(\d+)\](.*)$/i);
+    if (gameMatch) {
+      const gid = gameMatch[1];
+      const title = (gameMatch[2] || '').trim() || 'Игра';
+      const cover = chatCoverUrl(gid);
+      return `<div class="chat-attach ${cls}" data-type="game">
+        <button type="button" class="chat-attach-game" data-game-id="${escapeHtml(gid)}">
+          <span class="chat-attach-game-cover">
+            ${cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" onerror="this.remove()" />` : ''}
+          </span>
+          <span class="chat-attach-game-info">
+            <span class="chat-attach-game-title">${escapeHtml(title)}</span>
+            <span class="chat-attach-game-sub">Игра · открыть</span>
+          </span>
+        </button>
+        <div class="chat-attach-foot"><span></span><span class="chat-attach-time">${escapeHtml(time)}</span></div>
+      </div>`;
     }
-    return `<div class="chat-bubble ${cls}">${escapeHtml(m.body)}<span class="chat-bubble-time">${escapeHtml(time)}</span></div>`;
+
+    // ---- TEXT ----
+    return `<div class="chat-bubble ${cls}">${escapeHtml(body)}<span class="chat-bubble-time">${escapeHtml(time)}</span></div>`;
   }).join('');
-  $$('.chat-msg-game', box).forEach(el => {
-    el.addEventListener('click', () => { if (el.dataset.gameId) gotoGame(el.dataset.gameId); });
+
+  $$('.chat-attach-game', box).forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = el.dataset.gameId;
+      if (id) gotoGame(id);
+    });
   });
+  // images: error fallback + click
+  $$('.chat-attach-img', box).forEach(img => {
+    img.addEventListener('error', () => {
+      const broken = document.createElement('div');
+      broken.className = 'chat-attach-broken';
+      broken.textContent = '🖼 Файл недоступен';
+      img.replaceWith(broken);
+    });
+    img.addEventListener('click', () => {
+      try {
+        if (typeof openLightbox === 'function') openLightbox(img.src);
+        else window.open(img.src, '_blank');
+      } catch (e) {
+        window.open(img.src, '_blank');
+      }
+    });
+  });
+
   if (wasBottom || !silentRenderGuard) {
     box.scrollTop = box.scrollHeight;
   }
 }
 let silentRenderGuard = false;
+
+
 
 async function sendChatMessage() {
   const input = $('#chat-input');
@@ -4224,23 +4788,43 @@ async function refreshBadge() {
     const data = await fetchJSON(`${NOTIF_API}?action=badge`);
     if (!data.ok) return;
     const total = data.total || 0;
+    const notifN = data.notifications || 0;
+    const reqN = data.requests || 0;
+
     $$('.friends-menu-badge').forEach(el => {
-      if (total > 0) {
-        el.textContent = total > 99 ? '99+' : String(total);
+      const n = reqN || 0;
+      if (n > 0) {
+        el.textContent = n > 99 ? '99+' : String(n);
         el.classList.remove('hidden');
       } else {
         el.classList.add('hidden');
       }
     });
+
+    $$('.notif-menu-badge').forEach(el => {
+      if (notifN > 0) {
+        el.textContent = notifN > 99 ? '99+' : String(notifN);
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    });
+
     const tabBadge = $('#notif-tab-badge');
     if (tabBadge) {
-      const n = (data.notifications || 0) + (data.requests || 0);
+      const n = notifN + reqN;
       if (n > 0) {
         tabBadge.textContent = String(n);
         tabBadge.classList.remove('hidden');
       } else {
         tabBadge.classList.add('hidden');
       }
+    }
+
+    const dot = $('#side-avatar-dot');
+    if (dot) {
+      if (total > 0) dot.classList.add('visible');
+      else dot.classList.remove('visible');
     }
   } catch (e) {}
 }
@@ -4255,10 +4839,10 @@ async function loadNotifications() {
     const items = data.notifications || [];
     if (!items.length) {
       list.innerHTML = `
-        <div class="chat-empty" style="padding:40px 10px">
-          <div class="chat-empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
-          <div class="chat-empty-title">Нет уведомлений</div>
-          <div class="chat-empty-sub">Вы в курсе всех событий</div>
+        <div class="notif-page-empty">
+          <div class="notif-page-empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+          <div class="notif-page-empty-title">Нет уведомлений</div>
+          <div class="notif-page-empty-sub">Вы в курсе всех событий! Загляните позже за новыми обновлениями.</div>
         </div>`;
       return;
     }
@@ -4304,19 +4888,6 @@ async function loadNotifications() {
 }
 
 function initNotificationsUI() {
-  $$('.friends-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      $$('.friends-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      const name = tab.dataset.ftab;
-      const fp = $('#friends-pane-friends');
-      const np = $('#friends-pane-notifications');
-      if (fp) fp.classList.toggle('hidden', name !== 'friends');
-      if (np) np.classList.toggle('hidden', name !== 'notifications');
-      if (name === 'notifications') loadNotifications();
-    });
-  });
-
   $$('.notif-filter').forEach(btn => {
     btn.addEventListener('click', () => {
       $$('.notif-filter').forEach(b => b.classList.remove('active'));
@@ -4408,7 +4979,8 @@ function initChatExtras() {
         const res = await fetch(`${MESSAGES_API}?action=upload`, { method: 'POST', body: fd });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Ошибка');
-        loadChatThread();
+        silentRenderGuard = false;
+        await loadChatThread();
         toast('Изображение отправлено');
       } catch (err) {
         toast(err.message || 'Не удалось отправить');
@@ -4495,7 +5067,8 @@ function initDrawCanvas() {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Ошибка');
         $('#chat-draw-overlay')?.classList.add('hidden');
-        loadChatThread();
+        silentRenderGuard = false;
+        await loadChatThread();
         toast('Рисунок отправлен');
       } catch (err) {
         toast(err.message || 'Не удалось отправить');
@@ -4518,11 +5091,13 @@ async function openGamePicker() {
       list.innerHTML = '<div class="friends-empty">Библиотека пуста</div>';
       return;
     }
-    list.innerHTML = games.map(g => `
-      <button type="button" class="chat-game-pick-item" data-id="${g.id}" data-title="${escapeHtml(g.title)}">
-        <img src="media.php?type=cover&id=${g.id}" alt="" />
+    list.innerHTML = games.map(g => {
+      const cov = g.cover_src || g.cover_url || ('media.php?type=cover&id=' + g.id);
+      return `<button type="button" class="chat-game-pick-item" data-id="${g.id}" data-title="${escapeHtml(g.title)}">
+        <img src="${escapeHtml(cov)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'" />
         <span>${escapeHtml(g.title)}</span>
-      </button>`).join('');
+      </button>`;
+    }).join('');
     $$('.chat-game-pick-item', list).forEach(btn => {
       btn.addEventListener('click', async () => {
         picker.classList.add('hidden');
@@ -4979,6 +5554,235 @@ function initAdminUI() {
     el.classList.remove('hidden');
   };
 
+  let steamPreviewData = null;
+  let steamSelected = { icon_url: '', logo_url: '', banner_url: '', cover_url: '' };
+  let steamAppId = 0;
+  let sgdbCache = {}; // type -> assets[]
+  let sgdbCurrentType = 'icons';
+  // expose for game-page gear
+  window.getSteamAssetState = () => ({ steamAppId, steamSelected, sgdbCache, steamPreviewData });
+  window.setSteamAppId = (id) => { steamAppId = id; sgdbCache = {}; };
+  window.loadSgdbAssetsGlobal = (t) => loadSgdbAssets(t || 'icons');
+  window.openSteamModal = openSteamModal;
+  window.closeSteamModal = closeSteamModal;
+
+
+  function openSteamModal() {
+    if (typeof resetSteamModalToImportMode === 'function') resetSteamModalToImportMode();
+    const m = $('#steam-import-modal');
+    if (!m) return;
+    // import mode defaults
+    $$('.sgdb-nav-btn', m).forEach(b => {
+      b.style.display = '';
+      b.classList.toggle('active', b.dataset.sgdbTab === 'main');
+    });
+    $$('.sgdb-pane', m).forEach(p => p.classList.toggle('active', p.dataset.sgdbPane === 'main'));
+    m.classList.remove('hidden');
+    m.setAttribute('aria-hidden', 'false');
+  }
+  function closeSteamModal() {
+    const m = $('#steam-import-modal');
+    if (!m) return;
+    m.classList.add('hidden');
+    m.setAttribute('aria-hidden', 'true');
+    if (typeof resetSteamModalToImportMode === 'function') resetSteamModalToImportMode();
+  }
+  // admin uses inline form; modal only from game gear
+  //   $('#steam-open-modal-btn')?.addEventListener('click', openSteamModal);
+
+  // ===== Классический импорт в админке (без модалки) =====
+  (function initAdminSteamInline() {
+    const previewBtn = $('#steam-preview-admin-btn');
+    const importBtn = $('#steam-import-admin-btn');
+    if (!previewBtn && !importBtn) return;
+    const showErr = (msg) => {
+      const el = $('#steam-import-error');
+      if (!el) return;
+      if (!msg) { el.classList.add('hidden'); el.textContent = ''; return; }
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    };
+    previewBtn?.addEventListener('click', async () => {
+      const url = ($('#steam-url-admin')?.value || '').trim();
+      showErr('');
+      const box = $('#steam-preview-admin');
+      box?.classList.add('hidden');
+      if (!url) { showErr('Вставь ссылку или AppID'); return; }
+      previewBtn.disabled = true;
+      previewBtn.textContent = 'Загрузка...';
+      try {
+        const data = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
+        if (!data.ok) throw new Error(data.error || 'Ошибка');
+        window.__adminSteamPreview = data;
+        const banner = $('#steam-preview-admin-banner');
+        const cover = $('#steam-preview-admin-cover');
+        if (banner) banner.src = data.banner_url || data.cover_url || '';
+        if (cover) cover.src = data.cover_url || '';
+        const t = $('#steam-preview-admin-title');
+        if (t) t.textContent = data.title || '';
+        const m = $('#steam-preview-admin-meta');
+        if (m) m.textContent = [data.developers, data.publishers, data.release_date].filter(Boolean).join(' · ');
+        const s = $('#steam-preview-admin-short');
+        if (s) s.textContent = (data.short_description || '').slice(0, 280);
+        box?.classList.remove('hidden');
+      } catch (e) {
+        showErr(e.message || 'Не удалось загрузить');
+      } finally {
+        previewBtn.disabled = false;
+        previewBtn.textContent = 'Проверить';
+      }
+    });
+    importBtn?.addEventListener('click', async () => {
+      const url = ($('#steam-url-admin')?.value || '').trim();
+      showErr('');
+      if (!url) { showErr('Вставь ссылку или AppID'); return; }
+      importBtn.disabled = true;
+      importBtn.textContent = 'Импорт...';
+      try {
+        const data = await postJSON(`${STEAM_API}?action=import`, {
+          url,
+          publish: $('#steam-publish-admin')?.checked ? 1 : 0,
+        }, FETCH_TIMEOUT_LONG);
+        if (!data.ok) throw new Error(data.error || 'Ошибка импорта');
+        toast('Игра импортирована' + (data.title ? ': ' + data.title : ''));
+        if (data.game_id && typeof loadGamePage === 'function') {
+          // optional
+        }
+        if (typeof loadSideLibrary === 'function') loadSideLibrary();
+        showErr('');
+      } catch (e) {
+        showErr(e.message || 'Ошибка импорта');
+      } finally {
+        importBtn.disabled = false;
+        importBtn.textContent = 'Импортировать в CATio';
+      }
+    });
+  })();
+
+  document.querySelectorAll('[data-close-steam-modal]').forEach(el => {
+    el.addEventListener('click', closeSteamModal);
+  });
+
+  // side nav tabs
+  $$('.sgdb-nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.sgdbTab;
+      $$('.sgdb-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
+      $$('.sgdb-pane').forEach(p => p.classList.toggle('active', p.dataset.sgdbPane === tab));
+      if (tab === 'assets' && steamAppId) loadSgdbAssets(sgdbCurrentType);
+    });
+  });
+
+  // asset subtabs
+  $$('.sgdb-asset-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.assetType;
+      sgdbCurrentType = t;
+      $$('.sgdb-asset-tab').forEach(b => b.classList.toggle('active', b === btn));
+      loadSgdbAssets(t);
+    });
+  });
+
+  function setSgdbPreview(url, type) {
+    const wrap = $('#sgdb-asset-preview');
+    const img = $('#sgdb-asset-preview-img');
+    if (img) img.src = url || '';
+    if (wrap) {
+      wrap.classList.remove('is-hero', 'is-grid', 'is-logo');
+      if (type === 'heroes') wrap.classList.add('is-hero');
+      if (type === 'grids') wrap.classList.add('is-grid');
+      if (type === 'logos') wrap.classList.add('is-logo');
+    }
+  }
+
+  function selectSgdbAsset(url, type) {
+    if (type === 'icons') {
+      steamSelected.icon_url = url;
+      $('#steam-sel-icon').value = url;
+    } else if (type === 'logos') {
+      steamSelected.logo_url = url;
+      $('#steam-sel-logo').value = url;
+    } else if (type === 'heroes') {
+      steamSelected.banner_url = url;
+      $('#steam-sel-banner').value = url;
+    } else if (type === 'grids') {
+      steamSelected.cover_url = url;
+      $('#steam-sel-cover').value = url;
+    }
+    setSgdbPreview(url, type);
+    if (window.__steamEditMode && window.__steamEditGameId) {
+      const locked = Number(window.__steamEditGameId);
+      if (!locked) return;
+      applyGameAssetNow(locked, type, url);
+    }
+  }
+
+  async function loadSgdbAssets(type) {
+    const grid = $('#sgdb-asset-grid');
+    if (!grid) return;
+    if (!steamAppId && window.__steamAppId) steamAppId = +window.__steamAppId;
+    if (!steamAppId) {
+      grid.innerHTML = '<div class="settings-hint">Сначала загрузи игру во вкладке «Основные»</div>';
+      return;
+    }
+    grid.className = 'sgdb-asset-grid is-' + type;
+    if (sgdbCache[type]) {
+      renderSgdbGrid(sgdbCache[type], type);
+      return;
+    }
+    grid.innerHTML = '<div class="loading">Загрузка SteamGridDB...</div>';
+    try {
+      const data = await fetchJSON(`${API_BASE}?action=sgdb_assets&appid=${steamAppId}&type=${encodeURIComponent(type)}`, { timeout: FETCH_TIMEOUT_LONG });
+      if (!data.ok) {
+        grid.innerHTML = `<div class="settings-hint">${escapeHtml(data.error || 'Ошибка SGDB')}</div>`;
+        // fallback: steam CDN options from preview
+        if (steamPreviewData) {
+          const fb = [];
+          if (type === 'icons' && steamPreviewData.icon_options) fb.push(...steamPreviewData.icon_options.map(u => ({ url: u, thumb: u })));
+          if (type === 'grids' && steamPreviewData.cover_options) fb.push(...steamPreviewData.cover_options.map(u => ({ url: u, thumb: u })));
+          if (type === 'heroes' && steamPreviewData.banner_options) fb.push(...steamPreviewData.banner_options.map(u => ({ url: u, thumb: u })));
+          if (fb.length) renderSgdbGrid(fb, type);
+        }
+        return;
+      }
+      sgdbCache[type] = data.assets || [];
+      renderSgdbGrid(sgdbCache[type], type);
+    } catch (e) {
+      grid.innerHTML = `<div class="settings-hint">${escapeHtml(e.message || 'Ошибка')}</div>`;
+    }
+  }
+
+  function renderSgdbGrid(list, type) {
+    const grid = $('#sgdb-asset-grid');
+    if (!grid) return;
+    if (!list.length) {
+      grid.innerHTML = '<div class="settings-hint">Ничего не найдено</div>';
+      return;
+    }
+    const selected =
+      type === 'icons' ? steamSelected.icon_url :
+      type === 'logos' ? steamSelected.logo_url :
+      type === 'heroes' ? steamSelected.banner_url :
+      steamSelected.cover_url;
+    grid.innerHTML = list.map(a => {
+      const u = a.url || a.thumb;
+      const th = a.thumb || a.url;
+      return `<button type="button" class="sgdb-grid-item is-${type}${u === selected ? ' selected' : ''}" data-url="${escapeHtml(u)}">
+        <img src="${escapeHtml(th)}" alt="" loading="lazy" onerror="this.parentElement.style.opacity=0.3" />
+      </button>`;
+    }).join('');
+    $$('.sgdb-grid-item', grid).forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('.sgdb-grid-item', grid).forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectSgdbAsset(btn.dataset.url, type);
+      });
+    });
+    // auto preview first/selected
+    const cur = selected || (list[0] && (list[0].url || list[0].thumb));
+    if (cur) setSgdbPreview(cur, type);
+  }
+
   $('#steam-preview-btn')?.addEventListener('click', async () => {
     const url = ($('#steam-url')?.value || '').trim();
     showErr('');
@@ -4990,45 +5794,105 @@ function initAdminUI() {
       const data = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
       if (!data.ok) throw new Error(data.error || 'Ошибка');
       const p = data.preview || {};
+      steamPreviewData = p;
+      steamAppId = p.appid || 0;
+      sgdbCache = {};
+      steamSelected = {
+        icon_url: (p.icon_options && p.icon_options[0]) || p.library_image || '',
+        logo_url: '',
+        banner_url: (p.banner_options && p.banner_options[0]) || p.header_image || '',
+        cover_url: (p.cover_options && p.cover_options[0]) || p.capsule_image || '',
+      };
       const banner = $('#steam-preview-banner');
       const cover = $('#steam-preview-cover');
-      if (banner) banner.src = p.header_image || p.background || '';
-      if (cover) cover.src = p.capsule_image || p.header_image || '';
+      if (banner) banner.src = steamSelected.banner_url;
+      if (cover) cover.src = steamSelected.cover_url;
       const title = $('#steam-preview-title');
       if (title) title.textContent = p.title || '';
+      const mt = $('#sgdb-modal-title');
+      if (mt && p.title) mt.textContent = p.title;
       const meta = $('#steam-preview-meta');
       if (meta) meta.textContent = [p.developer, p.genre, p.release_date, p.is_free ? 'Бесплатно' : ''].filter(Boolean).join(' · ');
       const short = $('#steam-preview-short');
       if (short) short.textContent = p.short_description || '';
       const shots = $('#steam-preview-shots');
       if (shots) {
-        shots.innerHTML = (p.screenshots || []).slice(0, 8).map(src =>
+        shots.innerHTML = (p.screenshots || []).slice(0, 12).map(src =>
           `<img src="${escapeHtml(src)}" alt="" loading="lazy" />`
-        ).join('');
+        ).join('') || '<span class="settings-hint">Нет скриншотов</span>';
+      }
+      const vids = $('#steam-preview-videos');
+      if (vids) {
+        const movies = p.movies || [];
+        vids.innerHTML = movies.length ? movies.map(m => `
+          <div class="steam-vid">
+            <img src="${escapeHtml(m.thumbnail || '')}" alt="" />
+            <span>${escapeHtml(m.name || 'Трейлер')}</span>
+          </div>`).join('') : '<span class="settings-hint">Нет видео</span>';
+      }
+      const achs = $('#steam-preview-achs');
+      const achCount = $('#steam-ach-count');
+      const alist = p.achievements || [];
+      if (achCount) achCount.textContent = alist.length ? `(${alist.length})` : '';
+      if (achs) {
+        achs.innerHTML = alist.length ? alist.slice(0, 12).map(a => `
+          <div class="steam-ach-row">
+            ${a.icon_url ? `<img src="${escapeHtml(a.icon_url)}" alt="" />` : ''}
+            <span class="n">${escapeHtml(a.display_name || '')}</span>
+            <span class="p">${a.percent ? (Number(a.percent).toFixed(1) + '%') : ''}</span>
+          </div>`).join('') : '<span class="settings-hint">Нет ачивок</span>';
       }
       $('#steam-preview')?.classList.remove('hidden');
       toast('Данные Steam получены');
     } catch (e) {
       showErr(e.message || 'Не удалось получить данные');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Проверить'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Загрузить'; }
     }
   });
 
   $('#steam-import-btn')?.addEventListener('click', async () => {
-    const url = ($('#steam-url')?.value || '').trim();
-    showErr('');
-    if (!url) { showErr('Вставь ссылку или AppID'); return; }
     const btn = $('#steam-import-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Импорт...'; }
+    const isEdit = btn && btn.dataset.mode === 'edit' && window.__steamEditGameId;
+    showErr('');
+    if (!isEdit) {
+      const url = ($('#steam-url')?.value || '').trim();
+      if (!url) { showErr('Вставь ссылку или AppID'); return; }
+    }
+    if (btn) { btn.disabled = true; btn.textContent = isEdit ? 'Сохранение...' : 'Импорт...'; }
     try {
+      if (isEdit) {
+        const data = await postJSON(`${API_BASE}?action=update_assets`, {
+          game_id: window.__steamEditGameId,
+          icon_url: steamSelected.icon_url || $('#steam-sel-icon')?.value || '',
+          cover_url: steamSelected.cover_url || $('#steam-sel-cover')?.value || '',
+          banner_url: steamSelected.banner_url || $('#steam-sel-banner')?.value || '',
+          logo_url: steamSelected.logo_url || $('#steam-sel-logo')?.value || '',
+        }, FETCH_TIMEOUT_LONG);
+        if (!data.ok) throw new Error(data.error || 'Ошибка сохранения');
+        toast('Ассеты сохранены');
+        closeSteamModal();
+        window.__steamEditGameId = null;
+        if (btn) { btn.dataset.mode = ''; btn.textContent = 'Импортировать'; }
+        // refresh game page / side lib
+        if (typeof loadSideLibrary === 'function') loadSideLibrary();
+        const gid = data.game_id;
+        if (gid && typeof loadGamePage === 'function') loadGamePage(gid);
+        return;
+      }
+      const url = ($('#steam-url')?.value || '').trim();
       const data = await postJSON(`${STEAM_API}?action=import`, {
         url,
         publish: $('#steam-publish')?.checked ? 1 : 0,
+        icon_url: steamSelected.icon_url || $('#steam-sel-icon')?.value || '',
+        cover_url: steamSelected.cover_url || $('#steam-sel-cover')?.value || '',
+        banner_url: steamSelected.banner_url || $('#steam-sel-banner')?.value || '',
+        logo_url: steamSelected.logo_url || $('#steam-sel-logo')?.value || '',
       }, FETCH_TIMEOUT_LONG);
-      if (!data.ok) throw new Error(data.error || 'Ошибка импорта');
+if (!data.ok) throw new Error(data.error || 'Ошибка импорта');
       const vidInfo = data.videos ? `, видео: ${data.videos}` : '';
       toast(`Импортировано: ${data.title} (id ${data.game_id}${vidInfo})`);
+      closeSteamModal();
       homeCache = null;
       storeCache = [];
       if (data.status === 'published' && typeof gotoGame === 'function') {
@@ -5325,7 +6189,7 @@ function setGalleryMain(wrap, type, src, thumb, fallbacks) {
   if (type === 'video') {
     const yt = youtubeIdFromUrl(src);
     if (yt) {
-      box.innerHTML = `<iframe id="gallery-main-video" src="https://www.youtube.com/embed/${escapeHtml(yt)}?autoplay=1&rel=0"
+      box.innerHTML = `<iframe id="gallery-main-video" src="https://www.youtube.com/embed/${escapeHtml(yt)}?autoplay=1&mute=1&rel=0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen style="width:100%;height:100%;border:0;border-radius:8px;background:#000"></iframe>`;
     } else {
@@ -5350,7 +6214,23 @@ function setGalleryMain(wrap, type, src, thumb, fallbacks) {
         box.innerHTML = `<video id="gallery-main-video" controls playsinline preload="metadata" poster="${escapeHtml(thumb || '')}"></video>`;
         const v = $('#gallery-main-video', wrap);
         if (!v) return;
+        v.muted = true;
+        v.defaultMuted = true;
+        v.setAttribute('muted', '');
         v.addEventListener('error', () => tryPlay(), { once: true });
+        v.addEventListener('ended', () => {
+          const items = wrap._galleryItems || [];
+          const cur = items.findIndex(it => it.type === 'video' && (it.src === safeSrc || (it.fallbacks || []).includes(safeSrc)));
+          // следующее видео в галерее
+          for (let i = (cur >= 0 ? cur + 1 : 0); i < items.length; i++) {
+            if (items[i].type === 'video') {
+              setGalleryMain(wrap, 'video', items[i].src, items[i].thumb || '', items[i].fallbacks || []);
+              // подсветить thumb
+              $$('.gp-gallery-thumb', wrap).forEach((t, ti) => t.classList.toggle('active', ti === i));
+              return;
+            }
+          }
+        }, { once: true });
 
         if (isHls) {
           // Safari — native HLS
@@ -5680,6 +6560,8 @@ document.addEventListener('DOMContentLoaded', () => {
   safe('initChatUI', initChatUI);
   safe('initChatExtras', initChatExtras);
   safe('initNotificationsUI', initNotificationsUI);
+  safe('initBottomBar', initBottomBar);
+  safe('bindFriendCodeButtons', () => { bindFriendCodeButtons(); renderProfileFriendCode(getMyFriendCode()); updateBottomBarVersion(); });
   safe('initAdminPanel', initAdminPanel);
   safe('initAdminUserModal', initAdminUserModal);
   safe('initSideLibrary', initSideLibrary);

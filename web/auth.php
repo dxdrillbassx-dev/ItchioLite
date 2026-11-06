@@ -113,15 +113,16 @@ function getCurrentUser() {
 
     $db = getDB();
     $stmt = $db->prepare("
-        SELECT u.id, u.username, u.email, u.role, u.balance, u.avatar, u.avatar_color, u.avatar_url, u.banner_url, u.banner_pos, u.banner_zoom, u.karma, u.last_seen, u.is_online, u.lang, u.profile_visibility, u.media_visibility, u.allow_friend_requests, u.notif_prefs, u.created_at
+        SELECT u.id, u.username, u.email, u.role, u.balance, u.avatar, u.avatar_color, u.avatar_url, u.banner_url, u.banner_pos, u.banner_zoom, u.karma, u.last_seen, u.is_online, u.lang, u.profile_visibility, u.media_visibility, u.allow_friend_requests, u.notif_prefs, u.friend_code, u.created_at
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.id = ? AND s.expires_at > NOW()
     ");
     $stmt->execute([$_COOKIE['catio_sid']]);
     $user = $stmt->fetch();
-
-    return $user ?: null;
+    if (!$user) return null;
+    $user = ensureUserFriendCode($user);
+    return $user;
 }
 
 function isLoggedIn() {
@@ -130,6 +131,41 @@ function isLoggedIn() {
 
 function isAdmin($user) {
     return $user && $user['role'] === 'admin';
+}
+
+
+function generateFriendCode(PDO $db = null): string {
+    $db = $db ?: getDB();
+    $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    for ($attempt = 0; $attempt < 40; $attempt++) {
+        $code = '';
+        for ($i = 0; $i < 8; $i++) {
+            $code .= $chars[random_int(0, strlen($chars) - 1)];
+        }
+        $st = $db->prepare("SELECT id FROM users WHERE friend_code = ? LIMIT 1");
+        $st->execute([$code]);
+        if (!$st->fetch()) return $code;
+    }
+    // fallback ultra unique
+    return substr(bin2hex(random_bytes(6)), 0, 8);
+}
+
+function ensureUserFriendCode(array $user): array {
+    if (!empty($user['friend_code'])) return $user;
+    $db = getDB();
+    $code = generateFriendCode($db);
+    try {
+        $db->prepare("UPDATE users SET friend_code = ? WHERE id = ? AND (friend_code IS NULL OR friend_code = '')")
+            ->execute([$code, (int)$user['id']]);
+        $user['friend_code'] = $code;
+    } catch (Throwable $e) {
+        // race: re-read
+        $st = $db->prepare("SELECT friend_code FROM users WHERE id = ?");
+        $st->execute([(int)$user['id']]);
+        $row = $st->fetch();
+        if ($row && !empty($row['friend_code'])) $user['friend_code'] = $row['friend_code'];
+    }
+    return $user;
 }
 
 // ========== РЕГИСТРАЦИЯ ==========
@@ -150,8 +186,9 @@ function registerUser($username, $email, $password) {
 
     $hash = password_hash($password, PASSWORD_ARGON2ID, ['memory_cost' => 65536, 'time_cost' => 4]);
 
-    $stmt = $db->prepare("INSERT INTO users (username, email, password_hash, role, balance) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$username, $email, $hash, $role, $isFirst ? 10000 : 0]);
+    $friendCode = generateFriendCode($db);
+    $stmt = $db->prepare("INSERT INTO users (username, email, password_hash, role, balance, friend_code) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$username, $email, $hash, $role, $isFirst ? 10000 : 0, $friendCode]);
 
     $userId = $db->lastInsertId();
 
@@ -217,6 +254,7 @@ function getAuthState() {
             'allow_friend_requests' => (int)($user['allow_friend_requests'] ?? 1),
             'notif_prefs' => $user['notif_prefs'] ?? null,
             'created_at' => $user['created_at'],
+            'friend_code' => $user['friend_code'] ?? '',
         ] : null,
         'csrf_token' => generateCsrfToken(),
     ];

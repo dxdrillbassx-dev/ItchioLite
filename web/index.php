@@ -91,7 +91,7 @@ if (!$isAuthorized && $currentView !== 'auth') {
 }
 
 // Личные разделы недоступны без аккаунта
-if (!$isAuthorized && in_array($currentView, ['library', 'downloads', 'profile', 'settings'], true)) {
+if (!$isAuthorized && in_array($currentView, ['library', 'downloads', 'profile', 'settings', 'notifications'], true)) {
     $currentView = 'auth';
 }
 
@@ -149,9 +149,14 @@ if ($isAuthorized) {
     <aside class="sidebar">
       <div class="side-user avatar-wrap">
         <button type="button" class="side-user-btn" id="avatar-btn" aria-haspopup="true" aria-expanded="false">
-          <span class="side-avatar" id="side-avatar" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor, (int)($user['id'] ?? 0)); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></span>
+          <span class="side-avatar-wrap">
+            <span class="side-avatar" id="side-avatar" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor, (int)($user['id'] ?? 0)); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></span>
+            <span class="side-avatar-dot" id="side-avatar-dot" aria-hidden="true"></span>
+          </span>
           <span class="side-user-name"><?php echo htmlspecialchars($user['username']); ?></span>
-          <span class="side-user-arrow">▾</span>
+          <span class="side-user-arrow" aria-hidden="true">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+          </span>
         </button>
         <div class="user-menu hidden" id="user-menu" role="menu">
           <div class="user-menu-head">
@@ -163,10 +168,12 @@ if ($isAuthorized) {
             <b id="user-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
           </div>
           
-          <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
           <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
+          <button type="button" class="user-menu-item" id="menu-notifications"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Уведомления <span class="menu-badge notif-menu-badge hidden">0</span></button>
+          <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
           <button type="button" class="user-menu-item" id="menu-downloads"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Загрузки</button>
           <button type="button" class="user-menu-item" id="menu-settings"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Настройки</button>
+          <div class="user-menu-sep" role="separator"></div>
           <button type="button" class="user-menu-item danger" id="menu-logout"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
         </div>
       </div>
@@ -208,10 +215,6 @@ if ($isAuthorized) {
         <div id="side-lib-list"><div class="side-lib-empty">Загрузка...</div></div>
       </div>
 
-      <div class="side-foot">
-        <span id="side-dl-status">Нет активных загрузок</span>
-        <span class="side-ver">CATio</span>
-      </div>
     </aside>
     <?php endif; ?>
 
@@ -242,10 +245,12 @@ if ($isAuthorized) {
               <span>Баланс</span>
               <b id="user-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
             </div>
+            <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
+            <button type="button" class="user-menu-item menu-notifications-btn" id="menu-notifications"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Уведомления <span class="menu-badge notif-menu-badge hidden">0</span></button>
             <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
-          <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
             <button type="button" class="user-menu-item" id="menu-downloads"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Загрузки</button>
             <button type="button" class="user-menu-item" id="menu-settings"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Настройки</button>
+            <div class="user-menu-sep" role="separator"></div>
             <button type="button" class="user-menu-item danger" id="menu-logout"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
           </div>
         </div>
@@ -280,6 +285,7 @@ if ($isAuthorized) {
           <img class="home-hero-bg" id="home-hero-bg" src="" alt="" />
           <div class="home-hero-grad"></div>
           <div class="home-hero-info">
+            <img class="home-hero-logo hidden" id="home-hero-logo" src="" alt="" />
             <h2 class="home-hero-title" id="home-hero-title"></h2>
             <p class="home-hero-desc" id="home-hero-desc"></p>
           </div>
@@ -375,6 +381,11 @@ if ($isAuthorized) {
         <div id="game-page"><div class="loading">Загрузка страницы игры...</div></div>
       </section>
 
+      <!-- ===== ДОСТИЖЕНИЯ ИГРЫ ===== -->
+      <section id="view-achievements" class="view">
+        <div id="achievements-page"><div class="loading">Загрузка достижений...</div></div>
+      </section>
+
       <!-- ===== БИБЛИОТЕКА (сетка карточек, как в Hydra) ===== -->
       <section id="view-library" class="view <?php echo $currentView === 'library' ? 'active' : ''; ?>">
         <div class="lib-head">
@@ -410,6 +421,31 @@ if ($isAuthorized) {
             <h3 class="downloads-history-title">Завершённые</h3>
             <div id="downloads-history" class="downloads-history">
               <p class="downloads-history-empty">Пока пусто</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== УВЕДОМЛЕНИЯ (полноценная страница) ===== -->
+      <section id="view-notifications" class="view <?php echo $currentView === 'notifications' ? 'active' : ''; ?>">
+        <div class="notif-page">
+          <div class="notif-page-toolbar">
+            <div class="notif-filters">
+              <button type="button" class="notif-filter active" data-nfilter="all">Все</button>
+              <button type="button" class="notif-filter" data-nfilter="unread">Непрочитанные</button>
+            </div>
+            <div class="notif-actions">
+              <button type="button" class="notif-btn" id="notif-read-all">Отметить все как прочитанные</button>
+              <button type="button" class="notif-btn danger" id="notif-clear-all">Очистить все</button>
+            </div>
+          </div>
+          <div class="notif-list" id="notif-list">
+            <div class="notif-page-empty" id="notif-empty">
+              <div class="notif-page-empty-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              </div>
+              <div class="notif-page-empty-title">Нет уведомлений</div>
+              <div class="notif-page-empty-sub">Вы в курсе всех событий! Загляните позже за новыми обновлениями.</div>
             </div>
           </div>
         </div>
@@ -889,36 +925,35 @@ if ($isAuthorized) {
                 <div class="loading">Загрузка...</div>
               </div>
             </div>
-<div class="settings-pane hidden" id="admin-pane-import">
+            <div class="settings-pane hidden" id="admin-pane-import">
               <h2 class="settings-title">Загрузка игр</h2>
               <p class="settings-desc">Вставь ссылку на страницу Steam Store — подтянем название, описание, шапку, обложку, скриншоты и трейлер.</p>
               <div class="settings-block steam-import-box">
                 <label class="settings-label full">
                   <span>Ссылка Steam или AppID</span>
                   <div class="steam-import-row">
-                    <input class="auth-input" id="steam-url" placeholder="https://store.steampowered.com/app/730/..." />
-                    <button type="button" class="auth-submit" id="steam-preview-btn">Проверить</button>
+                    <input class="auth-input" id="steam-url-admin" placeholder="https://store.steampowered.com/app/730/..." />
+                    <button type="button" class="auth-submit" id="steam-preview-admin-btn">Проверить</button>
                   </div>
                 </label>
-                <p class="settings-hint">Примеры: <code>https://store.steampowered.com/app/570</code> или просто <code>570</code></p>
+                <p class="settings-hint">Примеры: <code>https://store.steampowered.com/app/570</code> или просто <code>570</code>. Оформление (иконка/лого/баннер) — через шестерёнку на странице игры.</p>
                 <div id="steam-import-error" class="gp-comment-error hidden"></div>
-              </div>
-              <div id="steam-preview" class="steam-preview hidden">
-                <div class="steam-preview-hero">
-                  <img id="steam-preview-banner" src="" alt="" />
-                  <div class="steam-preview-hero-info">
-                    <img id="steam-preview-cover" class="steam-preview-cover" src="" alt="" />
-                    <div>
-                      <h3 id="steam-preview-title"></h3>
-                      <p id="steam-preview-meta" class="settings-hint"></p>
+                <div id="steam-preview-admin" class="steam-preview-mini hidden">
+                  <div class="steam-preview-hero">
+                    <img id="steam-preview-admin-banner" src="" alt="" />
+                    <div class="steam-preview-hero-info">
+                      <img id="steam-preview-admin-cover" class="steam-preview-cover" src="" alt="" />
+                      <div>
+                        <h3 id="steam-preview-admin-title"></h3>
+                        <p id="steam-preview-admin-meta" class="settings-hint"></p>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <p id="steam-preview-short" class="steam-preview-short"></p>
-                <div id="steam-preview-shots" class="steam-preview-shots"></div>
-                <div class="settings-actions">
-                  <label class="settings-check"><input type="checkbox" id="steam-publish" checked /> Сразу опубликовать</label>
-                  <button type="button" class="auth-submit" id="steam-import-btn">Импортировать в CATio</button>
+                  <p id="steam-preview-admin-short" class="steam-preview-short"></p>
+                  <div class="settings-actions" style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                    <label class="settings-check"><input type="checkbox" id="steam-publish-admin" checked /> Сразу опубликовать</label>
+                    <button type="button" class="auth-submit" id="steam-import-admin-btn">Импортировать в CATio</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -983,6 +1018,16 @@ if ($isAuthorized) {
       <?php endif; ?>
     </main>
     </div><!-- /content -->
+
+    <!-- Нижняя полоска (загрузки + версия) — как Steam/Hydra -->
+    <?php if ($isAuthorized): ?>
+    <div class="bottom-bar" id="bottom-bar">
+      <button type="button" class="bottom-bar-dl" id="bottom-bar-dl" title="Перейти к загрузкам">
+        Нет активных загрузок
+      </button>
+      <span class="bottom-bar-ver" id="bottom-bar-ver">CATio — v0.0.1</span>
+    </div>
+    <?php endif; ?>
   </div><!-- /app -->
 
   <?php if ($isAuthorized): ?>
@@ -1558,5 +1603,96 @@ function socialAuth(provider) {
       </div>
     </div>
   </div>
+
+<!-- Модалка оформления игры (как Hydra) -->
+<div id="steam-import-modal" class="sgdb-modal hidden" aria-hidden="true">
+  <div class="sgdb-modal-backdrop" data-close-steam-modal></div>
+  <div class="sgdb-modal-card" role="dialog" aria-modal="true">
+    <div class="sgdb-modal-head">
+      <h3 id="sgdb-modal-title">Игра</h3>
+      <button type="button" class="sgdb-modal-close" data-close-steam-modal aria-label="Закрыть">×</button>
+    </div>
+    <div class="sgdb-modal-body">
+      <aside class="sgdb-nav">
+        <button type="button" class="sgdb-nav-btn" data-sgdb-tab="main">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Основные
+        </button>
+        <button type="button" class="sgdb-nav-btn" data-sgdb-tab="path">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Расположение
+        </button>
+        <button type="button" class="sgdb-nav-btn active" data-sgdb-tab="assets">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          Настройка
+        </button>
+        <button type="button" class="sgdb-nav-btn" data-sgdb-tab="downloads">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Загрузки
+        </button>
+        <button type="button" class="sgdb-nav-btn sgdb-nav-danger" data-sgdb-tab="danger">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Опасная зона
+        </button>
+      </aside>
+      <div class="sgdb-content">
+        <div class="sgdb-pane" data-sgdb-pane="main">
+          <div class="sgdb-pane-title">Основные</div>
+          <div class="sgdb-info-grid">
+            <div class="sgdb-info-row"><span>Название</span><b id="sgdb-info-title">—</b></div>
+            <div class="sgdb-info-row"><span>Steam AppID</span><b id="sgdb-info-appid">—</b></div>
+            <div class="sgdb-info-row"><span>ID в CATio</span><b id="sgdb-info-id">—</b></div>
+          </div>
+          <p class="settings-hint">Ссылку Steam для импорта используй в админке → Загрузка игр. Здесь только оформление уже добавленной игры.</p>
+        </div>
+        <div class="sgdb-pane" data-sgdb-pane="path">
+          <div class="sgdb-pane-title">Расположение</div>
+          <div class="sgdb-placeholder">
+            <p>Путь к исполняемому файлу и папке игры</p>
+            <p class="settings-hint">В разработке</p>
+          </div>
+        </div>
+        <div class="sgdb-pane active" data-sgdb-pane="assets">
+          <div class="sgdb-asset-tabs">
+            <button type="button" class="sgdb-asset-tab active" data-asset-type="icons">Иконка</button>
+            <button type="button" class="sgdb-asset-tab" data-asset-type="logos">Логотип</button>
+            <button type="button" class="sgdb-asset-tab" data-asset-type="heroes">Баннер</button>
+            <button type="button" class="sgdb-asset-tab" data-asset-type="grids">Обложка</button>
+          </div>
+          <div class="sgdb-asset-preview-wrap">
+            <div class="sgdb-asset-preview checker" id="sgdb-asset-preview">
+              <img id="sgdb-asset-preview-img" src="" alt="" />
+            </div>
+          </div>
+          <p class="sgdb-warn">⚠ Ваши пользовательские изображения не будут синхронизированы с вашей учётной записью.</p>
+          <div class="sgdb-source-label">SteamGridDB</div>
+          <div id="sgdb-asset-grid" class="sgdb-asset-grid">
+            <div class="settings-hint">Загрузка…</div>
+          </div>
+          <input type="hidden" id="steam-sel-icon" />
+          <input type="hidden" id="steam-sel-logo" />
+          <input type="hidden" id="steam-sel-banner" />
+          <input type="hidden" id="steam-sel-cover" />
+        </div>
+        <div class="sgdb-pane" data-sgdb-pane="downloads">
+          <div class="sgdb-pane-title">Загрузки</div>
+          <div class="sgdb-placeholder">
+            <p>Нет активных загрузок</p>
+            <p class="settings-hint">В разработке</p>
+          </div>
+        </div>
+        <div class="sgdb-pane" data-sgdb-pane="danger">
+          <div class="sgdb-pane-title">Опасная зона</div>
+          <div class="sgdb-placeholder">
+            <p>Удаление игры из каталога и сброс локальных файлов</p>
+            <p class="settings-hint">В разработке</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 </body>
 </html>
