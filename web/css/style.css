@@ -20,6 +20,10 @@
   --radius-xl: 12px;
   --shadow: 0 8px 24px rgba(0,0,0,0.5);
   --font: 'Inter', system-ui, -apple-system, sans-serif;
+  /* единая высота шапки: главная / профиль / страница игры */
+  --hero-h: 320px;
+  --hero-h-sm: 220px;
+  --web-content-max: 1177px;
 }
 
 html, body {
@@ -2531,19 +2535,32 @@ body.client.auth-open .bottom-bar {
 }
 
 .head-back {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text);
-  font-size: 1rem;
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.12s ease, border-color 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.12s ease, background 0.12s ease;
 }
-
-.head-back:hover { color: var(--text-bright); border-color: var(--text-muted); }
+.head-back svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+.head-back:hover {
+  color: var(--text-bright);
+  background: rgba(255,255,255,0.06);
+}
+.head-back:active {
+  background: rgba(255,255,255,0.1);
+}
 
 .head-title {
   font-size: 1.05rem;
@@ -2589,8 +2606,8 @@ body.web .main {
 /* Hero — src/renderer/src/components/hero/hero.scss */
 .home-hero {
   width: 100%;
-  height: 180px;
-  min-height: 150px;
+  height: var(--hero-h);
+  min-height: var(--hero-h);
   border-radius: 0;
   color: #dadbe1;
   overflow: hidden;
@@ -2603,18 +2620,6 @@ body.web .main {
   display: block;
   background: #0e0d0c;
   margin: 0;
-}
-@media (min-width: 480px) {
-  .home-hero { height: 220px; min-height: 200px; }
-}
-@media (min-width: 768px) {
-  .home-hero { height: 300px; min-height: 300px; }
-}
-@media (min-width: 1024px) and (min-height: 800px) {
-  .home-hero { height: 400px; min-height: 400px; }
-}
-@media (min-width: 1024px) and (max-height: 799px) {
-  .home-hero { height: 300px; min-height: 250px; }
 }
 
 .home-hero-bg {
@@ -2689,13 +2694,14 @@ body.web .main {
   overflow: hidden;
 }
 
-/* Pills */
+/* Pills + section + grid — как Hydra home.scss */
 .home-pills {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
-  padding: 16px 24px 0;
+  /* горизонталь даёт .main; сверху воздуха после hero */
+  padding: 20px 0 0;
   margin: 0;
 }
 .home-pill {
@@ -2723,19 +2729,22 @@ body.web .main {
   font-size: 1.1rem;
   font-weight: 700;
   margin: 0;
-  padding: 16px 24px 0;
+  padding: 22px 0 12px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-/* Cards grid — home.scss &__cards */
+/* Hydra: gap = 16px, cols 2→3→4, card height 180px */
 .home-grid {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
   gap: 16px;
-  padding: 16px 24px 24px;
+  padding: 0 0 28px;
   margin: 0;
+  transition: all ease 0.2s;
+  width: 100%;
+  box-sizing: border-box;
 }
 @media (min-width: 768px) {
   .home-grid { grid-template-columns: repeat(2, 1fr); }
@@ -2747,10 +2756,13 @@ body.web .main {
   .home-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
-/* Game card — game-card.scss 1:1 */
+/* Hydra game-card: fixed 180px, wide landscape */
 .home-card {
   width: 100%;
   height: 180px;
+  min-height: 180px;
+  max-height: 180px;
+  aspect-ratio: auto;
   box-shadow: 0px 0px 15px 0px #000000;
   overflow: hidden;
   border-radius: 4px;
@@ -2763,6 +2775,7 @@ body.web .main {
   padding: 0;
   background: #000;
   text-align: left;
+  box-sizing: border-box;
 }
 .home-card:active { opacity: 0.7; }
 
@@ -2787,7 +2800,6 @@ body.web .main {
   transform: scale(1.05);
 }
 
-/* backdrop gradient sits above image, content inside */
 .home-card-shade {
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 50%, transparent 100%);
   width: 100%;
@@ -2855,7 +2867,7 @@ body.web .main {
   margin: 0;
   font-size: 12px;
   color: #c0c1c7;
-  opacity: 1; /* always in flow; parent translateY hides them until hover */
+  opacity: 1;
 }
 .home-card-stats span {
   display: inline-flex;
@@ -3479,11 +3491,18 @@ body.web .main {
   padding: 0;
 }
 
-/* --- Banner hero (banner + toolbar share background) --- */
+/* --- Banner hero (banner + toolbar = --hero-h total) --- */
 .hp-hero {
   position: relative;
-  margin: -16px -16px 0 -16px;
+  margin: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: var(--hero-h);
+  min-height: var(--hero-h);
+  max-height: var(--hero-h);
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .hp-hero-bg {
@@ -3499,10 +3518,12 @@ body.web .main {
   background-position: center top;
 }
 
-/* --- Banner --- */
+/* --- Banner (flex fills space above toolbar) --- */
 .hp-banner {
   position: relative;
-  height: 200px;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
   background: transparent;
   border-radius: 0;
   overflow: visible;
@@ -3538,9 +3559,9 @@ body.web .main {
 .hp-user {
   position: absolute;
   left: 28px;
-  bottom: 22px;
+  bottom: 18px;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 16px;
   z-index: 2;
 }
@@ -3627,8 +3648,12 @@ body.web .main {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 20px;
+  padding: 0 20px;
   margin: 0;
+  height: 52px;
+  min-height: 52px;
+  flex-shrink: 0;
+  box-sizing: border-box;
   /* frosted glass over the shared banner image */
   background: rgba(18, 17, 14, 0.45);
   backdrop-filter: blur(18px);
@@ -3638,35 +3663,108 @@ body.web .main {
 }
 .hp-toolbar-spacer { flex: 1; }
 
+/* Профиль / друзья — те же кнопки, что на странице игры (.gp-bar-btn) */
 .hp-btn-edit,
-.hp-btn-logout {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+.hp-btn-logout,
+.hp-friend-actions .hp-btn-edit,
+.hp-friend-actions .hp-btn-logout,
+.hp-toolbar .hp-btn-edit,
+.hp-toolbar .hp-btn-logout {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  background: rgba(255,255,255,0.06) !important;
+  color: rgba(255,255,255,0.92) !important;
+  font-family: inherit !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease !important;
+  box-shadow: none !important;
+}
+.hp-btn-edit svg,
+.hp-btn-logout svg {
+  flex-shrink: 0;
+  opacity: 0.95;
+  display: block;
+}
+.hp-btn-edit:hover,
+.hp-friend-actions .hp-btn-edit:hover,
+.hp-toolbar .hp-btn-edit:hover {
+  background: rgba(255,255,255,0.12) !important;
+  border-color: rgba(255,255,255,0.16) !important;
+  color: #fff !important;
 }
 
-.hp-btn-edit {
-  background: transparent;
-  color: var(--text-bright);
-  border: 1px solid var(--border);
+/* Primary-ish: принять / написать — чуть светлее, как акцент действия */
+.hp-btn-edit.hp-btn-primary,
+#hp-accept-friend,
+#hp-msg-friend,
+#hp-add-friend {
+  background: rgba(232, 228, 220, 0.92) !important;
+  color: #1a1814 !important;
+  border-color: transparent !important;
+  font-weight: 600 !important;
 }
-.hp-btn-edit:hover {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(255,255,255,0.18);
+.hp-btn-edit.hp-btn-primary:hover,
+#hp-accept-friend:hover,
+#hp-msg-friend:hover,
+#hp-add-friend:hover {
+  background: #fff !important;
+  color: #1a1814 !important;
 }
 
-.hp-btn-logout {
-  background: #c23b2e;
-  color: #fff;
-  border: 1px solid transparent;
+/* Danger: выйти / удалить / отклонить — glass + red, не плоский кирпич */
+.hp-btn-logout,
+#hp-remove-friend,
+#hp-decline-friend,
+#hp-cancel-friend {
+  background: rgba(194, 59, 46, 0.18) !important;
+  border: 1px solid rgba(194, 59, 46, 0.4) !important;
+  color: #ffb4aa !important;
+  font-weight: 500 !important;
 }
-.hp-btn-logout:hover { background: #d44538; }
+.hp-btn-logout:hover,
+#hp-remove-friend:hover,
+#hp-decline-friend:hover,
+#hp-cancel-friend:hover {
+  background: rgba(194, 59, 46, 0.32) !important;
+  border-color: rgba(220, 80, 65, 0.55) !important;
+  color: #ffd0c8 !important;
+}
+
+.hp-friend-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+}
+.hp-toolbar {
+  gap: 8px !important;
+  /* чуть левее правого края — как колонка статистики */
+  padding-right: 28px !important;
+  padding-left: 20px !important;
+  box-sizing: border-box !important;
+}
+body.client .hp-toolbar {
+  padding-right: 28px !important;
+}
+/* кнопки не прилипают к самому краю hero */
+.hp-toolbar > .hp-btn-edit,
+.hp-toolbar > .hp-btn-logout,
+.hp-toolbar > .hp-friend-actions {
+  position: relative;
+}
+
 
 /* --- Body layout --- */
 .hp-body {
@@ -4009,8 +4107,7 @@ body.web .main {
     order: -1;
   }
   .hp-banner {
-    margin: -16px -12px 0 -12px;
-    height: 180px;
+    margin: 0;
   }
   .hp-avatar {
     width: 72px;
@@ -4181,9 +4278,9 @@ body.web .main {
 }
 
 @media (max-width: 1100px) {
-  .hp-hero { margin: -16px -12px 0 -12px; }
+  .hp-hero { margin: 0; }
   .hp-toolbar { padding: 10px 12px; }
-  .hp-banner { height: 170px; }
+  .hp-banner { height: var(--hero-h); min-height: var(--hero-h); }
   .hp-avatar { width: 72px; height: 72px; font-size: 1.8rem; }
   .hp-username { font-size: 1.3rem; }
   .hp-games-row .hp-game-card {
@@ -4245,14 +4342,32 @@ body.web .main {
   display: flex;
   gap: 10px;
   width: 100%;
-  margin-top: 4px;
+  margin-top: 12px;
+  align-items: stretch;
 }
 .hp-banner-modal-actions .hp-btn-edit {
   flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 16px;
 }
-.hp-banner-modal-actions .hp-edit-save {
+.hp-banner-modal-actions .hp-edit-save,
+.hp-banner-modal-actions .hp-banner-save-btn,
+.hp-banner-modal-actions .auth-submit {
   flex: 1;
   margin-top: 0;
+  min-height: 42px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.hp-banner-modal-actions .auth-submit.is-loading,
+.hp-banner-save-btn.is-loading,
+.hp-edit-save:disabled,
+.hp-banner-save-btn:disabled,
+.hp-banner-modal-actions .auth-submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 
@@ -5632,8 +5747,8 @@ button.avatar,
   position: relative;
   border-radius: 0 0 8px 8px;
   overflow: hidden;
-  height: 350px;
-  min-height: 350px;
+  height: var(--hero-h);
+  min-height: var(--hero-h);
   background: #0e0d0c;
   margin-bottom: 0;
   display: flex;
@@ -5970,7 +6085,7 @@ button.avatar,
 @media (max-width: 1100px) {
   .gp-layout { flex-direction: column; }
   .gp-aside { width: 100%; min-width: 0; max-width: none; }
-  .gp-hero { height: 280px; min-height: 280px; }
+  .gp-hero { height: var(--hero-h); min-height: var(--hero-h); }
   .gp-title { max-width: 100%; font-size: 1.6rem; }
 }
 
@@ -5983,8 +6098,8 @@ button.avatar,
 .gp-hero {
   position: relative !important;
   width: 100% !important;
-  height: 350px !important;
-  min-height: 350px !important;
+  height: var(--hero-h) !important;
+  min-height: var(--hero-h) !important;
   border-radius: 0 0 8px 8px !important;
   overflow: hidden !important;
   background: #0e0d0c !important;
@@ -6312,7 +6427,7 @@ button.avatar,
 @media (max-width: 1100px) {
   .gp-layout { flex-direction: column !important; }
   .gp-aside { width: 100% !important; min-width: 0 !important; max-width: none !important; }
-  .gp-hero { height: 260px !important; min-height: 260px !important; }
+  .gp-hero { height: var(--hero-h) !important; min-height: var(--hero-h) !important; }
   .gp-title { max-width: 100%; font-size: 1.5rem !important; }
   .gp-gallery-viewport, .gp-gallery-thumbs { width: 100% !important; }
 }
@@ -7263,7 +7378,7 @@ button.avatar,
 /* страница игры */
 body.web .gp,
 body:not(.client) .gp {
-  max-width: 1100px !important;
+  max-width: 100% !important;
   width: 100% !important;
   margin: 0 auto !important;
   position: relative !important;
@@ -7280,7 +7395,7 @@ body:not(.client) .content-head {
 }
 body.web .content-head-inner,
 body:not(.client) .content-head-inner {
-  max-width: 1200px;
+  max-width: var(--web-content-max);
   margin: 0 auto;
   padding: 0 24px;
 }
@@ -7288,7 +7403,7 @@ body:not(.client) .content-head-inner {
 /* main в браузере */
 body.web .main,
 body:not(.client) .main {
-  max-width: 1200px !important;
+  max-width: var(--web-content-max) !important;
   margin-left: auto !important;
   margin-right: auto !important;
   width: 100%;
@@ -7462,14 +7577,8 @@ body.client .content > .main {
    КЛИЕНТ: главная / профиль / страница игры —
    растягиваем содержимое на 20px влево, вправо и вверх
    ============================================================ */
-body.client #view-home,
-body.client #view-game {
-  margin: -22px -22px 0; /* top | left/right | bottom */
-}
+/* view bleed removed — hero self-bleeds */
 
-body.client #view-profile {
-  margin: -8px -8px 0;
-}
 /* ===== Экран бана ===== */
 .ban-screen {
   position: fixed;
@@ -8634,13 +8743,30 @@ body.client #view-admin.view.active {
 .sgdb-nav-btn.sgdb-nav-danger:hover,
 .sgdb-nav-btn.sgdb-nav-danger.active { color: #f0a090; background: rgba(200,60,40,0.12); }
 .sgdb-content {
-  flex: 1; min-width: 0;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #1b1b1b;
+  display: flex;
+  flex-direction: column;
+}
+.sgdb-pane {
+  display: none;
+  flex: 1;
+  min-height: 0;
   padding: 16px 20px;
   overflow-y: auto;
-  background: #1b1b1b;
 }
-.sgdb-pane { display: none; }
 .sgdb-pane.active { display: block; }
+/* Вкладка ассетов: шапка и сейвбар зафиксированы, скролл только у сетки */
+.sgdb-pane.active[data-sgdb-pane="assets"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
 .sgdb-pane-title {
   font-size: 0.95rem; font-weight: 600; color: #eee;
   margin-bottom: 14px;
@@ -8800,3 +8926,922 @@ body.client #view-admin.view.active {
   position: relative;
   z-index: 3;
 }
+
+
+/* SGDB assets: fixed header + fixed save, only grid scrolls */
+.sgdb-pane[data-sgdb-pane="assets"] .sgdb-asset-tabs,
+.sgdb-pane[data-sgdb-pane="assets"] .sgdb-asset-preview-wrap,
+.sgdb-pane[data-sgdb-pane="assets"] .sgdb-warn,
+.sgdb-pane[data-sgdb-pane="assets"] .sgdb-source-label {
+  flex-shrink: 0;
+}
+.sgdb-asset-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: 0 -4px;
+  padding: 0 4px 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.sgdb-asset-scroll .sgdb-asset-grid {
+  margin-bottom: 0;
+}
+.sgdb-asset-savebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  margin: 0 -20px 0;
+  padding: 12px 20px 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  background: #181818;
+  z-index: 2;
+}
+.sgdb-asset-save-hint {
+  flex: 1;
+  font-size: 0.82rem;
+  color: #999;
+  line-height: 1.3;
+}
+.sgdb-asset-save-hint.has-sel {
+  color: #c8c4bc;
+}
+.sgdb-asset-save-btn,
+.sgdb-asset-savebar .auth-submit {
+  flex: 0 0 auto;
+  min-width: 140px;
+  min-height: 40px;
+  margin: 0;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.sgdb-asset-save-btn:disabled,
+.sgdb-asset-savebar .auth-submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.sgdb-pane[data-sgdb-pane="assets"] .sgdb-asset-tabs {
+  margin-bottom: 12px;
+}
+.sgdb-pane[data-sgdb-pane="assets"] .sgdb-asset-preview-wrap {
+  margin-bottom: 10px;
+}
+.sgdb-pane[data-sgdb-pane="assets"] .sgdb-source-label {
+  margin-bottom: 8px;
+}
+
+
+
+/* ============================================================
+   Hydra-like game hero + floating action bar
+   ============================================================ */
+.gp-hero {
+  position: relative !important;
+  width: 100% !important;
+  height: var(--hero-h) !important;
+  min-height: var(--hero-h) !important;
+  overflow: hidden !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-end !important;
+  margin: 0 !important;
+  padding: 0 16px 16px !important;
+  box-sizing: border-box !important;
+}
+.gp-hero-bg {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center top !important;
+  z-index: 0 !important;
+}
+.gp-hero-grad {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  background: linear-gradient(
+    180deg,
+    rgba(0,0,0,0.12) 0%,
+    rgba(0,0,0,0.28) 48%,
+    rgba(0,0,0,0.78) 100%
+  ) !important;
+  pointer-events: none !important;
+}
+.gp-hero-content {
+  position: relative !important;
+  z-index: 2 !important;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-end !important;
+  padding: 20px 8px 12px !important;
+  pointer-events: none !important;
+}
+.gp-hero-logo {
+  display: block !important;
+  max-width: min(380px, 55%) !important;
+  max-height: 100px !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  filter: drop-shadow(0 4px 18px rgba(0,0,0,0.55)) !important;
+  margin: 0 !important;
+}
+.gp-hero .gp-title { display: none !important; }
+
+/* tools + actionbar stack at bottom */
+.gp-hero-bottom {
+  position: relative !important;
+  z-index: 3 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  gap: 10px !important;
+  width: 100% !important;
+  flex-shrink: 0 !important;
+}
+.gp-hero-tools {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+.gp-hero-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  height: 34px !important;
+  padding: 0 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  /* как hp-toolbar / карточки профиля — тёмное стекло */
+  background: rgba(18, 17, 14, 0.55) !important;
+  backdrop-filter: blur(20px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.15) !important;
+  color: rgba(255,255,255,0.92) !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  font-family: inherit !important;
+  white-space: nowrap !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.28) !important;
+}
+.gp-hero-chip:hover {
+  background: rgba(18, 17, 14, 0.72) !important;
+  border-color: rgba(255,255,255,0.14) !important;
+}
+.gp-hero-chip svg { flex-shrink: 0; opacity: 0.9; }
+
+/* Floating bar — same dark frosted glass */
+.gp-actionbar {
+  position: relative !important;
+  z-index: 3 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 10px 12px 10px 18px !important;
+  background: rgba(18, 17, 14, 0.58) !important;
+  backdrop-filter: blur(22px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.2) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.4) !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+.gp-action-left {
+  min-width: 0 !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+}
+.gp-playtime {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  color: rgba(255,255,255,0.92) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.gp-last-play {
+  font-size: 0.75rem !important;
+  color: rgba(255,255,255,0.48) !important;
+  margin-top: 2px !important;
+}
+.gp-action-btns {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+.gp-bar-sep {
+  width: 1px !important;
+  height: 22px !important;
+  background: rgba(255,255,255,0.12) !important;
+  margin: 0 4px !important;
+  flex-shrink: 0 !important;
+}
+.gp-bar-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  background: rgba(255,255,255,0.06) !important;
+  color: rgba(255,255,255,0.92) !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  font-family: inherit !important;
+}
+.gp-bar-btn.icon {
+  width: 36px !important;
+  padding: 0 !important;
+}
+.gp-bar-btn:hover {
+  background: rgba(255,255,255,0.12) !important;
+}
+.gp-bar-btn.primary {
+  background: rgba(232, 228, 220, 0.95) !important;
+  color: #1a1814 !important;
+  border-color: transparent !important;
+  font-weight: 600 !important;
+}
+.gp-bar-btn.primary:hover {
+  background: #fff !important;
+}
+.gp-bar-btn.gp-settings-btn {
+  padding: 0 12px 0 10px !important;
+}
+.gp-bar-btn.gp-settings-btn span {
+  font-size: 0.84rem !important;
+}
+.gp-like-btn.liked {
+  color: #ff6b7a !important;
+  border-color: rgba(255,107,122,0.35) !important;
+}
+
+@media (max-width: 720px) {
+  .gp-hero { height: var(--hero-h) !important; min-height: var(--hero-h) !important; padding: 0 10px 10px !important; }
+  .gp-hero-chip span { display: none !important; }
+  .gp-hero-chip { width: 34px !important; padding: 0 !important; justify-content: center !important; }
+  .gp-bar-btn.gp-settings-btn span { display: none !important; }
+  .gp-bar-btn.gp-settings-btn { width: 36px !important; padding: 0 !important; }
+  .gp-playtime { font-size: 0.8rem !important; }
+  .gp-actionbar { padding: 8px 8px 8px 12px !important; border-radius: 12px !important; }
+}
+
+
+
+
+
+/* ============================================================
+   SHARED PAGE SHELL
+   Hero full-bleed, content width like Store (main padding)
+   Side cards look like profile hp-side-card
+   ============================================================ */
+
+/* --- Hero bleed: ONLY home / profile / game (never store) --- */
+/* Browser (web): leave as-is — user said browser is fine */
+body.client #view-home .home-hero,
+body.client #view-profile .hp-hero,
+body.client #view-game .gp-hero {
+  width: calc(100% + 48px) !important;
+  max-width: none !important;
+  margin-left: -24px !important;
+  margin-right: -24px !important;
+  margin-top: -16px !important;
+  margin-bottom: 0 !important;
+}
+/* Store: no negative margins, no width calc */
+body.client #view-store,
+body.client #view-store .store-layout {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  left: auto !important;
+  right: auto !important;
+  transform: none !important;
+  box-sizing: border-box !important;
+}
+body.client #view-store .store-layout {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+/* Ensure main padding intact in client (prevents whole page shift) */
+body.client .content > .main {
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+  padding-top: 16px !important;
+  box-sizing: border-box !important;
+}
+body.client .content-head {
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+}
+
+.home-hero,
+.gp-hero,
+.hp-hero {
+  position: relative !important;
+  height: var(--hero-h) !important;
+  min-height: var(--hero-h) !important;
+  max-height: var(--hero-h) !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+  background: #0e0d0c !important;
+}
+
+.home-hero-bg,
+.gp-hero-bg {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center top !important;
+  z-index: 0 !important;
+  display: block !important;
+}
+.hp-hero-bg {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  background-size: cover !important;
+  background-position: center top !important;
+}
+.home-hero-grad,
+.gp-hero-grad {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  background: linear-gradient(
+    180deg,
+    rgba(0,0,0,0.12) 0%,
+    rgba(0,0,0,0.28) 48%,
+    rgba(0,0,0,0.78) 100%
+  ) !important;
+}
+.home-hero-info,
+.gp-hero-content {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-end !important;
+  padding: 20px 24px !important;
+  box-sizing: border-box !important;
+  pointer-events: none !important;
+}
+
+.hp-hero {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.hp-banner {
+  position: relative !important;
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  z-index: 1 !important;
+}
+.hp-toolbar {
+  position: relative !important;
+  z-index: 2 !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  max-height: 52px !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+  padding: 0 28px 0 20px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  background: rgba(18, 17, 14, 0.45) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  border-top: 1px solid rgba(255,255,255,0.06) !important;
+  border-bottom: none !important;
+}
+.hp-user {
+  position: absolute !important;
+  left: 24px !important;
+  bottom: 16px !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 14px !important;
+  z-index: 2 !important;
+  margin: 0 !important;
+}
+
+.gp-hero { display: block !important; }
+.gp-hero-bottom {
+  position: absolute !important;
+  left: 16px !important;
+  right: 16px !important;
+  bottom: 16px !important;
+  z-index: 3 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  gap: 10px !important;
+  pointer-events: none !important;
+}
+.gp-hero-bottom > * { pointer-events: auto !important; }
+.gp-hero-content { padding-bottom: 88px !important; }
+
+/* --- Content grids: same as Store --- */
+.store-layout,
+.hp-body,
+.gp-layout {
+  display: grid !important;
+  grid-template-columns: 1fr 300px !important;
+  gap: 24px !important;
+  align-items: start !important;
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+.hp-body {
+  padding-top: 20px !important;
+  padding-bottom: 40px !important;
+}
+.gp-layout {
+  padding-top: 16px !important;
+  padding-bottom: 24px !important;
+}
+.store-layout {
+  padding-top: 8px !important;
+}
+
+.hp-main,
+.gp-main,
+.store-layout > .store-main,
+.store-layout > div:first-child {
+  min-width: 0 !important;
+}
+
+.hp-side,
+.gp-aside,
+.store-filters {
+  width: 300px !important;
+  max-width: 300px !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  position: sticky !important;
+  top: 16px !important;
+  box-sizing: border-box !important;
+}
+
+/* --- Unified side cards (profile look) --- */
+.hp-side-card,
+.filter-block,
+.side-card,
+.gp-side-card {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+
+.hp-side-head,
+.filter-block-head,
+.side-card-head,
+.gp-side-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  width: 100% !important;
+  padding: 12px 14px !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: var(--text-bright) !important;
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-sizing: border-box !important;
+  font-family: inherit !important;
+  text-align: left !important;
+}
+
+.hp-side-body,
+.filter-block-body,
+.side-card-body,
+.gp-side-body {
+  padding: 10px 14px 14px !important;
+  box-sizing: border-box !important;
+}
+
+/* filter head is a button — keep cursor */
+.filter-block-head {
+  cursor: pointer !important;
+}
+.filter-block-head .filter-dot {
+  margin-right: 2px;
+}
+
+@media (max-width: 1100px) {
+  .store-layout,
+  .hp-body,
+  .gp-layout {
+    grid-template-columns: 1fr !important;
+  }
+  .hp-side,
+  .gp-aside,
+  .store-filters {
+    width: 100% !important;
+    max-width: none !important;
+    position: static !important;
+  }
+}
+
+@media (max-width: 720px) {
+  :root { --hero-h: var(--hero-h-sm); }
+  body.client .home-hero,
+  body.client .gp-hero,
+  body.client .hp-hero {
+    width: calc(100% + 24px) !important;
+    margin-left: -12px !important;
+    margin-right: -12px !important;
+  }
+  body.web .home-hero,
+  body.web .gp-hero,
+  body.web .hp-hero {
+    width: calc(100% + 24px) !important;
+    margin-left: -12px !important;
+    margin-right: -12px !important;
+  }
+  /* main pad on mobile often 12 */
+  body.client .content > .main,
+  body.web .main {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .hp-toolbar {
+    height: 48px !important;
+    min-height: 48px !important;
+    max-height: 48px !important;
+    padding: 0 12px !important;
+  }
+  .hp-user { left: 14px !important; bottom: 12px !important; }
+  .gp-hero-bottom {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+  }
+}
+
+
+/* ============================================================
+   GAME PAGE FIX — hero bottom insets + content not cropped
+   ============================================================ */
+
+/* Hero: clip only the image layer, keep bottom stack fully inside */
+.gp-hero {
+  position: relative !important;
+  display: block !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  /* keep shared height; cancel weird side bleed calc if it overshoots */
+  border-radius: 0 !important;
+}
+.gp-hero-bg {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  border-radius: 0 !important;
+}
+.gp-hero-grad {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  border-radius: 0 !important;
+}
+
+/* Bottom stack: explicit margins from hero edges */
+.gp-hero-bottom {
+  position: absolute !important;
+  left: 16px !important;
+  right: 16px !important;
+  bottom: 16px !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  z-index: 5 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  pointer-events: none !important;
+}
+.gp-hero-bottom > * {
+  pointer-events: auto !important;
+}
+
+/* Tools row — right aligned, never overflow hero */
+.gp-hero-tools {
+  position: static !important;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  flex-wrap: wrap !important;
+}
+.gp-hero-chip {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  flex-shrink: 1 !important;
+  overflow: hidden !important;
+}
+.gp-hero-chip span {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Action bar full width of the inset bottom stack */
+.gp-actionbar {
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 10px 12px 10px 16px !important;
+  border-radius: 14px !important;
+  background: rgba(18, 17, 14, 0.58) !important;
+  backdrop-filter: blur(22px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.2) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.4) !important;
+}
+
+/* Content under hero: no elevated crop, same width as hero column */
+.gp {
+  overflow: visible !important;
+}
+.gp-layout {
+  display: grid !important;
+  grid-template-columns: 1fr 300px !important;
+  gap: 16px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 16px 0 24px !important;
+  box-sizing: border-box !important;
+  background: transparent !important; /* was elevated gradient — looked cropped */
+  overflow: visible !important;
+  border-radius: 0 !important;
+}
+.gp-main {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+.gp-aside {
+  width: 300px !important;
+  max-width: 300px !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+
+/* Meta / gallery cards — full column width, not clipped */
+.gp-meta-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  overflow: visible !important;
+}
+.gp-gallery,
+.gp-gallery-viewport {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Client: hero should match content width (no overshoot calc) */
+body.client .gp-hero {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-top: -16px !important;
+  /* bleed only upward into main padding; horizontal via negative on wrapper */
+}
+/* True full-bleed hero in client: cancel main horizontal pad */
+body.client #view-game .gp-hero {
+  width: calc(100% + 48px) !important;
+  margin-left: -24px !important;
+  margin-right: -24px !important;
+  margin-top: -16px !important;
+}
+/* browser game hero: do not override (user OK) */
+
+@media (max-width: 1100px) {
+  .gp-layout {
+    grid-template-columns: 1fr !important;
+  }
+  .gp-aside {
+    width: 100% !important;
+    max-width: none !important;
+  }
+}
+@media (max-width: 720px) {
+  .gp-hero-bottom {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    gap: 8px !important;
+  }
+  body.client #view-game .gp-hero {
+    width: calc(100% + 24px) !important;
+    margin-left: -12px !important;
+    margin-right: -12px !important;
+  }
+}
+
+
+/* ============================================================
+   CLIENT STORE — no left shift (browser untouched)
+   ============================================================ */
+body.client #view-store {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  position: relative !important;
+  left: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+body.client #view-store .store-layout {
+  display: grid !important;
+  grid-template-columns: 1fr 300px !important;
+  gap: 24px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 8px 0 24px !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  left: 0 !important;
+  transform: none !important;
+}
+body.client #view-store .store-main {
+  min-width: 0 !important;
+  width: auto !important;
+  margin: 0 !important;
+}
+body.client #view-store .store-filters {
+  width: 300px !important;
+  max-width: 300px !important;
+  margin: 0 !important;
+}
+@media (max-width: 1100px) {
+  body.client #view-store .store-layout {
+    grid-template-columns: 1fr !important;
+  }
+  body.client #view-store .store-filters {
+    width: 100% !important;
+    max-width: none !important;
+  }
+}
+
+
+
+/* ============================================================
+   WEB CONTENT WIDTH — единый max-width для topbar / head / main
+   ============================================================ */
+body.web,
+body:not(.client) {
+  --web-content-max: 1177px;
+}
+
+body.web .topbar,
+body:not(.client) .topbar {
+  padding-left: max(24px, calc((100% - var(--web-content-max)) / 2 + 24px)) !important;
+  padding-right: max(24px, calc((100% - var(--web-content-max)) / 2 + 24px)) !important;
+  box-sizing: border-box !important;
+}
+
+body.web .content-head,
+body:not(.client) .content-head {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+body.web .content-head-inner,
+body:not(.client) .content-head-inner {
+  max-width: var(--web-content-max) !important;
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+  box-sizing: border-box !important;
+}
+
+body.web .main,
+body:not(.client) .main {
+  max-width: var(--web-content-max) !important;
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+  box-sizing: border-box !important;
+}
+
+body.web .gp,
+body:not(.client) .gp {
+  max-width: 100% !important;
+}
+
+
+/* ============================================================
+   PROFILE BTNS MATCH GAME — final lock
+   ============================================================ */
+.hp-toolbar .hp-btn-edit,
+.hp-toolbar .hp-btn-logout,
+.hp-friend-actions button.hp-btn-edit,
+.hp-friend-actions button.hp-btn-logout {
+  height: 36px !important;
+  border-radius: 10px !important;
+}
+
+
+/* Icon-only profile toolbar buttons */
+.hp-btn-icon {
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+}
+.hp-btn-icon svg {
+  margin: 0 !important;
+}
+
+/* Friends modal: plain title, no tabs */
+.friends-modal-head .friends-tabs { display: none !important; }
+.friends-modal-title {
+  margin: 0 !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  color: var(--text-bright) !important;
+}
+
+#friends-pane-notifications { display: none !important; }
+#friends-pane-friends { display: block !important; }

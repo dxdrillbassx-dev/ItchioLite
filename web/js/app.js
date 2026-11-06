@@ -32,7 +32,27 @@ async function fetchJSON(url, opts = {}) {
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(url, { ...fetchOpts, signal: ctrl.signal });
-    return await res.json();
+    let text = await res.text();
+    // Срезаем PHP Warning/Notice HTML перед JSON (display_errors на старых файлах)
+    if (text) {
+      const jsonStart = text.indexOf('{');
+      const jsonStartArr = text.indexOf('[');
+      let start = -1;
+      if (jsonStart >= 0 && jsonStartArr >= 0) start = Math.min(jsonStart, jsonStartArr);
+      else start = Math.max(jsonStart, jsonStartArr);
+      if (start > 0) text = text.slice(start);
+    }
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (parseErr) {
+      const snippet = String(text || '').replace(/\s+/g, ' ').slice(0, 180);
+      const m = String(text || '').match(/<b>(\w+ error|Warning|Notice|Parse error)<\/b>:\s*([^<]+)/i);
+      if (m) throw new Error(m[1] + ': ' + m[2].trim());
+      throw new Error('Сервер вернул не JSON (' + res.status + '): ' + (snippet || res.statusText || 'пусто'));
+    }
+    if (data == null) throw new Error('Пустой ответ сервера');
+    return data;
   } catch (err) {
     if (err && (err.name === 'AbortError' || /aborted/i.test(String(err.message || '')))) {
       throw new Error('Сервер не ответил вовремя. Попробуй ещё раз или проверь XAMPP.');
@@ -73,9 +93,15 @@ function isOffline(err) {
 
 function gameCoverUrl(g) {
   if (!g) return '';
-  if (g.cover_src) return g.cover_src;
-  if (g.cover_url) return g.cover_url;
-  if (g.id) return 'media.php?type=cover&id=' + g.id;
+  const bust = (u) => {
+    if (!u) return '';
+    if (typeof bustUrl === 'function') return bustUrl(u);
+    const sep = String(u).includes('?') ? '&' : '?';
+    return u + sep + 'v=' + (window.__mediaBust || '');
+  };
+  if (g.cover_src) return bust(g.cover_src);
+  if (g.cover_url) return bust(g.cover_url);
+  if (g.id) return bust('media.php?type=cover&id=' + g.id);
   return '';
 }
 function gameHeroUrl(g) {
@@ -123,6 +149,7 @@ function iconSvg(name, size=16) {
     settings: `<svg ${common}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
     plus: `<svg ${common}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
     pencil: `<svg ${common}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+    arrowLeft: `<svg ${common}><path d="M15 18l-6-6 6-6"/></svg>`,
     share: `<svg ${common}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`,
   };
   return map[name] || '';
@@ -1420,34 +1447,67 @@ function renderGamePage(wrap, data) {
     ? ('Последний запуск ' + (typeof formatRelative === 'function' ? formatRelative(g.last_played) : formatDate(g.last_played)))
     : '';
 
-  const actionLeft = g.owned
-    ? `<div class="gp-playtime">${escapeHtml(playLabel)}</div>
-       ${lastLabel ? `<div class="gp-last-play">${escapeHtml(lastLabel)}</div>` : ''}`
-    : `<div class="gp-playtime">${hasBuilds ? 'Доступна для добавления' : 'Нет файлов для скачивания'}</div>`;
+  // Hydra-style status line: title lives only here, no big H1
+  let statusMain = '';
+  let statusSub = '';
+  if (g.owned) {
+    if (playHours > 0) {
+      statusMain = playLabel;
+      statusSub = lastLabel;
+    } else {
+      statusMain = 'Вы ещё не играли в ' + (g.title || 'эту игру');
+    }
+  } else {
+    statusMain = hasBuilds ? ('Добавьте «' + (g.title || 'игру') + '» в библиотеку') : 'Нет файлов для скачивания';
+  }
+  const actionLeft = `<div class="gp-playtime">${escapeHtml(statusMain)}</div>`
+    + (statusSub ? `<div class="gp-last-play">${escapeHtml(statusSub)}</div>` : '');
 
-  const adminEditBtn = viewer && viewer.is_admin
-    ? `<button type="button" class="gp-bar-btn icon" id="gp-admin-edit" title="Редактировать текст">${iconSvg('pencil',16)}</button>`
+  const isWebBrowser = document.body.classList.contains('web') || !document.body.classList.contains('client');
+
+  // В браузере: без облака/настроек; карандаш админа — в actionbar вместо настроек
+  const adminEditChip = (viewer && viewer.is_admin && !isWebBrowser)
+    ? `<button type="button" class="gp-hero-chip" id="gp-admin-edit" title="Редактировать">${iconSvg('pencil',15)}</button>`
     : '';
+  const adminEditBar = (viewer && viewer.is_admin && isWebBrowser)
+    ? `<button type="button" class="gp-bar-btn icon" id="gp-admin-edit" title="Редактировать">${iconSvg('pencil',16)}</button>`
+    : '';
+  const adminEditBtn = adminEditChip; // legacy name for hero tools
 
   const dlDisabled = !hasBuilds ? ' disabled aria-disabled="true"' : '';
   const dlClass = hasBuilds ? 'gp-bar-btn primary' : 'gp-bar-btn primary is-disabled';
   const dlTitle = hasBuilds ? 'Скачать' : 'Нет файлов для скачивания';
+
+  const pinSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`;
+
+  const settingsOrEditBtn = isWebBrowser
+    ? adminEditBar
+    : `<button type="button" class="gp-bar-btn gp-settings-btn" id="gp-settings" title="Настройки">
+         ${iconSvg('settings',16)}
+         <span>Настройки</span>
+       </button>`;
+
+  const cloudChip = isWebBrowser ? '' : `
+            <button type="button" class="gp-hero-chip" id="gp-cloud-saves" title="Облачное сохранение">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+              <span>Облачное сохранение</span>
+            </button>`;
 
   const actionBtns = g.owned
     ? `<button type="button" class="${dlClass}" id="btn-buy-game"${dlDisabled} title="${dlTitle}">
          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
          Скачать
        </button>
+       <span class="gp-bar-sep" aria-hidden="true"></span>
        <button type="button" class="gp-bar-btn icon gp-like-btn ${g.is_liked || g.liked ? 'liked' : ''}" id="gp-like" title="${g.is_liked || g.liked ? 'Убрать лайк' : 'Лайк'}">${iconSvg('heart',16)}</button>
-       <button type="button" class="gp-bar-btn icon" id="gp-share" title="Поделиться">${iconSvg('share',16) || '↗'}</button>
-       <button type="button" class="gp-bar-btn icon" id="gp-settings" title="Настройки">${iconSvg('settings',16)}</button>
-       ${adminEditBtn}`
+       <button type="button" class="gp-bar-btn icon" id="gp-share" title="Закрепить">${pinSvg}</button>
+       ${settingsOrEditBtn}`
     : `${price.className === 'paid' ? `<span class="gp-price">${escapeHtml(price.text)}</span>` : ''}
        <button type="button" class="gp-bar-btn primary" id="btn-buy-game">
          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
          Добавить в библиотеку
        </button>
-       ${adminEditBtn}`;
+       ${adminEditBar}`;
 
   wrap.innerHTML = `
     <div class="gp">
@@ -1456,11 +1516,16 @@ function renderGamePage(wrap, data) {
         <div class="gp-hero-grad"></div>
         <div class="gp-hero-content">
           ${g.logo_url ? `<img class="gp-hero-logo" src="${escapeHtml(g.logo_url)}" alt="" onerror="this.style.display='none'" />` : ''}
-          <h1 class="gp-title${g.logo_url ? ' gp-title-with-logo' : ''}">${escapeHtml(g.title)}</h1>
         </div>
-        <div class="gp-actionbar">
-          <div class="gp-action-left">${actionLeft}</div>
-          <div class="gp-action-btns">${actionBtns}</div>
+        <div class="gp-hero-bottom">
+          ${(!isWebBrowser || adminEditBtn || cloudChip) ? `<div class="gp-hero-tools">
+            ${adminEditBtn || ''}
+            ${cloudChip || ''}
+          </div>` : ''}
+          <div class="gp-actionbar">
+            <div class="gp-action-left">${actionLeft}</div>
+            <div class="gp-action-btns">${actionBtns}</div>
+          </div>
         </div>
       </div>
 
@@ -1707,6 +1772,7 @@ function renderGamePage(wrap, data) {
       }
     });
   }
+    $('#gp-cloud-saves')?.addEventListener('click', () => toast('Облачные сохранения скоро'));
   $('#gp-settings')?.addEventListener('click', () => {
     const isAdmin = !!(window.AUTH_STATE && window.AUTH_STATE.user &&
       (window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin));
@@ -2286,7 +2352,10 @@ function openAdminGameEditModal(g) {
         modal.classList.add('hidden');
         homeCache = null;
         storeCache = [];
-        loadGamePage(+id);
+        window.__mediaBust = Date.now();
+        window.__iconBust = window.__mediaBust;
+        await loadGamePage(+id);
+        refreshGameImagesEverywhere(+id);
       } catch (e) {
         if (err) { err.textContent = e.message || 'Ошибка'; err.classList.remove('hidden'); }
         toast(e.message || 'Ошибка');
@@ -2347,6 +2416,25 @@ function openGameAssetsModal(g) {
   window.__steamEditGameId = Number(g.id);
   window.__steamAppId = appId;
   if (typeof window.setSteamAppId === 'function') window.setSteamAppId(appId);
+  // сброс выбора при открытии
+  try {
+    const st = window.getSteamAssetState && window.getSteamAssetState();
+    if (st && st.steamSelected) {
+      st.steamSelected.icon_url = '';
+      st.steamSelected.logo_url = '';
+      st.steamSelected.banner_url = '';
+      st.steamSelected.cover_url = '';
+    }
+  } catch (e) {}
+  ['steam-sel-icon','steam-sel-logo','steam-sel-banner','steam-sel-cover'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const hint = document.getElementById('sgdb-asset-save-hint');
+  if (hint) {
+    hint.textContent = 'Выбери ассеты и нажми сохранить';
+    hint.classList.remove('has-sel');
+  }
 
   const title = document.getElementById('sgdb-modal-title');
   if (title) title.textContent = g.title || 'Игра';
@@ -3053,9 +3141,8 @@ async function loadProfile() {
   if (toolbar && !toolbar.querySelector('#btn-edit-profile')) {
     toolbar.innerHTML = `
       <div class="hp-toolbar-spacer"></div>
-      <button type="button" class="hp-btn-edit" id="btn-edit-profile">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Редактировать Профиль
+      <button type="button" class="hp-btn-edit hp-btn-icon" id="btn-edit-profile" title="Редактировать профиль" aria-label="Редактировать профиль">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button>
       <button type="button" class="hp-btn-logout" onclick="logout()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -3372,57 +3459,57 @@ async function uploadProfileImage(kind, file) {
   fd.append('kind', kind);
   fd.append('file', file);
   fd.append('csrf_token', window.CSRF_TOKEN || '');
-  try {
-    const res = await fetch(`${USER_API}?action=upload`, { method: 'POST', body: fd });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Ошибка загрузки');
-    const url = data.url + '?t=' + Date.now();
-    if (kind === 'avatar') {
-      const el = $('#hp-avatar');
-      if (el) {
-        el.style.backgroundImage = `url('${url}')`;
-        el.style.backgroundSize = 'cover';
-        el.style.backgroundPosition = 'center';
-        el.textContent = '';
-      }
-      const editEl = $('#hp-edit-avatar');
-      if (editEl) {
-        editEl.style.backgroundImage = `url('${url}')`;
-        editEl.style.backgroundSize = 'cover';
-        editEl.style.backgroundPosition = 'center';
-        editEl.textContent = '';
-      }
-      // sidebar avatar
-      const applyAva = (el) => {
-        if (!el) return;
-        el.style.backgroundImage = `url('${url}')`;
-        el.style.backgroundSize = 'cover';
-        el.style.backgroundPosition = 'center';
-        el.style.backgroundColor = 'transparent';
-        el.textContent = '';
-      };
-      applyAva($('#side-avatar'));
-      applyAva($('#avatar-btn'));
-      applyAva($('#settings-avatar-preview'));
-      applyAva($('#hp-avatar'));
-      applyAva($('#hp-edit-avatar'));
-      if (window.AUTH_STATE && window.AUTH_STATE.user) {
-        window.AUTH_STATE.user.avatar_url = data.url;
-      }
-      toast('Аватар обновлён');
-    } else {
-      const bg = $('#hp-banner-bg');
-      if (bg) {
-        bg.style.backgroundImage = `url('${url}')`;
-        bg.classList.add('has-image');
-      }
-      if (window.AUTH_STATE && window.AUTH_STATE.user) {
-        window.AUTH_STATE.user.banner_url = data.url;
-      }
-      toast('Баннер обновлён');
+  const res = await fetch(`${USER_API}?action=upload`, { method: 'POST', body: fd });
+  let data;
+  try { data = await res.json(); } catch (e) { throw new Error('Сервер вернул не JSON'); }
+  if (!data.ok) throw new Error(data.error || 'Ошибка загрузки');
+  const url = data.url + (String(data.url).includes('?') ? '&' : '?') + 't=' + Date.now();
+  if (kind === 'avatar') {
+    const applyAva = (el) => {
+      if (!el) return;
+      el.style.backgroundImage = `url('${url}')`;
+      el.style.backgroundSize = 'cover';
+      el.style.backgroundPosition = 'center';
+      el.style.backgroundColor = 'transparent';
+      el.textContent = '';
+    };
+    applyAva($('#hp-avatar'));
+    applyAva($('#hp-edit-avatar'));
+    applyAva($('#side-avatar'));
+    applyAva($('#avatar-btn'));
+    applyAva($('#settings-avatar-preview'));
+    if (window.AUTH_STATE && window.AUTH_STATE.user) {
+      window.AUTH_STATE.user.avatar_url = data.url;
     }
-  } catch (err) {
-    toast(err.message || 'Не удалось загрузить');
+    toast('Аватар обновлён');
+  } else {
+    applyBannerEverywhere(url, null, null);
+    if (window.AUTH_STATE && window.AUTH_STATE.user) {
+      window.AUTH_STATE.user.banner_url = data.url;
+    }
+    toast('Баннер обновлён');
+  }
+  return data;
+}
+
+/** Применить баннер на профиль + настройки + сайдбар */
+function applyBannerEverywhere(url, pos, zoom) {
+  if (url) {
+    const bg = $('#hp-banner-bg');
+    if (bg) {
+      bg.style.backgroundImage = `url('${url}')`;
+      bg.classList.add('has-image');
+    }
+    const setPrev = $('#settings-banner-preview');
+    if (setPrev) {
+      setPrev.style.backgroundImage = `url('${url}')`;
+      setPrev.classList.add('has-image');
+    }
+  }
+  if (pos != null || zoom != null) {
+    const p = pos != null ? pos : (window.AUTH_STATE?.user?.banner_pos || '50% 50%');
+    const z = zoom != null ? zoom : (parseFloat(window.AUTH_STATE?.user?.banner_zoom) || 1);
+    applyBannerToHero(p, z);
   }
 }
 
@@ -3560,7 +3647,10 @@ function initBannerEditor() {
 
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
+      const label = saveBtn.textContent;
       saveBtn.disabled = true;
+      saveBtn.classList.add('is-loading');
+      saveBtn.textContent = 'Сохранение…';
       try {
         // 1) upload new file if chosen
         if (bannerEditor.pendingFile) {
@@ -3574,10 +3664,18 @@ function initBannerEditor() {
           zoom: bannerEditor.zoom,
         });
         if (!res.ok) throw new Error(res.error || 'Ошибка');
-        applyBannerToHero(pos, res.zoom);
+        const z = res.zoom != null ? res.zoom : bannerEditor.zoom;
+        applyBannerToHero(pos, z);
+        // settings preview position too
+        const setPrev = $('#settings-banner-preview');
+        if (setPrev) {
+          const size = z <= 1.01 ? 'cover' : (Math.round(z * 100) + '%');
+          setPrev.style.backgroundPosition = pos;
+          setPrev.style.backgroundSize = size;
+        }
         if (window.AUTH_STATE?.user) {
           window.AUTH_STATE.user.banner_pos = pos;
-          window.AUTH_STATE.user.banner_zoom = res.zoom;
+          window.AUTH_STATE.user.banner_zoom = z;
         }
         toast('Баннер сохранён');
         close();
@@ -3585,6 +3683,8 @@ function initBannerEditor() {
         toast(err.message || 'Не удалось сохранить');
       } finally {
         saveBtn.disabled = false;
+        saveBtn.classList.remove('is-loading');
+        saveBtn.textContent = label || 'Сохранить';
       }
     });
   }
@@ -3671,14 +3771,20 @@ function initSettingsView() {
   if (setBanBtn && setBanFile) {
     setBanBtn.addEventListener('click', () => setBanFile.click());
     setBanFile.addEventListener('change', async () => {
-      if (!setBanFile.files?.[0]) return;
-      await uploadProfileImage('banner', setBanFile.files[0]);
-      const prev = $('#settings-banner-preview');
-      const url = window.AUTH_STATE?.user?.banner_url;
-      if (prev && url) {
-        prev.style.backgroundImage = `url('${url}?t=${Date.now()}')`;
+      const f = setBanFile.files && setBanFile.files[0];
+      if (!f) return;
+      setBanBtn.disabled = true;
+      const old = setBanBtn.textContent;
+      setBanBtn.textContent = 'Загрузка…';
+      try {
+        await uploadProfileImage('banner', f);
+      } catch (err) {
+        toast(err.message || 'Не удалось загрузить баннер');
+      } finally {
+        setBanBtn.disabled = false;
+        setBanBtn.textContent = old || 'Загрузить баннер';
+        setBanFile.value = '';
       }
-      setBanFile.value = '';
     });
   }
 
@@ -4400,7 +4506,7 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
     const isAdm = !!(viewerIsAdmin
       || (authUser && (authUser.role === 'admin' || authUser.is_admin === true || authUser.is_admin === 1)));
     const adminBtn = isAdm
-      ? `<button type="button" class="hp-btn-edit" id="hp-admin-edit-user">Редактировать</button>`
+      ? `<button type="button" class="hp-btn-edit hp-btn-icon" id="hp-admin-edit-user" title="Редактировать" aria-label="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>`
       : '';
     // Админ-кнопка ОТДЕЛЬНО от friend-actions — иначе innerHTML друзей её стирает
     toolbar.innerHTML = `
@@ -4458,8 +4564,10 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
         });
       } else if (p.relation === 'friends') {
         box.innerHTML = `
-          <button type="button" class="hp-btn-edit" id="hp-msg-friend">Написать</button>
-          <button type="button" class="hp-btn-edit" id="hp-remove-friend">Удалить из друзей</button>`;
+          <button type="button" class="hp-btn-logout hp-btn-icon" id="hp-remove-friend" title="Удалить из друзей" aria-label="Удалить из друзей">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          </button>
+          <button type="button" class="hp-btn-edit" id="hp-msg-friend">Написать</button>`;
         $('#hp-msg-friend')?.addEventListener('click', () => openChat(p.id, p.username));
         $('#hp-remove-friend')?.addEventListener('click', async () => {
           try {
@@ -5586,7 +5694,10 @@ function initAdminUI() {
     m.classList.add('hidden');
     m.setAttribute('aria-hidden', 'true');
     if (typeof resetSteamModalToImportMode === 'function') resetSteamModalToImportMode();
-  }
+  
+  window.__steamEditMode = false;
+  window.__steamEditGameId = null;
+}
   // admin uses inline form; modal only from game gear
   //   $('#steam-open-modal-btn')?.addEventListener('click', openSteamModal);
 
@@ -5611,17 +5722,18 @@ function initAdminUI() {
       previewBtn.disabled = true;
       previewBtn.textContent = 'Загрузка...';
       try {
-        const data = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
-        if (!data.ok) throw new Error(data.error || 'Ошибка');
+        const raw = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
+        if (!raw.ok) throw new Error(raw.error || 'Ошибка');
+        const data = { ...raw, ...(raw.preview || {}) };
         window.__adminSteamPreview = data;
         const banner = $('#steam-preview-admin-banner');
         const cover = $('#steam-preview-admin-cover');
-        if (banner) banner.src = data.banner_url || data.cover_url || '';
-        if (cover) cover.src = data.cover_url || '';
+        if (banner) banner.src = data.banner_url || data.header_image || data.cover_url || data.library_image || '';
+        if (cover) cover.src = data.cover_url || data.library_image || data.capsule_image || data.header_image || '';
         const t = $('#steam-preview-admin-title');
         if (t) t.textContent = data.title || '';
         const m = $('#steam-preview-admin-meta');
-        if (m) m.textContent = [data.developers, data.publishers, data.release_date].filter(Boolean).join(' · ');
+        if (m) m.textContent = [data.developers || data.developer, data.publishers || data.publisher, data.release_date].filter(Boolean).join(' · ');
         const s = $('#steam-preview-admin-short');
         if (s) s.textContent = (data.short_description || '').slice(0, 280);
         box?.classList.remove('hidden');
@@ -5710,12 +5822,94 @@ function initAdminUI() {
       $('#steam-sel-cover').value = url;
     }
     setSgdbPreview(url, type);
-    if (window.__steamEditMode && window.__steamEditGameId) {
-      const locked = Number(window.__steamEditGameId);
-      if (!locked) return;
-      applyGameAssetNow(locked, type, url);
+    updateSgdbSaveHint();
+  }
+
+  function updateSgdbSaveHint() {
+    const hint = $('#sgdb-asset-save-hint');
+    if (!hint) return;
+    const parts = [];
+    if (steamSelected.icon_url) parts.push('иконка');
+    if (steamSelected.logo_url) parts.push('логотип');
+    if (steamSelected.banner_url) parts.push('баннер');
+    if (steamSelected.cover_url) parts.push('обложка');
+    if (!parts.length) {
+      hint.textContent = 'Выбери ассеты и нажми сохранить';
+      hint.classList.remove('has-sel');
+    } else {
+      hint.textContent = 'Выбрано: ' + parts.join(', ');
+      hint.classList.add('has-sel');
     }
   }
+
+  /** Сохранить выбранные ассеты на сервер (игра уже в каталоге) */
+  async function applyGameAssetNow(gameId, type, url) {
+    if (!gameId || !url) return null;
+    const payload = { game_id: gameId, csrf_token: window.CSRF_TOKEN || '' };
+    if (type === 'icons' || type === 'icon') payload.icon_url = url;
+    else if (type === 'logos' || type === 'logo') payload.logo_url = url;
+    else if (type === 'heroes' || type === 'banner') payload.banner_url = url;
+    else if (type === 'grids' || type === 'cover') payload.cover_url = url;
+    else return null;
+    const res = await postJSON(`${STEAM_API}?action=update_assets`, payload, FETCH_TIMEOUT_LONG);
+    if (!res.ok) throw new Error(res.error || 'Не удалось сохранить ассет');
+    return res;
+  }
+
+  async function saveSelectedGameAssets() {
+    const gameId = Number(window.__steamEditGameId || 0);
+    if (!gameId) {
+      toast('Сначала открой настройки с страницы игры');
+      return;
+    }
+    const payload = {
+      game_id: gameId,
+      csrf_token: window.CSRF_TOKEN || '',
+      icon_url: steamSelected.icon_url || $('#steam-sel-icon')?.value || '',
+      logo_url: steamSelected.logo_url || $('#steam-sel-logo')?.value || '',
+      banner_url: steamSelected.banner_url || $('#steam-sel-banner')?.value || '',
+      cover_url: steamSelected.cover_url || $('#steam-sel-cover')?.value || '',
+    };
+    if (!payload.icon_url && !payload.logo_url && !payload.banner_url && !payload.cover_url) {
+      toast('Ничего не выбрано');
+      return;
+    }
+    const btn = $('#sgdb-asset-save');
+    const old = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Сохранение…'; }
+    try {
+      const res = await postJSON(`${STEAM_API}?action=update_assets`, payload, FETCH_TIMEOUT_LONG);
+      if (!res.ok) throw new Error(res.error || 'Ошибка сохранения');
+      window.__mediaBust = Date.now();
+      window.__iconBust = window.__mediaBust;
+      homeCache = null;
+      storeCache = [];
+      toast('Ассеты сохранены');
+      if (typeof refreshGameImagesEverywhere === 'function') {
+        refreshGameImagesEverywhere(gameId);
+      }
+      // обновить страницу игры, если открыта
+      if (typeof loadGamePage === 'function') {
+        try { await loadGamePage(gameId); } catch (e) {}
+      }
+      if (typeof loadSideLibrary === 'function') {
+        try { loadSideLibrary(); } catch (e) {}
+      }
+      closeSteamModal();
+    } catch (err) {
+      toast(err.message || 'Не удалось сохранить');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = old || 'Сохранить'; }
+    }
+  }
+
+  // кнопка Сохранить в модалке ассетов
+  $('#sgdb-asset-save')?.addEventListener('click', () => {
+    saveSelectedGameAssets();
+  });
+  // expose
+  window.applyGameAssetNow = applyGameAssetNow;
+  window.saveSelectedGameAssets = saveSelectedGameAssets;
 
   async function loadSgdbAssets(type) {
     const grid = $('#sgdb-asset-grid');
@@ -5927,7 +6121,7 @@ async function loadAdminPending() {
     }
     list.innerHTML = games.map(g => `
       <button type="button" class="admin-pending-item" data-id="${g.id}">
-        <img src="${escapeHtml(g.cover_url || '')}" alt="" onerror="this.style.display=\'none\'" />
+        <img src="${escapeHtml(g.cover_url ? bustUrl(g.cover_url) : '')}" alt="" onerror="this.style.display=\'none\'" />
         <div>
           <div class="t">${escapeHtml(g.title)}</div>
           <div class="s">${escapeHtml(g.submitter || '—')} · ${escapeHtml(g.genre || '')}</div>
@@ -5963,19 +6157,44 @@ async function openAdminGame(id) {
     renderLangTable('#admin-lang-table', g.languages);
     $('#admin-video').value = g.video_url || '';
     $('#admin-note').value = g.review_note || '';
+
+    // Сброс файлов и превью от предыдущей игры
+    const coverInput = $('#admin-cover');
+    const bannerInput = $('#admin-banner');
+    const shotsInput = $('#admin-shots');
+    if (coverInput) coverInput.value = '';
+    if (bannerInput) bannerInput.value = '';
+    if (shotsInput) shotsInput.value = '';
+    const coverPrev = $('#admin-cover-preview');
+    const bannerPrev = $('#admin-banner-preview');
+    if (coverPrev) { coverPrev.style.display = 'none'; coverPrev.removeAttribute('src'); }
+    if (bannerPrev) { bannerPrev.style.display = 'none'; bannerPrev.removeAttribute('src'); }
+
     const media = $('#admin-media-list');
     if (media) {
-      media.innerHTML = (g.media || []).map(m => `
+      const list = g.media || [];
+      media.innerHTML = list.length
+        ? list.map(m => `
         <div class="admin-media-thumb" data-mid="${m.id}">
-          <img src="${escapeHtml(m.url)}" alt="" />
+          <img src="${escapeHtml(bustUrl(m.url))}" alt="" />
           <button type="button" title="Удалить" data-del="${m.id}">×</button>
-        </div>`).join('');
+        </div>`).join('')
+        : '<div class="settings-hint">Медиа нет</div>';
       $$('[data-del]', media).forEach(b => {
         b.addEventListener('click', () => {
           adminDeleteMedia.push(+b.dataset.del);
           b.closest('.admin-media-thumb')?.remove();
         });
       });
+    }
+    // обложка в списке слева — актуальная с сервера (с cache-bust)
+    const coverUrl = g.cover_url || g.cover_src || (g.id ? ('media.php?type=cover&id=' + g.id) : '');
+    if (coverUrl) setPendingItemCover(id, bustUrl(coverUrl));
+    // title в списке
+    const pend = document.querySelector(`.admin-pending-item[data-id="${id}"]`);
+    if (pend) {
+      const t = pend.querySelector('.t');
+      if (t && g.title) t.textContent = g.title;
     }
     $$('.admin-pending-item').forEach(el => el.classList.toggle('active', +el.dataset.id === id));
   } catch (err) {
@@ -6054,9 +6273,110 @@ function initAdminUsersControls() {
   $('#admin-users-filter')?.addEventListener('change', run);
 }
 
+function setPendingItemCover(gameId, url) {
+  if (!gameId || !url) return;
+  const btn = document.querySelector(`.admin-pending-item[data-id="${gameId}"]`);
+  if (!btn) return;
+  let img = btn.querySelector('img');
+  if (!img) {
+    img = document.createElement('img');
+    img.alt = '';
+    btn.insertBefore(img, btn.firstChild);
+  }
+  img.style.display = '';
+  img.onerror = () => { img.style.display = 'none'; };
+  img.src = url;
+}
+
+function bustUrl(url) {
+  if (!url) return '';
+  const u = String(url);
+  const sep = u.includes('?') ? '&' : '?';
+  return u + sep + 'v=' + (window.__mediaBust || Date.now());
+}
+
+function refreshGameImagesEverywhere(gameId) {
+  if (!gameId) return;
+  window.__mediaBust = Date.now();
+  window.__iconBust = window.__mediaBust;
+  const selectors = [
+    `.admin-pending-item[data-id="${gameId}"] img`,
+    `#admin-media-list img`,
+    `.home-card[data-id="${gameId}"] img`,
+    `.game-card[data-id="${gameId}"] img`,
+    `.store-row[data-id="${gameId}"] img`,
+    `.lib-card[data-id="${gameId}"] img`,
+    `.hp-game-card[data-id="${gameId}"] img`,
+    `.gp-similar-card[data-id="${gameId}"] img`,
+  ];
+  selectors.forEach(sel => {
+    $$(sel).forEach(img => {
+      const src = img.getAttribute('src') || '';
+      if (!src || src.startsWith('blob:')) return;
+      // force reload
+      const base = src.replace(/([?&])v=\d+/, '').replace(/[?&]$/, '');
+      img.src = bustUrl(base);
+    });
+  });
+  // hero on game page if open
+  const hero = $('.gp-hero-bg');
+  if (hero && hero.src) {
+    const base = hero.src.replace(/([?&])v=\d+/, '').replace(/[?&]$/, '');
+    hero.src = bustUrl(base);
+  }
+}
+
+function bindAdminMediaPreviews() {
+  const bind = (inputId, previewId, kind) => {
+    const input = $(inputId);
+    const preview = $(previewId);
+    if (!input || input.dataset.previewBound === '1') return;
+    input.dataset.previewBound = '1';
+    input.addEventListener('change', () => {
+      const f = input.files && input.files[0];
+      const gameId = $('#admin-game-id')?.value;
+      if (!f) {
+        if (preview) {
+          preview.style.display = 'none';
+          preview.removeAttribute('src');
+        }
+        return;
+      }
+      if (preview) {
+        if (preview._objUrl) URL.revokeObjectURL(preview._objUrl);
+        preview._objUrl = URL.createObjectURL(f);
+        preview.src = preview._objUrl;
+        preview.style.display = 'block';
+      }
+      // сразу в списке слева (обложка/иконка)
+      if (kind === 'cover' && gameId) {
+        setPendingItemCover(gameId, preview ? preview.src : URL.createObjectURL(f));
+      }
+      // сразу в блоке текущих медиа — временный thumb
+      if (kind === 'cover') {
+        const media = $('#admin-media-list');
+        if (media) {
+          let tmp = media.querySelector('.admin-media-thumb.is-pending-cover');
+          if (!tmp) {
+            tmp = document.createElement('div');
+            tmp.className = 'admin-media-thumb is-pending-cover';
+            tmp.innerHTML = '<img alt="" /><span class="settings-hint" style="position:absolute;bottom:2px;left:2px;right:2px;font-size:10px;background:rgba(0,0,0,.65);color:#fff;text-align:center;border-radius:2px">новая</span>';
+            media.prepend(tmp);
+          }
+          const img = tmp.querySelector('img');
+          if (img) img.src = preview ? preview.src : URL.createObjectURL(f);
+        }
+      }
+    });
+  };
+  bind('#admin-cover', '#admin-cover-preview', 'cover');
+  bind('#admin-banner', '#admin-banner-preview', 'banner');
+}
+
 function initAdminPanel() {
   if (!$('#view-admin')) return;
   try { initAdminUI(); } catch (e) {}
+  try { bindAdminMediaPreviews(); } catch (e) {}
   // load when opening admin view - hook showView
   $('#admin-save')?.addEventListener('click', async () => {
     const id = $('#admin-game-id')?.value;
@@ -6087,7 +6407,12 @@ function initAdminPanel() {
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Ошибка');
       toast('Сохранено');
-      openAdminGame(+id);
+      homeCache = null;
+      storeCache = [];
+      window.__mediaBust = Date.now();
+      window.__iconBust = window.__mediaBust;
+      await openAdminGame(+id);
+      refreshGameImagesEverywhere(+id);
     } catch (err) { toast(err.message); }
   });
 

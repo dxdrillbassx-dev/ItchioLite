@@ -266,7 +266,9 @@ if ($isAuthorized) {
       <!-- Блок над вкладкой: назад + название + поиск по вкладке (как в Hydra) -->
       <header class="content-head">
         <div class="content-head-inner">
-<button type="button" class="head-back" id="head-back" title="Назад">←</button>
+<button type="button" class="head-back" id="head-back" title="Назад" aria-label="Назад">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
         <h1 class="head-title" id="head-title">Главная</h1>
         <div class="head-search" id="head-search">
           <input type="text" id="head-search-input" placeholder="Поиск" aria-label="Поиск по вкладке" />
@@ -509,9 +511,8 @@ if ($isAuthorized) {
             <!-- Кнопки под баннером (blur поверх того же фона) -->
             <div class="hp-toolbar">
               <div class="hp-toolbar-spacer"></div>
-              <button type="button" class="hp-btn-edit" id="btn-edit-profile">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                Редактировать Профиль
+              <button type="button" class="hp-btn-edit hp-btn-icon" id="btn-edit-profile" title="Редактировать профиль" aria-label="Редактировать профиль">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               </button>
               <button type="button" class="hp-btn-logout" onclick="logout()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -695,7 +696,7 @@ if ($isAuthorized) {
               </label>
               <div class="hp-banner-modal-actions">
                 <button type="button" class="hp-btn-edit" id="hp-banner-pick">Выбрать файл</button>
-                <button type="button" class="hp-edit-save" id="hp-banner-save">Сохранить</button>
+                <button type="button" class="auth-submit hp-banner-save-btn" id="hp-banner-save">Сохранить баннер</button>
               </div>
               <input type="file" id="hp-banner-file-modal" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
             </div>
@@ -891,9 +892,19 @@ if ($isAuthorized) {
                       <h3 class="settings-subtitle">Языки</h3>
                       <div class="lang-table" id="admin-lang-table"></div>
                     </div>
+                    <div class="settings-block">
+                      <h3 class="settings-subtitle">Текущие медиа</h3>
+                      <div id="admin-media-list" class="admin-media-list"></div>
+                    </div>
                     <div class="settings-grid">
-                      <label class="settings-label"><span>Новая обложка</span><input type="file" id="admin-cover" accept="image/*" /></label>
-                      <label class="settings-label"><span>Новый баннер</span><input type="file" id="admin-banner" accept="image/*" /></label>
+                      <label class="settings-label"><span>Новая обложка</span>
+                        <input type="file" id="admin-cover" accept="image/*" />
+                        <img id="admin-cover-preview" class="admin-cover-preview" alt="" style="display:none;max-width:120px;max-height:120px;object-fit:cover;border-radius:8px;margin-top:8px" />
+                      </label>
+                      <label class="settings-label"><span>Новый баннер</span>
+                        <input type="file" id="admin-banner" accept="image/*" />
+                        <img id="admin-banner-preview" class="admin-cover-preview" alt="" style="display:none;max-width:160px;max-height:90px;object-fit:cover;border-radius:8px;margin-top:8px" />
+                      </label>
                       <label class="settings-label full"><span>Добавить скриншоты</span><input type="file" id="admin-shots" accept="image/*" multiple /></label>
                       <label class="settings-label full"><span>Заметка модератора</span><textarea class="auth-input settings-textarea" id="admin-note" rows="2"></textarea></label>
                     </div>
@@ -1218,10 +1229,7 @@ function socialAuth(provider) {
     <div class="friends-modal-backdrop" id="friends-backdrop"></div>
     <div class="friends-modal-box">
       <div class="friends-modal-head">
-        <div class="friends-tabs">
-          <button type="button" class="friends-tab active" data-ftab="friends">Друзья</button>
-          <button type="button" class="friends-tab" data-ftab="notifications">Уведомления <span class="friends-tab-badge hidden" id="notif-tab-badge">0</span></button>
-        </div>
+        <h2 class="friends-modal-title">Друзья</h2>
         <button type="button" class="friends-modal-close" id="friends-close" aria-label="Закрыть">×</button>
       </div>
       <div class="friends-modal-body">
@@ -1666,13 +1674,19 @@ function socialAuth(provider) {
           </div>
           <p class="sgdb-warn">⚠ Ваши пользовательские изображения не будут синхронизированы с вашей учётной записью.</p>
           <div class="sgdb-source-label">SteamGridDB</div>
-          <div id="sgdb-asset-grid" class="sgdb-asset-grid">
-            <div class="settings-hint">Загрузка…</div>
+          <div class="sgdb-asset-scroll">
+            <div id="sgdb-asset-grid" class="sgdb-asset-grid">
+              <div class="settings-hint">Загрузка…</div>
+            </div>
           </div>
           <input type="hidden" id="steam-sel-icon" />
           <input type="hidden" id="steam-sel-logo" />
           <input type="hidden" id="steam-sel-banner" />
           <input type="hidden" id="steam-sel-cover" />
+          <div class="sgdb-asset-savebar">
+            <span class="sgdb-asset-save-hint" id="sgdb-asset-save-hint">Выбери ассеты и нажми сохранить</span>
+            <button type="button" class="auth-submit sgdb-asset-save-btn" id="sgdb-asset-save">Сохранить</button>
+          </div>
         </div>
         <div class="sgdb-pane" data-sgdb-pane="downloads">
           <div class="sgdb-pane-title">Загрузки</div>
