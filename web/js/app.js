@@ -404,10 +404,15 @@ let homeSearch = '';
 let dlSearch = '';
 let profileSearch = '';
 
+const HOME_SORT_ICONS = {
+  popular: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.2 6.6H21l-5.4 4 2.1 6.6L12 15.8 6.3 19.2l2.1-6.6L3 8.6h6.8L12 2z"/></svg>',
+  week: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h7v7"/></svg>',
+  new: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>',
+};
 const HOME_SORT_TITLES = {
-  popular: '🔥 Сейчас популярно',
-  week: '📈 Лучшие игры недели',
-  new: '✨ Новинки',
+  popular: 'Сейчас популярно',
+  week: 'Лучшие игры недели',
+  new: 'Новинки',
 };
 
 async function loadHome() {
@@ -507,7 +512,7 @@ function renderHomeGrid() {
   }
 
   grid.innerHTML = games.map(g => {
-    const cover = escapeHtml(gameCoverUrl(g));
+    const cover = escapeHtml(g.banner_url || g.cover_url || gameCoverUrl(g));
     const author = escapeHtml(g.developer_name || g.developer || '');
     const sub = author || (parseFloat(g.price) > 0 ? (parseFloat(g.price).toFixed(0) + ' ₽') : 'Бесплатно');
     const dl = formatStatNum(g.download_count);
@@ -544,7 +549,7 @@ function initHomeControls() {
       pill.classList.add('active');
       homeSort = pill.dataset.hsort;
       const title = $('#home-section-title');
-      if (title) title.textContent = HOME_SORT_TITLES[homeSort] || '';
+      if (title) title.innerHTML = (HOME_SORT_ICONS[homeSort] || '') + ' ' + (HOME_SORT_TITLES[homeSort] || '');
       renderHomeGrid();
     });
   });
@@ -818,25 +823,123 @@ function initContentHead() {
 
   const hs = $('#head-search-input');
   if (hs) {
+    let searchTimer = null;
     hs.addEventListener('input', () => {
       const q = hs.value.trim();
       const view = getViewFromUrl();
       if (view === 'store') {
+        hideHeadSearchDrop();
         storeSearch = q;
         if (storeCache.length) renderStoreList();
-      } else if (view === 'home') {
-        homeSearch = q;
-        renderHomeGrid();
+      } else if (view === 'home' || view === 'profile') {
+        // Steam-style: выпадающий список игр, не фильтр страницы
+        clearTimeout(searchTimer);
+        if (!q) { hideHeadSearchDrop(); return; }
+        searchTimer = setTimeout(() => updateHeadSearchDrop(q), 160);
       } else if (view === 'library') {
+        hideHeadSearchDrop();
         librarySearch = q;
         renderLibraryGrid();
       } else if (view === 'downloads') {
+        hideHeadSearchDrop();
         dlSearch = q;
         renderDownloadsView();
-      } else if (view === 'profile') {
-        profileSearch = q;
-        loadProfileGames();
+      } else {
+        hideHeadSearchDrop();
       }
+    });
+    hs.addEventListener('focus', () => {
+      const q = hs.value.trim();
+      const view = getViewFromUrl();
+      if ((view === 'home' || view === 'profile') && q) updateHeadSearchDrop(q);
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#head-search')) hideHeadSearchDrop();
+    });
+  }
+}
+
+let headSearchGamesCache = null;
+async function ensureSearchGames() {
+  if (storeCache && storeCache.length) return storeCache;
+  if (headSearchGamesCache && headSearchGamesCache.length) return headSearchGamesCache;
+  if (homeCache && homeCache.length) return homeCache;
+  try {
+    const data = await fetchJSON(`${API_BASE}?action=list&category=game`);
+    if (data.ok) {
+      headSearchGamesCache = data.games || [];
+      return headSearchGamesCache;
+    }
+  } catch (e) {}
+  return [];
+}
+
+function hideHeadSearchDrop() {
+  const drop = $('#head-search-drop');
+  if (!drop) return;
+  drop.hidden = true;
+  drop.innerHTML = '';
+  drop.classList.remove('is-open');
+}
+
+async function updateHeadSearchDrop(q) {
+  const drop = $('#head-search-drop');
+  const wrap = $('#head-search');
+  if (!drop || !wrap) return;
+  const query = String(q || '').trim().toLowerCase();
+  if (!query) { hideHeadSearchDrop(); return; }
+
+  drop.hidden = false;
+  drop.classList.add('is-open');
+  drop.innerHTML = '<div class="head-search-drop-status">Поиск…</div>';
+
+  const games = await ensureSearchGames();
+  const matched = games.filter(g => {
+    const t = String(g.title || '').toLowerCase();
+    const d = String(g.developer_name || g.developer || '').toLowerCase();
+    const gen = String(g.genre || '').toLowerCase();
+    return t.includes(query) || d.includes(query) || gen.includes(query);
+  }).slice(0, 8);
+
+  if (!matched.length) {
+    drop.innerHTML = '<div class="head-search-drop-status">Ничего не найдено</div>';
+    return;
+  }
+
+  drop.innerHTML = matched.map(g => {
+    const cover = escapeHtml(g.cover_url || g.cover_src || g.banner_url || ('media.php?type=cover&id=' + g.id));
+    const title = escapeHtml(g.title || 'Без названия');
+    const meta = escapeHtml((g.genre || g.developer_name || g.developer || '').toString().split(/[,/]/)[0].trim() || '');
+    return `<button type="button" class="head-search-item" data-id="${g.id}">
+      <img class="head-search-item-cover" src="${cover}" alt="" loading="lazy" />
+      <span class="head-search-item-meta">
+        <span class="head-search-item-title">${title}</span>
+        ${meta ? `<span class="head-search-item-sub">${meta}</span>` : ''}
+      </span>
+    </button>`;
+  }).join('') + `<button type="button" class="head-search-more" data-q="${escapeHtml(q)}">Все результаты в каталоге</button>`;
+
+  drop.querySelectorAll('.head-search-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      hideHeadSearchDrop();
+      const id = btn.dataset.id;
+      if (id) gotoGame(id);
+    });
+  });
+  const more = drop.querySelector('.head-search-more');
+  if (more) {
+    more.addEventListener('click', () => {
+      const qq = more.dataset.q || q;
+      hideHeadSearchDrop();
+      storeSearch = qq;
+      const input = $('#head-search-input');
+      if (input) input.value = qq;
+      showView('store');
+      // filter after store loads
+      setTimeout(() => {
+        storeSearch = qq;
+        if (storeCache.length) renderStoreList();
+      }, 400);
     });
   }
 }
@@ -849,7 +952,7 @@ let storeGenres = new Set();
 let storeDevs = new Set();
 let storeSearch = '';
 let storeSort = 'popular';
-let storeViewMode = localStorage.getItem('catio_store_mode') || 'list'; // 'list' | 'grid'
+let storeEra = localStorage.getItem('catio_store_era') || 'modern'; // 'modern' | 'classics'
 let storePrice = 'all'; // 'all' | 'free' | 'paid'
 
 async function loadStore() {
@@ -857,16 +960,15 @@ async function loadStore() {
   const list = $('#store-list');
   if (!list) return;
   list.innerHTML = '<div class="loading">Загрузка каталога...</div>';
-  list.dataset.mode = storeViewMode;
-
   try {
     const data = await fetchJSON(`${API_BASE}?action=list&category=game`);
     if (!data.ok) throw new Error(data.error || 'Ошибка загрузки');
 
     storeCache = data.games || [];
     buildStoreFilters();
-    syncStoreViewToggle();
+    syncStoreEraToggle();
     renderStoreList();
+    try { refreshStoreChrome(); } catch (e) {}
   } catch (err) {
     if (isOffline(err)) {
       renderOffline(list, loadStore, 'Кот ушёл в запой');
@@ -876,20 +978,35 @@ async function loadStore() {
   }
 }
 
-function syncStoreViewToggle() {
-  $$('.store-view-btn').forEach(btn => {
-    const on = btn.dataset.mode === storeViewMode;
+function syncStoreEraToggle() {
+  $$('.store-era-btn').forEach(btn => {
+    const on = btn.dataset.era === storeEra;
     btn.classList.toggle('active', on);
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
-  const list = $('#store-list');
-  if (list) list.dataset.mode = storeViewMode;
+}
+
+/** Классика = ретро / эмуляторы (PS1, NES, и т.д.) */
+function isClassicGame(g) {
+  if (!g) return false;
+  if (g.is_classic == 1 || g.is_classic === true || g.era === 'classics' || g.platform_type === 'retro') return true;
+  const blob = [
+    g.genre, g.tags, g.platforms, g.platform, g.category, g.title, g.short_description
+  ].map(x => String(x || '').toLowerCase()).join(' ');
+  return /\b(retro|ретро|classic|классик|emulator|эмулятор|ps1|ps2|psx|psp|nes|snes|n64|gamecube|wii|gba|gbc|nds|3ds|sega|genesis|megadrive|dreamcast|arcade|mame|atari|dos|amiga|gameboy)\b/i.test(blob);
 }
 
 // Панель фильтров: жанры и разработчики из реальных данных
+function splitFilterTokens(raw) {
+  return String(raw || '')
+    .split(/[,;/|·•]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 function buildStoreFilters() {
-  const genres = [...new Set(storeCache.map(g => g.genre).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
-  const devs = [...new Set(storeCache.map(g => g.developer_name || g.developer).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+  const genres = [...new Set(storeCache.flatMap(g => splitFilterTokens(g.genre)))].sort((a, b) => a.localeCompare(b, 'ru'));
+  const devs = [...new Set(storeCache.flatMap(g => splitFilterTokens(g.developer_name || g.developer)))].sort((a, b) => a.localeCompare(b, 'ru'));
 
   const gc = $('#genre-count');
   if (gc) gc.textContent = genres.length;
@@ -929,11 +1046,17 @@ function buildStoreFilters() {
 
 function applyStoreFilters(games) {
   let out = games;
+  if (storeEra === 'classics') {
+    out = out.filter(isClassicGame);
+  } else {
+    // современные — всё, что не классика
+    out = out.filter(g => !isClassicGame(g));
+  }
   if (storeGenres.size) {
-    out = out.filter(g => g.genre && storeGenres.has(g.genre));
+    out = out.filter(g => splitFilterTokens(g.genre).some(p => storeGenres.has(p)));
   }
   if (storeDevs.size) {
-    out = out.filter(g => storeDevs.has(g.developer_name || g.developer));
+    out = out.filter(g => splitFilterTokens(g.developer_name || g.developer).some(p => storeDevs.has(p)));
   }
   if (storePrice === 'free') {
     out = out.filter(g => !(parseFloat(g.price) > 0));
@@ -983,64 +1106,80 @@ function clearStoreFilters() {
 function createStoreRow(game) {
   const price = formatPrice(game.price);
   const row = document.createElement('article');
-  row.className = 'store-row';
+  row.className = 'store-row game-item';
   row.dataset.id = game.id;
+  const cover = escapeHtml(game.banner_url || game.cover_url || game.cover_src || ('media.php?type=cover&id=' + game.id));
+  const genres = escapeHtml((game.genre || '').split(/[,/|]/).map(s => s.trim()).filter(Boolean).slice(0, 4).join(', ') || '—');
   row.innerHTML = `
-    <div class="store-row-cover">
-      <img src="${escapeHtml(game.cover_src || ('media.php?type=cover&id=' + game.id))}" alt="${escapeHtml(game.title)}" loading="lazy" />
-      ${game.owned ? '<span class="card-badge owned">В библиотеке</span>' : ''}
+    <div class="game-item__content-link">
+      <div class="game-item__cover-wrapper">
+        <img class="game-item__cover" src="${cover}" alt="${escapeHtml(game.title)}" loading="lazy" />
+      </div>
+      <div class="game-item__details">
+        <h3 class="store-row-title">${escapeHtml(game.title)}</h3>
+        <div class="game-item__genres">${genres}</div>
+      </div>
     </div>
-    <div class="store-row-info">
-      <h3 class="store-row-title">${escapeHtml(game.title)}</h3>
-      <div class="store-row-meta">${escapeHtml([game.genre, game.developer_name || game.developer].filter(Boolean).join(' · '))}</div>
-      <div class="store-row-rating">${starsHtml(game.rating, game.ratings_count)}</div>
-    </div>
-    <div class="store-row-side">
-      <span class="price ${price.className}">${price.text}</span>
-      <button type="button" class="btn-get ${game.owned ? 'owned' : ''}" data-id="${game.id}"></button>
-    </div>
-    <span class="store-row-arrow">›</span>
+    <button type="button" class="game-item__plus-wrapper ${game.owned ? 'is-owned' : 'is-add'}" data-id="${game.id}" title="${game.owned ? 'В библиотеке' : 'В библиотеку'}" ${game.owned ? 'disabled' : ''}>
+      ${game.owned
+        ? '<svg class="gi-icon gi-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+        : '<svg class="gi-icon gi-plus" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>'}
+    </button>
   `;
-  const btn = row.querySelector('.btn-get');
-  paintCardButton(btn, game, price);
-  row.addEventListener('click', () => gotoGame(game.id));
-  btn.addEventListener('click', (e) => {
+  const plus = row.querySelector('.game-item__plus-wrapper');
+  row.addEventListener('click', (e) => {
+    if (e.target.closest('.game-item__plus-wrapper')) return;
+    gotoGame(game.id);
+  });
+  plus.addEventListener('click', async (e) => {
     e.stopPropagation();
-    buyFromCard(btn, game, price);
+    if (game.owned || plus.disabled) return;
+    plus.disabled = true;
+    try {
+      const data = await postJSON(`${API_BASE}?action=buy`, { game_id: game.id });
+      if (!data.ok) throw new Error(data.error || 'Не удалось оформить');
+      if (data.balance !== undefined) updateBalance(data.balance);
+      game.owned = true;
+      // обновить в кэше
+      const cached = storeCache.find(g => String(g.id) === String(game.id));
+      if (cached) cached.owned = true;
+      markStoreRowOwned(plus);
+      try { sideLibAddOptimistic(game); } catch (err) {}
+      toast(data.message || `«${game.title}» добавлена в библиотеку`);
+    } catch (err) {
+      plus.disabled = false;
+      toast(err.message || 'Ошибка');
+    }
   });
   return row;
 }
 
+function markStoreRowOwned(plusBtn) {
+  if (!plusBtn) return;
+  plusBtn.classList.remove('is-add');
+  plusBtn.classList.add('is-owned');
+  plusBtn.disabled = true;
+  plusBtn.title = 'В библиотеке';
+  plusBtn.innerHTML = '<svg class="gi-icon gi-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+}
+
 function createStoreGridCard(game) {
   const price = formatPrice(game.price);
-  const tags = tagsToArray(game.tags).slice(0, 2);
   const card = document.createElement('article');
   card.className = 'store-grid-card';
   card.dataset.id = game.id;
+  const cover = escapeHtml(game.cover_url || game.cover_src || game.banner_url || ('media.php?type=cover&id=' + game.id));
   card.innerHTML = `
     <div class="store-grid-cover">
-      <img src="${escapeHtml(game.cover_src || ('media.php?type=cover&id=' + game.id))}" alt="${escapeHtml(game.title)}" loading="lazy" />
-      ${game.owned ? '<span class="card-badge owned">В библиотеке</span>' : ''}
-      <div class="store-grid-overlay">
-        <span class="price ${price.className}">${price.text}</span>
-      </div>
+      <img src="${cover}" alt="${escapeHtml(game.title)}" loading="lazy" />
+      ${game.owned ? '<span class="card-badge owned">✓</span>' : ''}
     </div>
     <div class="store-grid-body">
       <h3 class="store-grid-title">${escapeHtml(game.title)}</h3>
-      <div class="store-grid-meta">${escapeHtml(game.developer_name || game.developer || game.genre || '')}</div>
-      <div class="store-grid-footer">
-        <div class="store-grid-rating">${starsHtml(game.rating, game.ratings_count)}</div>
-        <button type="button" class="btn-get btn-get-sm ${game.owned ? 'owned' : ''}" data-id="${game.id}"></button>
-      </div>
+      <div class="store-grid-meta">${escapeHtml(game.genre || game.developer_name || '')}</div>
     </div>
   `;
-  const btn = card.querySelector('.btn-get');
-  paintCardButton(btn, game, price);
   card.addEventListener('click', () => gotoGame(game.id));
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    buyFromCard(btn, game, price);
-  });
   return card;
 }
 
@@ -1052,20 +1191,18 @@ function renderStoreList() {
   const count = $('#store-count');
   if (count) count.textContent = games.length.toLocaleString('ru-RU');
 
-  list.dataset.mode = storeViewMode;
-  list.className = storeViewMode === 'grid' ? 'store-list store-grid' : 'store-list';
+  list.className = 'store-list';
 
   if (!games.length) {
-    list.innerHTML = '<div class="loading store-empty">Ничего не найдено.<br><small>Сбрось фильтры или измени запрос.</small></div>';
+    const emptyMsg = storeEra === 'classics'
+      ? 'В разделе «Классика» пока пусто.<br><small>Сюда попадут ретро-игры и релизы для эмуляторов (PS1, NES и т.д.).</small>'
+      : 'Ничего не найдено.<br><small>Сбрось фильтры или измени запрос.</small>';
+    list.innerHTML = `<div class="loading store-empty">${emptyMsg}</div>`;
     return;
   }
 
   list.innerHTML = '';
-  if (storeViewMode === 'grid') {
-    games.forEach(game => list.appendChild(createStoreGridCard(game)));
-  } else {
-    games.forEach(game => list.appendChild(createStoreRow(game)));
-  }
+  games.forEach(game => list.appendChild(createStoreRow(game)));
 }
 
 // ============================================================
@@ -1192,16 +1329,18 @@ function initStoreControls() {
     });
   }
 
-  // Переключатель вид: список / сетка
-  $$('.store-view-btn').forEach(btn => {
+  setTimeout(() => { try { refreshStoreChrome(); } catch (e) {} }, 0);
+
+  // Современные / Классика (ретро)
+  $$('.store-era-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      storeViewMode = btn.dataset.mode || 'list';
-      localStorage.setItem('catio_store_mode', storeViewMode);
-      syncStoreViewToggle();
+      storeEra = btn.dataset.era || 'modern';
+      localStorage.setItem('catio_store_era', storeEra);
+      syncStoreEraToggle();
       if (storeCache.length) renderStoreList();
     });
   });
-  syncStoreViewToggle();
+  syncStoreEraToggle();
 
   // Фильтр по цене
   $$('#price-pills .price-pill').forEach(pill => {
@@ -1222,7 +1361,36 @@ function initStoreControls() {
   // Сворачивание блоков фильтров
   $$('.filter-block-head').forEach(head => {
     head.addEventListener('click', () => {
-      head.closest('.filter-block').classList.toggle('collapsed');
+      const block = head.closest('.filter-block');
+      if (!block) return;
+      const body = block.querySelector('.filter-block-body');
+      const willCollapse = !block.classList.contains('collapsed');
+      if (body) {
+        if (willCollapse) {
+          // зафиксировать текущую высоту → 0
+          body.style.maxHeight = body.scrollHeight + 'px';
+          body.offsetHeight; // reflow
+          block.classList.add('collapsed');
+          body.style.maxHeight = '0px';
+          body.style.paddingTop = '0px';
+          body.style.paddingBottom = '0px';
+          body.style.opacity = '0';
+        } else {
+          block.classList.remove('collapsed');
+          body.style.paddingTop = '';
+          body.style.paddingBottom = '';
+          body.style.opacity = '1';
+          body.style.maxHeight = body.scrollHeight + 'px';
+          const onEnd = (e) => {
+            if (e.propertyName !== 'max-height') return;
+            body.style.maxHeight = '';
+            body.removeEventListener('transitionend', onEnd);
+          };
+          body.addEventListener('transitionend', onEnd);
+        }
+      } else {
+        block.classList.toggle('collapsed');
+      }
     });
   });
 }
@@ -3151,29 +3319,37 @@ async function loadProfile() {
   }
   const upload = $('#hp-banner-upload');
   if (upload) upload.style.display = '';
-  // restore own banner/avatar from AUTH_STATE
+
+  // Свежие данные с сервера (аватар, баннер, pos/zoom) — не из устаревшего AUTH_STATE
+  try {
+    const data = await fetchJSON(`${USER_API}?action=me`);
+    if (data.ok && data.user) {
+      window.AUTH_STATE = window.AUTH_STATE || {};
+      window.AUTH_STATE.user = Object.assign({}, window.AUTH_STATE.user || {}, data.user);
+    }
+  } catch (err) {
+    console.warn('profile me refresh failed', err);
+  }
+
   const me = window.AUTH_STATE && window.AUTH_STATE.user;
   if (me) {
-    const bg = $('#hp-banner-bg');
-    if (bg && me.banner_url) {
-      const zoom = parseFloat(me.banner_zoom) || 1;
-      const size = zoom <= 1.01 ? 'cover' : (Math.round(zoom * 100) + '%');
-      bg.style.backgroundImage = `url('${me.banner_url}')`;
-      bg.style.backgroundPosition = me.banner_pos || '50% 50%';
-      bg.style.backgroundSize = size;
-      bg.classList.add('has-image');
-    }
+    applyUserBanner(me.banner_url || '', me.banner_pos || '50% 50%', me.banner_zoom || 1);
     applyUserAvatarEl($('#hp-avatar'), me);
     applyUserAvatarEl($('#side-avatar'), me);
     applyUserAvatarEl($('#settings-avatar-preview'), me);
     setProfileRoleBadge(me);
     const uname = $('#hp-username');
     if (uname) uname.textContent = me.username;
+    if (typeof updateBalance === 'function' && me.balance != null) updateBalance(me.balance);
   }
-  loadProfileStats();
-  loadProfileActivity();
-  loadProfileFriends();
-  await loadProfileLibrary();
+
+  // статистика / библиотека / активность — параллельно после identity
+  await Promise.all([
+    loadProfileStats(),
+    loadProfileActivity(),
+    loadProfileFriends(),
+    loadProfileLibrary(),
+  ]);
   loadProfileReviews(null);
   initProfileControls();
 }
@@ -3345,7 +3521,10 @@ function renderProfileLibrary() {
   });
 }
 
+let profileControlsInited = false;
 function initProfileControls() {
+  if (profileControlsInited) return;
+  profileControlsInited = true;
   $$('.hp-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       $$('.hp-tab').forEach(t => t.classList.remove('active'));
@@ -3386,18 +3565,18 @@ function initProfileControls() {
 
   $$('.hp-side-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
-      const body = btn.closest('.hp-side-card')?.querySelector('.hp-side-body');
-      if (!body) return;
-      const hidden = body.style.display === 'none';
-      body.style.display = hidden ? '' : 'none';
-      btn.textContent = hidden ? '▴' : '▾';
+      const card = btn.closest('.hp-side-card');
+      if (!card) return;
+      const collapsed = card.classList.toggle('is-collapsed');
+      btn.textContent = collapsed ? '▾' : '▴';
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     });
   });
 
   // --- Edit profile modal ---
   const modal = $('#hp-edit-modal');
-  const openEdit = () => { if (modal) modal.classList.remove('hidden'); };
-  const closeEdit = () => { if (modal) modal.classList.add('hidden'); };
+  const openEdit = () => openAnimatedModal(modal);
+  const closeEdit = () => closeAnimatedModal(modal);
 
   const editBtn = $('#btn-edit-profile');
   if (editBtn) editBtn.addEventListener('click', openEdit);
@@ -3443,6 +3622,8 @@ function initProfileControls() {
         }
         // side user name
         $$('.side-user-name, .user-menu-name').forEach(el => { el.textContent = res.username; });
+        const sdn = $('#settings-display-name'); if (sdn) sdn.textContent = res.username;
+        const sun = $('#settings-username'); if (sun) sun.value = res.username;
         toast('Профиль сохранён');
         closeEdit();
       } catch (err) {
@@ -3505,6 +3686,10 @@ function applyBannerEverywhere(url, pos, zoom) {
       setPrev.style.backgroundImage = `url('${url}')`;
       setPrev.classList.add('has-image');
     }
+    const cardBan = $('#settings-profile-card-banner');
+    if (cardBan) {
+      cardBan.style.backgroundImage = `url('${url}')`;
+    }
   }
   if (pos != null || zoom != null) {
     const p = pos != null ? pos : (window.AUTH_STATE?.user?.banner_pos || '50% 50%');
@@ -3525,7 +3710,9 @@ let bannerEditor = {
   lastY: 0,
 };
 
+let bannerEditorInited = false;
 function initBannerEditor() {
+  if (bannerEditorInited) return;
   const modal = $('#hp-banner-modal');
   const openBtn = $('#hp-banner-upload');
   const closeBtn = $('#hp-banner-close');
@@ -3539,6 +3726,7 @@ function initBannerEditor() {
   const previewImg = $('#hp-banner-preview-img');
 
   if (!modal || !openBtn) return;
+  bannerEditorInited = true;
 
   const open = () => {
     // load current banner into preview
@@ -3571,11 +3759,11 @@ function initBannerEditor() {
     }
     if (zoomSl) zoomSl.value = Math.round(bannerEditor.zoom * 100);
     if (zoomVal) zoomVal.textContent = Math.round(bannerEditor.zoom * 100) + '%';
-    modal.classList.remove('hidden');
+    openAnimatedModal(modal);
   };
 
   const close = () => {
-    modal.classList.add('hidden');
+    closeAnimatedModal(modal);
     if (bannerEditor.objectUrl) {
       URL.revokeObjectURL(bannerEditor.objectUrl);
       bannerEditor.objectUrl = null;
@@ -3630,9 +3818,12 @@ function initBannerEditor() {
       bannerEditor.lastX = pt.clientX;
       bannerEditor.lastY = pt.clientY;
       // sensitivity depends on zoom — higher zoom = more room to pan
-      const sens = 0.25 / bannerEditor.zoom;
-      bannerEditor.posX = Math.max(0, Math.min(100, bannerEditor.posX - dx * sens));
-      bannerEditor.posY = Math.max(0, Math.min(100, bannerEditor.posY - dy * sens));
+      const box = preview.getBoundingClientRect();
+      // % сдвига = пиксели / размер превью * 100 / zoom
+      const sensX = (100 / Math.max(1, box.width)) / bannerEditor.zoom;
+      const sensY = (100 / Math.max(1, box.height)) / bannerEditor.zoom;
+      bannerEditor.posX = Math.max(0, Math.min(100, bannerEditor.posX - dx * sensX));
+      bannerEditor.posY = Math.max(0, Math.min(100, bannerEditor.posY - dy * sensY));
       applyBannerPreview();
       e.preventDefault();
     };
@@ -3694,22 +3885,392 @@ function applyBannerPreview() {
   const el = $('#hp-banner-preview-img');
   if (!el) return;
   const size = bannerEditor.zoom <= 1.01 ? 'cover' : (Math.round(bannerEditor.zoom * 100) + '%');
-  el.style.backgroundPosition = `${bannerEditor.posX}% ${bannerEditor.posY}%`;
-  el.style.backgroundSize = size;
+  const pos = `${bannerEditor.posX}% ${bannerEditor.posY}%`;
+  el.style.setProperty('background-position', pos, 'important');
+  el.style.setProperty('background-size', size, 'important');
+  el.style.setProperty('background-repeat', 'no-repeat', 'important');
 }
 
+/** Применить позицию/зум баннера к hero — 1:1 как в превью */
 function applyBannerToHero(pos, zoom) {
   const bg = $('#hp-banner-bg');
   if (!bg) return;
-  const size = zoom <= 1.01 ? 'cover' : (Math.round(zoom * 100) + '%');
-  bg.style.backgroundPosition = pos;
-  bg.style.backgroundSize = size;
+  const z = Math.max(1, Math.min(2.5, parseFloat(zoom) || 1));
+  const size = z <= 1.01 ? 'cover' : (Math.round(z * 100) + '%');
+  const p = pos || '50% 50%';
+  bg.style.setProperty('background-position', p, 'important');
+  bg.style.setProperty('background-size', size, 'important');
+  bg.style.setProperty('background-repeat', 'no-repeat', 'important');
   bg.classList.add('has-image');
+}
+
+function applyUserBanner(url, pos, zoom) {
+  const bg = $('#hp-banner-bg');
+  if (bg) {
+    if (url) {
+      bg.style.setProperty('background-image', `url('${url}')`, 'important');
+      bg.classList.add('has-image');
+    } else {
+      bg.style.removeProperty('background-image');
+      bg.classList.remove('has-image');
+    }
+    applyBannerToHero(pos || '50% 50%', zoom != null ? zoom : 1);
+  }
+  // фон карточки в настройках
+  const cardBan = $('#settings-profile-card-banner');
+  if (cardBan && url) {
+    const z = Math.max(1, Math.min(2.5, parseFloat(zoom) || 1));
+    const size = z <= 1.01 ? 'cover' : (Math.round(z * 100) + '%');
+    cardBan.style.backgroundImage = `url('${url}')`;
+    cardBan.style.backgroundPosition = pos || '50% 50%';
+    cardBan.style.backgroundSize = size;
+  }
 }
 
 
 
 // ---------- Вкладка настроек ----------
+
+// ---------- Тема (тёмная / светлая) ----------
+function getTheme() {
+  try {
+    const t = localStorage.getItem('catio_theme');
+    return t === 'light' ? 'light' : 'dark';
+  } catch (e) {
+    return 'dark';
+  }
+}
+
+function applyTheme(theme) {
+  const t = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('catio_theme', t); } catch (e) {}
+  // sync picker UI
+  $$('.theme-option').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === t);
+  });
+}
+
+
+// ---------- Custom select (красивые выпадающие списки) ----------
+
+const SELECT_OPTION_ICONS = {
+  // sort
+  popular: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2H22l-6 4.8 2.3 7L12 16.8 5.7 21 8 14 2 9.2h7.6z"/></svg>',
+  new: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  rating: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2H22l-6 4.8 2.3 7L12 16.8 5.7 21 8 14 2 9.2h7.6z"/></svg>',
+  price: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+  title: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h14"/></svg>',
+  // platform-ish
+  windows: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5l7.5-1v7H3V5.5zm8.5-1.2L21 3v8.5h-9.5V4.3zM3 12.5h7.5V20l-7.5-1v-6.5zm8.5 0H21V21l-9.5-1.3V12.5z"/></svg>',
+  linux: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M6 19c1.5-3 3-4 6-4s4.5 1 6 4"/></svg>',
+  mac: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c2 0 3 1.5 3 3-1.5 0-3 0-3-3zm-2 18c-2 0-4-2-4-5 0-3 2-5 5-6 1-.3 2-.3 3 0 3 1 5 3 5 6 0 3-2 5-4 5-1 0-1.5-.5-2.5-.5S11 21 10 21z"/></svg>',
+  all: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  // visibility
+  public: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+  friends: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  hidden: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-5 0-9.27-3-11-8a11.7 11.7 0 0 1 5.17-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c5 0 9.27 3 11 8a11.65 11.65 0 0 1-2.16 3.19"/><path d="M1 1l22 22"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>',
+  // lang
+  ru: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18"/></svg>',
+  // library sorts fallback
+  recent: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  name: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h14"/></svg>',
+  playtime: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+};
+
+function selectOptionIcon(value, label) {
+  const v = String(value || '').toLowerCase();
+  const l = String(label || '').toLowerCase();
+  if (SELECT_OPTION_ICONS[v]) return SELECT_OPTION_ICONS[v];
+  if (/windows|win/.test(v+l)) return SELECT_OPTION_ICONS.windows;
+  if (/linux/.test(v+l)) return SELECT_OPTION_ICONS.linux;
+  if (/mac|osx|darwin/.test(v+l)) return SELECT_OPTION_ICONS.mac;
+  if (/популяр|popular/.test(l)) return SELECT_OPTION_ICONS.popular;
+  if (/нов|new/.test(l)) return SELECT_OPTION_ICONS.new;
+  if (/оцен|rating|star/.test(l)) return SELECT_OPTION_ICONS.rating;
+  if (/цен|price/.test(l)) return SELECT_OPTION_ICONS.price;
+  if (/назван|title|name|а-я/.test(l)) return SELECT_OPTION_ICONS.title;
+  if (/друг|friend/.test(l)) return SELECT_OPTION_ICONS.friends;
+  if (/скрыт|hidden|private/.test(l)) return SELECT_OPTION_ICONS.hidden;
+  if (/всем|public|открыт/.test(l)) return SELECT_OPTION_ICONS.public;
+  return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>';
+}
+
+const CATIO_SELECT_CHEVRON = '<svg class="catio-select__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+
+
+function openAnimatedModal(modal) {
+  if (!modal) return;
+  modal.classList.remove('is-closing', 'hidden');
+  // reflow so enter transition plays
+  void modal.offsetWidth;
+}
+
+function closeAnimatedModal(modal, ms = 220) {
+  if (!modal || modal.classList.contains('hidden')) return;
+  modal.classList.add('is-closing');
+  window.setTimeout(() => {
+    modal.classList.add('hidden');
+    modal.classList.remove('is-closing');
+  }, ms);
+}
+
+function enhanceSelect(sel) {
+  if (!sel || sel.dataset.catioEnhanced === '1') return;
+  if (sel.multiple || sel.size > 1) return;
+  sel.dataset.catioEnhanced = '1';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'catio-select';
+  if (sel.className) wrap.className += ' ' + sel.className.replace(/\b(settings-select|sort-select|hp-select|auth-input)\b/g, '').trim();
+  wrap.dataset.for = sel.id || '';
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'catio-select__btn';
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-expanded', 'false');
+
+  const val = document.createElement('span');
+  val.className = 'catio-select__value';
+  btn.appendChild(val);
+  btn.insertAdjacentHTML('beforeend', CATIO_SELECT_CHEVRON);
+
+  const menu = document.createElement('div');
+  menu.className = 'catio-select__menu';
+  menu.setAttribute('role', 'listbox');
+
+  const parent = sel.parentNode;
+  parent.insertBefore(wrap, sel);
+  wrap.appendChild(btn);
+  wrap.appendChild(menu);
+  wrap.appendChild(sel);
+  sel.classList.add('select-native-hidden');
+  sel.setAttribute('tabindex', '-1');
+  sel.style.cssText = 'position:absolute!important;opacity:0!important;pointer-events:none!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;';
+
+  const sync = () => {
+    const opt = sel.options[sel.selectedIndex];
+    if (opt) {
+      val.innerHTML = `<span class="catio-select__ico">${selectOptionIcon(opt.value, opt.textContent)}</span><span class="catio-select__txt">${opt.textContent}</span>`;
+    } else {
+      val.textContent = '';
+    }
+    menu.querySelectorAll('.catio-select__option').forEach(o => {
+      o.classList.toggle('is-active', o.dataset.value === sel.value);
+    });
+  };
+
+  const rebuild = () => {
+    menu.innerHTML = '';
+    [...sel.options].forEach(opt => {
+      if (opt.disabled && opt.value === '') return; // skip empty placeholder? keep all
+      const o = document.createElement('button');
+      o.type = 'button';
+      o.className = 'catio-select__option' + (opt.selected ? ' is-active' : '');
+      o.dataset.value = opt.value;
+      o.innerHTML = `<span class="catio-select__ico">${selectOptionIcon(opt.value, opt.textContent)}</span><span class="catio-select__txt">${opt.textContent}</span>`;
+      o.setAttribute('role', 'option');
+      o.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sel.value = opt.value;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        sync();
+        close();
+      });
+      menu.appendChild(o);
+    });
+    sync();
+  };
+
+  const positionMenu = () => {
+    const rect = btn.getBoundingClientRect();
+    const menuW = Math.max(rect.width, 168);
+    let left = rect.left;
+    if (left + menuW > window.innerWidth - 8) left = Math.max(8, window.innerWidth - menuW - 8);
+    menu.style.position = 'fixed';
+    menu.style.left = left + 'px';
+    menu.style.top = (rect.bottom + 6) + 'px';
+    menu.style.width = menuW + 'px';
+    menu.style.right = 'auto';
+    menu.style.minWidth = menuW + 'px';
+    menu.style.zIndex = '10000';
+  };
+  const open = () => {
+    document.querySelectorAll('.catio-select.is-open').forEach(w => {
+      if (w !== wrap) {
+        w.classList.remove('is-open');
+        const m = w.querySelector('.catio-select__menu');
+        if (m) { m.style.position = ''; m.style.left = ''; m.style.top = ''; }
+      }
+    });
+    positionMenu();
+    wrap.classList.add('is-open');
+    btn.setAttribute('aria-expanded', 'true');
+  };
+  const close = () => {
+    wrap.classList.remove('is-open');
+    btn.setAttribute('aria-expanded', 'false');
+    menu.style.position = '';
+    menu.style.left = '';
+    menu.style.top = '';
+    menu.style.width = '';
+    menu.style.right = '';
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (wrap.classList.contains('is-open')) close();
+    else open();
+  });
+  // label не должен перехватывать клик
+  const lab = wrap.closest('label');
+  if (lab) {
+    lab.addEventListener('click', (e) => {
+      if (e.target.closest('.catio-select')) {
+        e.preventDefault();
+      }
+    });
+  }
+
+  sel.addEventListener('change', sync);
+  rebuild();
+
+  // MutationObserver if options change
+  const mo = new MutationObserver(rebuild);
+  mo.observe(sel, { childList: true, subtree: true, attributes: true });
+}
+
+function initCatioSelects(root = document) {
+  const nodes = root.querySelectorAll('select.settings-select, select.sort-select, select.hp-select, select#settings-lang, select#sort-select, select#library-sort, select#hp-sort, select#hp-platform, select#settings-profile-vis, select#settings-media-vis');
+  nodes.forEach(enhanceSelect);
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.catio-select')) {
+    document.querySelectorAll('.catio-select.is-open').forEach(w => w.classList.remove('is-open'));
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.catio-select.is-open').forEach(w => {
+      w.classList.remove('is-open');
+    });
+  }
+});
+window.addEventListener('scroll', () => {
+  document.querySelectorAll('.catio-select.is-open').forEach(w => w.classList.remove('is-open'));
+}, true);
+
+
+function moveSegIndicator(groupEl) {
+  if (!groupEl) return;
+  let ind = groupEl.querySelector('.seg-indicator');
+  if (!ind) {
+    ind = document.createElement('span');
+    ind.className = 'seg-indicator';
+    groupEl.prepend(ind);
+  }
+  const active = groupEl.querySelector('.store-era-btn.active, .price-pill.active, .seg-btn.active');
+  if (!active) { ind.style.opacity = '0'; return; }
+  ind.style.opacity = '1';
+  ind.style.width = active.offsetWidth + 'px';
+  ind.style.height = active.offsetHeight + 'px';
+  ind.style.transform = `translate(${active.offsetLeft}px, ${active.offsetTop}px)`;
+}
+
+function initSegControls() {
+  const groups = [
+    document.querySelector('#view-store .catalogue-mode-toggle'),
+    document.querySelector('#price-pills'),
+  ].filter(Boolean);
+  groups.forEach(g => {
+    if (g.dataset.segInit === '1') {
+      moveSegIndicator(g);
+      return;
+    }
+    g.dataset.segInit = '1';
+    g.classList.add('seg-control');
+    g.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        requestAnimationFrame(() => moveSegIndicator(g));
+        setTimeout(() => moveSegIndicator(g), 40);
+      });
+    });
+  });
+  const paint = () => groups.forEach(moveSegIndicator);
+  paint();
+  requestAnimationFrame(paint);
+  setTimeout(paint, 50);
+  setTimeout(paint, 200);
+  window.addEventListener('resize', paint);
+}
+
+/** Пересчитать сегменты при открытии каталога */
+function refreshStoreChrome() {
+  try { initCatioSelects(document.getElementById('view-store') || document); } catch (e) {}
+  try { initSegControls(); } catch (e) {}
+  // force indicator after layout
+  setTimeout(() => {
+    document.querySelectorAll('#view-store .seg-control, #view-store .catalogue-mode-toggle, #price-pills').forEach(moveSegIndicator);
+  }, 30);
+}
+
+function initThemePicker() {
+  applyTheme(getTheme());
+  $$('.theme-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyTheme(btn.dataset.theme);
+      toast(btn.dataset.theme === 'light' ? 'Светлая тема' : 'Тёмная тема');
+    });
+  });
+}
+
+
+function openProfileEditModal() {
+  const modal = $('#hp-edit-modal');
+  if (!modal) { toast('Модалка профиля не найдена'); return; }
+  const me = window.AUTH_STATE && window.AUTH_STATE.user;
+  const input = $('#hp-edit-displayname');
+  if (input && me) input.value = me.username || '';
+  // sync avatar preview in modal
+  if (me && typeof applyUserAvatarEl === 'function') {
+    applyUserAvatarEl($('#hp-edit-avatar'), me);
+  }
+  openAnimatedModal(modal);
+}
+
+function openBannerEditModal() {
+  // ensure editor bound
+  try { initBannerEditor(); } catch (e) {}
+  const openBtn = $('#hp-banner-upload');
+  if (openBtn) {
+    openBtn.click();
+    return;
+  }
+  const modal = $('#hp-banner-modal');
+  if (!modal) { toast('Модалка баннера не найдена'); return; }
+  // fallback open + preview
+  const me = window.AUTH_STATE && window.AUTH_STATE.user;
+  const previewImg = $('#hp-banner-preview-img');
+  if (previewImg && me?.banner_url) {
+    previewImg.style.backgroundImage = `url('${me.banner_url}')`;
+  }
+  if (typeof applyBannerPreview === 'function') {
+    try {
+      const pos = (me?.banner_pos || '50% 50%').split(/\s+/);
+      if (typeof bannerEditor !== 'undefined') {
+        bannerEditor.posX = parseFloat(pos[0]) || 50;
+        bannerEditor.posY = parseFloat(pos[1]) || 50;
+        bannerEditor.zoom = parseFloat(me?.banner_zoom) || 1;
+        applyBannerPreview();
+      }
+    } catch (e) {}
+  }
+  openAnimatedModal(modal);
+}
+
 function initSettingsView() {
   const view = $('#view-settings');
   if (!view) return;
@@ -3753,38 +4314,21 @@ function initSettingsView() {
     });
   }
 
-  // avatar upload
-  const setAvaBtn = $('#settings-avatar-upload');
-  const setAvaFile = $('#settings-avatar-file');
-  if (setAvaBtn && setAvaFile) {
-    setAvaBtn.addEventListener('click', () => setAvaFile.click());
-    setAvaFile.addEventListener('change', async () => {
-      if (!setAvaFile.files?.[0]) return;
-      await uploadProfileImage('avatar', setAvaFile.files[0]);
-      setAvaFile.value = '';
+  // Профиль / баннер — модалки вне view-profile, открываются напрямую
+  const openProfileEdit = $('#settings-open-profile-edit');
+  if (openProfileEdit) {
+    openProfileEdit.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openProfileEditModal();
     });
   }
-
-  // banner upload from settings
-  const setBanBtn = $('#settings-banner-upload');
-  const setBanFile = $('#settings-banner-file');
-  if (setBanBtn && setBanFile) {
-    setBanBtn.addEventListener('click', () => setBanFile.click());
-    setBanFile.addEventListener('change', async () => {
-      const f = setBanFile.files && setBanFile.files[0];
-      if (!f) return;
-      setBanBtn.disabled = true;
-      const old = setBanBtn.textContent;
-      setBanBtn.textContent = 'Загрузка…';
-      try {
-        await uploadProfileImage('banner', f);
-      } catch (err) {
-        toast(err.message || 'Не удалось загрузить баннер');
-      } finally {
-        setBanBtn.disabled = false;
-        setBanBtn.textContent = old || 'Загрузить баннер';
-        setBanFile.value = '';
-      }
+  const openBannerEdit = $('#settings-open-banner-edit');
+  if (openBannerEdit) {
+    openBannerEdit.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openBannerEditModal();
     });
   }
 
@@ -3878,16 +4422,31 @@ function initAvatarMenu() {
   const menu = $('#user-menu');
   if (!btn || !menu) return;
 
+  let menuClosing = false;
+  function openMenu() {
+    menuClosing = false;
+    menu.classList.remove('hidden', 'is-closing');
+    void menu.offsetWidth;
+    menu.classList.add('is-open');
+    btn.setAttribute('aria-expanded', 'true');
+  }
   function closeMenu() {
-    menu.classList.add('hidden');
+    if (menu.classList.contains('hidden') || menuClosing) return;
+    menuClosing = true;
+    menu.classList.remove('is-open');
+    menu.classList.add('is-closing');
     btn.setAttribute('aria-expanded', 'false');
+    window.setTimeout(() => {
+      menu.classList.add('hidden');
+      menu.classList.remove('is-closing');
+      menuClosing = false;
+    }, 180);
   }
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const opening = menu.classList.contains('hidden');
-    menu.classList.toggle('hidden');
-    btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+    if (menu.classList.contains('hidden') || menu.classList.contains('is-closing')) openMenu();
+    else closeMenu();
   });
 
   document.addEventListener('click', (e) => {
@@ -4433,6 +4992,10 @@ async function loadProfileReviews(userId) {
 
 async function openUserProfile(username, id) {
   closeFriendsModal();
+  // сразу показываем профиль в состоянии загрузки — без чужих/своих старых данных
+  viewingUserId = id || -1;
+  showView('profile', null, { foreign: true });
+  setProfileLoadingShell(true);
   try {
     const q = id ? `id=${id}` : `username=${encodeURIComponent(username)}`;
     const data = await fetchJSON(`${FRIENDS_API}?action=profile&${q}`);
@@ -4442,15 +5005,15 @@ async function openUserProfile(username, id) {
     // own profile → normal
     if (p.relation === 'self') {
       viewingUserId = null;
+      setProfileLoadingShell(false);
       gotoView('profile');
       return;
     }
 
     viewingUserId = p.id;
-    showView('profile', null, { foreign: true });
     const isAdmin = !!(data.viewer_is_admin || (window.AUTH_STATE && window.AUTH_STATE.user && (window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin)));
     renderForeignProfile(p, data.library || [], isAdmin);
-    // подстрахуемся: если loadProfile всё же ушёл — через тик снова нарисуем чужую библиотеку
+    setProfileLoadingShell(false);
     const libSnapshot = data.library || [];
     setTimeout(() => {
       if (viewingUserId === p.id) {
@@ -4458,23 +5021,30 @@ async function openUserProfile(username, id) {
       }
     }, 50);
   } catch (err) {
+    setProfileLoadingShell(false);
+    viewingUserId = null;
     toast(err.message || 'Не удалось открыть профиль');
   }
 }
 
+function setProfileLoadingShell(on) {
+  const page = $('.hydra-profile') || $('#view-profile');
+  if (page) page.classList.toggle('is-loading', !!on);
+  if (on) {
+    const uname = $('#hp-username');
+    if (uname) uname.textContent = 'Загрузка…';
+    const lib = $('#hp-library-games') || $('#profile-library');
+    if (lib) lib.innerHTML = '<div class="loading">Загрузка профиля…</div>';
+  }
+}
+
 function renderForeignProfile(p, library, viewerIsAdmin) {
-  // banner
-  const bg = $('#hp-banner-bg');
-  if (bg) {
-    if (p.banner_url) {
-      const zoom = parseFloat(p.banner_zoom) || 1;
-      const size = zoom <= 1.01 ? 'cover' : (Math.round(zoom * 100) + '%');
-      bg.style.backgroundImage = `url('${p.banner_url}')`;
-      bg.style.backgroundPosition = p.banner_pos || '50% 50%';
-      bg.style.backgroundSize = size;
-      bg.classList.add('has-image');
-    } else {
-      bg.style.backgroundImage = '';
+  // banner — те же pos/zoom что сохранил пользователь
+  applyUserBanner(p.banner_url || '', p.banner_pos || '50% 50%', p.banner_zoom || 1);
+  if (!p.banner_url) {
+    const bg = $('#hp-banner-bg');
+    if (bg) {
+      bg.style.removeProperty('background-image');
       bg.classList.remove('has-image');
     }
   }
@@ -5242,6 +5812,60 @@ const SYSREQ_LABELS = {
   sound: 'Звуковая карта',
   other: 'Дополнительно',
 };
+
+const LANG_NAME_RU = {
+  'english': 'английский',
+  'russian': 'русский',
+  'ukrainian': 'украинский',
+  'belarusian': 'белорусский',
+  'japanese': 'японский',
+  'korean': 'корейский',
+  'chinese': 'китайский',
+  'simplified chinese': 'китайский (упр.)',
+  'traditional chinese': 'китайский (трад.)',
+  'schinese': 'китайский (упр.)',
+  'tchinese': 'китайский (трад.)',
+  'french': 'французский',
+  'german': 'немецкий',
+  'italian': 'итальянский',
+  'spanish': 'испанский',
+  'spanish - spain': 'испанский — Испания',
+  'spanish - latin america': 'испанский — Латам',
+  'latam': 'испанский — Латам',
+  'portuguese': 'португальский',
+  'portuguese - brazil': 'португальский — Бразилия',
+  'portuguese-brazil': 'португальский — Бразилия',
+  'brazilian': 'португальский — Бразилия',
+  'polish': 'польский',
+  'turkish': 'турецкий',
+  'arabic': 'арабский',
+  'thai': 'тайский',
+  'vietnamese': 'вьетнамский',
+  'indonesian': 'индонезийский',
+  'dutch': 'нидерландский',
+  'czech': 'чешский',
+  'hungarian': 'венгерский',
+  'romanian': 'румынский',
+  'swedish': 'шведский',
+  'norwegian': 'норвежский',
+  'danish': 'датский',
+  'finnish': 'финский',
+  'greek': 'греческий',
+  'bulgarian': 'болгарский',
+  'hindi': 'хинди',
+};
+function localizeLangName(name) {
+  const n = String(name || '').trim();
+  if (!n) return '';
+  const key = n.toLowerCase().replace(/\s+/g, ' ');
+  if (LANG_NAME_RU[key]) return LANG_NAME_RU[key];
+  for (const [en, ru] of Object.entries(LANG_NAME_RU)) {
+    if (key.includes(en)) return ru;
+  }
+  if (/[а-яё]/i.test(n)) return n;
+  return n;
+}
+
 const GAME_LANGS = [
   'русский','английский','японский','китайский (упр.)','китайский (трад.)',
   'корейский','французский','итальянский','немецкий','испанский — Испания',
@@ -5271,6 +5895,92 @@ function fillSysReq(containerId, data) {
     inp.value = obj[inp.dataset.k] || '';
   });
 }
+
+const PUB_PRICE_MIN = 0;
+const PUB_PRICE_MAX = 15000;
+
+function initPublishFilePreviews(root = document) {
+  const bindOne = (inputId, previewId, nameId) => {
+    const input = root.querySelector('#' + inputId) || document.getElementById(inputId);
+    if (!input || input.dataset.previewBound) return;
+    input.dataset.previewBound = '1';
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      const prev = document.getElementById(previewId);
+      const nameEl = document.getElementById(nameId);
+      if (!file) {
+        if (prev) { prev.style.backgroundImage = ''; prev.classList.remove('has-img'); }
+        if (nameEl) nameEl.textContent = nameEl.dataset.placeholder || '';
+        return;
+      }
+      if (nameEl) nameEl.textContent = file.name;
+      if (prev && file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        prev.style.backgroundImage = `url('${url}')`;
+        prev.classList.add('has-img');
+      }
+    });
+  };
+  bindOne('sg-cover', 'sg-cover-preview', 'sg-cover-name');
+  bindOne('sg-banner', 'sg-banner-preview', 'sg-banner-name');
+  bindOne('sg-logo', 'sg-logo-preview', 'sg-logo-name');
+  bindOne('sg-icon', 'sg-icon-preview', 'sg-icon-name');
+
+  const shots = document.getElementById('sg-shots');
+  if (shots && !shots.dataset.previewBound) {
+    shots.dataset.previewBound = '1';
+    shots.addEventListener('change', () => {
+      const box = document.getElementById('sg-shots-preview');
+      if (!box) return;
+      box.innerHTML = '';
+      [...(shots.files || [])].slice(0, 8).forEach(f => {
+        if (!f.type.startsWith('image/')) return;
+        const d = document.createElement('div');
+        d.className = 'pub-shot-thumb';
+        d.style.backgroundImage = `url('${URL.createObjectURL(f)}')`;
+        box.appendChild(d);
+      });
+    });
+  }
+}
+
+function initPublishPriceInput() {
+  const price = document.getElementById('sg-price');
+  if (!price || price.dataset.priceBound) return;
+  price.dataset.priceBound = '1';
+  const sanitize = () => {
+    let v = String(price.value || '').replace(/[^\d]/g, '');
+    if (v.length > 1) v = v.replace(/^0+/, '') || '0';
+    let n = parseInt(v || '0', 10);
+    if (Number.isNaN(n)) n = 0;
+    if (n > PUB_PRICE_MAX) n = PUB_PRICE_MAX;
+    if (n < PUB_PRICE_MIN) n = PUB_PRICE_MIN;
+    price.value = String(n);
+  };
+  price.addEventListener('input', () => {
+    price.value = String(price.value || '').replace(/[^\d]/g, '');
+  });
+  price.addEventListener('blur', sanitize);
+  price.addEventListener('change', sanitize);
+}
+
+function validatePublishForm() {
+  const title = ($('#sg-title')?.value || '').trim();
+  if (title.length < 2) return 'Укажите название игры (минимум 2 символа)';
+  const genre = ($('#sg-genre')?.value || '').trim();
+  if (!genre) return 'Выберите жанр';
+  const desc = ($('#sg-desc')?.value || '').trim();
+  if (desc.length < 20) return 'Описание слишком короткое (минимум 20 символов)';
+  let price = parseInt(String($('#sg-price')?.value || '0').replace(/[^\d]/g, ''), 10);
+  if (Number.isNaN(price)) price = 0;
+  if (price < PUB_PRICE_MIN) return `Цена не может быть меньше ${PUB_PRICE_MIN} ₽`;
+  if (price > PUB_PRICE_MAX) return `Цена не может быть больше ${PUB_PRICE_MAX} ₽`;
+  const cover = $('#sg-cover')?.files?.[0];
+  const coverUrl = $('#sg-cover-url')?.value;
+  if (!cover && !coverUrl) return 'Добавьте обложку';
+  return null;
+}
+
 function renderLangTable(containerId, selected) {
   const box = $(containerId);
   if (!box) return;
@@ -5280,21 +5990,28 @@ function renderLangTable(containerId, selected) {
   }
   if (!Array.isArray(sel)) sel = [];
   const map = {};
-  sel.forEach(r => { map[r.name] = r; });
-  const head = box.querySelector('.lang-table-head');
+  sel.forEach(r => {
+    const n = r && (r.name || r.lang || r.language);
+    if (n) map[n] = r;
+  });
   box.innerHTML = '';
-  if (head) box.appendChild(head);
-  else box.insertAdjacentHTML('afterbegin', '<div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>');
-  GAME_LANGS.forEach(name => {
+  const head = document.createElement('div');
+  head.className = 'lang-table-head';
+  head.innerHTML = '<span>Язык</span><span>Субтитры</span><span>Аудио</span>';
+  box.appendChild(head);
+  const body = document.createElement('div');
+  body.className = 'lang-table-body';
+  (GAME_LANGS || []).forEach(name => {
     const r = map[name] || {};
     const row = document.createElement('div');
     row.className = 'lang-table-row';
     row.innerHTML = `
-      <span>${escapeHtml(name)}</span>
-      <label style="text-align:center"><input type="checkbox" data-lang="${escapeHtml(name)}" data-kind="sub" ${r.subtitles ? 'checked' : ''} /></label>
-      <label style="text-align:center"><input type="checkbox" data-lang="${escapeHtml(name)}" data-kind="audio" ${r.audio ? 'checked' : ''} /></label>`;
-    box.appendChild(row);
+      <span class="lang-table-name">${escapeHtml(name)}</span>
+      <label class="lang-table-cell"><input type="checkbox" data-lang="${escapeHtml(name)}" data-kind="sub" ${r.subtitles ? 'checked' : ''} /></label>
+      <label class="lang-table-cell"><input type="checkbox" data-lang="${escapeHtml(name)}" data-kind="audio" ${r.audio ? 'checked' : ''} /></label>`;
+    body.appendChild(row);
   });
+  box.appendChild(body);
 }
 function collectLanguages(containerId) {
   const box = $(containerId);
@@ -5357,8 +6074,8 @@ function parseLangs(raw) {
 }
 function normalizeLangRow(r) {
   if (!r) return null;
-  if (typeof r === 'string') return { name: r, subtitles: true, audio: false };
-  const name = String(r.name || r.lang || r.language || '').trim();
+  if (typeof r === 'string') return { name: localizeLangName(r), subtitles: true, audio: false };
+  const name = localizeLangName(String(r.name || r.lang || r.language || '').trim());
   if (!name) return null;
   return {
     name,
@@ -5369,27 +6086,29 @@ function normalizeLangRow(r) {
 
 /** Описание игры: если есть HTML (img/video/iframe) — санитизируем; иначе — абзацы из текста */
 function formatGameDescription(raw) {
-  const text = String(raw || '').trim() || 'Описание отсутствует.';
+  let text = String(raw || '').trim() || 'Описание отсутствует.';
+  // markdown leftover **bold** → strong
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
   if (!/<[a-z][\s\S]*>/i.test(text)) {
     return text.split(/\n+/).map(p => `<p>${escapeHtml(p)}</p>`).join('');
   }
-  // DOM-санитизация: только безопасные теги
+
   const allowed = new Set(['P','BR','IMG','VIDEO','SOURCE','IFRAME','A','B','STRONG','I','EM','U','UL','OL','LI','H1','H2','H3','H4','H5','SPAN','DIV','TABLE','THEAD','TBODY','TR','TH','TD','HR']);
   const tmp = document.createElement('div');
   tmp.innerHTML = text;
+
   const walk = (node) => {
     [...node.childNodes].forEach(ch => {
       if (ch.nodeType === 1) {
         if (!allowed.has(ch.tagName)) {
-          // заменить на содержимое
           while (ch.firstChild) node.insertBefore(ch.firstChild, ch);
           node.removeChild(ch);
           return;
         }
-        // атрибуты
         [...ch.attributes].forEach(attr => {
           const n = attr.name.toLowerCase();
-          if (n.startsWith('on') || n === 'style' || n === 'srcdoc') ch.removeAttribute(attr.name);
+          if (n.startsWith('on') || n === 'style' || n === 'srcdoc' || n === 'class') ch.removeAttribute(attr.name);
         });
         if (ch.tagName === 'A') {
           const href = ch.getAttribute('href') || '';
@@ -5404,6 +6123,8 @@ function formatGameDescription(raw) {
           if (!/^https?:\/\//i.test(src)) { node.removeChild(ch); return; }
           ch.setAttribute('loading', 'lazy');
           ch.setAttribute('referrerpolicy', 'no-referrer');
+          ch.removeAttribute('width');
+          ch.removeAttribute('height');
         }
         if (ch.tagName === 'IFRAME') {
           const src = ch.getAttribute('src') || '';
@@ -5415,7 +6136,6 @@ function formatGameDescription(raw) {
           ch.setAttribute('referrerpolicy', 'no-referrer');
         }
         if (ch.tagName === 'VIDEO') {
-          // без UI плеера: зациклено, автоплей, без звука
           ch.removeAttribute('controls');
           ch.setAttribute('autoplay', '');
           ch.setAttribute('muted', '');
@@ -5423,55 +6143,67 @@ function formatGameDescription(raw) {
           ch.setAttribute('playsinline', '');
           ch.setAttribute('preload', 'auto');
           ch.muted = true;
-          ch.defaultMuted = true;
-          ch.playsInline = true;
-          ch.style.maxWidth = '100%';
         }
         walk(ch);
       }
     });
   };
   walk(tmp);
-  // стили для медиа внутри описания
-  tmp.querySelectorAll('img').forEach(img => {
-    img.style.maxWidth = '100%';
-    img.style.height = 'auto';
-    img.style.borderRadius = '8px';
-    img.style.margin = '10px 0';
-  });
+
+  // группируем подряд идущие IMG в ряды (Steam: 2 в ряд / 1 на всю ширину)
+  const groupImages = (parent) => {
+    const kids = [...parent.childNodes];
+    let buf = [];
+    const flush = () => {
+      if (!buf.length) return;
+      const wrap = document.createElement('div');
+      if (buf.length === 1) wrap.className = 'gp-desc-img-row gp-desc-img-row--1';
+      else if (buf.length >= 3) wrap.className = 'gp-desc-img-row gp-desc-img-row--3';
+      else wrap.className = 'gp-desc-img-row';
+      parent.insertBefore(wrap, buf[0]);
+      buf.forEach(img => wrap.appendChild(img));
+      buf = [];
+    };
+    kids.forEach(ch => {
+      if (ch.nodeType === 1 && ch.tagName === 'IMG') {
+        buf.push(ch);
+      } else if (ch.nodeType === 1 && ch.tagName === 'BR' && buf.length) {
+        try { parent.removeChild(ch); } catch (e) {}
+      } else {
+        flush();
+        if (ch.nodeType === 1) groupImages(ch);
+      }
+    });
+    flush();
+  };
+  groupImages(tmp);
+
   tmp.querySelectorAll('video').forEach(v => {
-    v.removeAttribute('controls');
-    v.setAttribute('autoplay', '');
-    v.setAttribute('muted', '');
-    v.setAttribute('loop', '');
-    v.setAttribute('playsinline', '');
-    v.muted = true;
     v.classList.add('gp-desc-video');
+    v.muted = true;
   });
   tmp.querySelectorAll('iframe').forEach(f => {
-    f.style.width = '100%';
-    f.style.aspectRatio = '16/9';
-    f.style.border = '0';
-    f.style.borderRadius = '8px';
-    f.style.margin = '10px 0';
-    // youtube: autoplay + mute + loop
     let src = f.getAttribute('src') || '';
     if (/youtube\.com|youtube-nocookie\.com/i.test(src)) {
-      const u = new URL(src, 'https://www.youtube.com');
-      u.searchParams.set('autoplay', '1');
-      u.searchParams.set('mute', '1');
-      u.searchParams.set('controls', '0');
-      u.searchParams.set('modestbranding', '1');
-      u.searchParams.set('rel', '0');
-      u.searchParams.set('playsinline', '1');
-      const id = u.pathname.split('/').pop();
-      if (id) u.searchParams.set('loop', '1'), u.searchParams.set('playlist', id);
-      f.setAttribute('src', u.toString());
-      f.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+      try {
+        const u = new URL(src, 'https://www.youtube.com');
+        u.searchParams.set('autoplay', '1');
+        u.searchParams.set('mute', '1');
+        u.searchParams.set('controls', '0');
+        u.searchParams.set('modestbranding', '1');
+        u.searchParams.set('rel', '0');
+        u.searchParams.set('playsinline', '1');
+        const id = u.pathname.split('/').pop();
+        if (id) { u.searchParams.set('loop', '1'); u.searchParams.set('playlist', id); }
+        f.setAttribute('src', u.toString());
+        f.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+      } catch (e) {}
     }
   });
+
   return tmp.innerHTML || `<p>${escapeHtml(text)}</p>`;
 }
+
 function renderSysReqBlock(minRaw, recRaw) {
   const min = parseSysReq(minRaw);
   const rec = parseSysReq(recRaw);
@@ -5502,8 +6234,8 @@ function renderLangBlock(raw) {
   const rows = langs.map(r => `
     <tr>
       <td>${escapeHtml(r.name)}</td>
-      <td class="${r.subtitles ? 'ok' : 'no'}">${r.subtitles ? '✓' : '✕'}</td>
-      <td class="${r.audio ? 'ok' : 'no'}">${r.audio ? '✓' : '✕'}</td>
+      <td class="${r.subtitles ? 'ok' : 'no'}">${r.subtitles ? '<svg class="lang-ico lang-ico--ok" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' : '<svg class="lang-ico lang-ico--no" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'}</td>
+      <td class="${r.audio ? 'ok' : 'no'}">${r.audio ? '<svg class="lang-ico lang-ico--ok" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' : '<svg class="lang-ico lang-ico--no" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'}</td>
     </tr>`).join('');
   return `
     <div class="gp-side-card" id="game-langs">
@@ -5558,6 +6290,13 @@ function initSubmitGame() {
       if (formModal) {
         try { renderLangTable('#sg-lang-table', []); } catch (err) { console.warn(err); }
         formModal.classList.remove('hidden');
+        const fillBtn = $('#sg-steam-fill');
+        if (fillBtn && !fillBtn.dataset.bound) {
+          fillBtn.dataset.bound = '1';
+          fillBtn.addEventListener('click', fillSubmitFromSteam);
+        }
+        try { initCatioSelects(formModal); } catch (e) {}
+        try { initPublishFilePreviews(formModal); initPublishPriceInput(); } catch (e) {}
       }
     });
   }
@@ -5577,6 +6316,56 @@ function initSubmitGame() {
   if (send && !send.dataset.bound) {
     send.dataset.bound = '1';
     send.addEventListener('click', submitGameForm);
+  }
+}
+
+
+async function fillSubmitFromSteam() {
+  const input = $('#sg-steam-url');
+  const btn = $('#sg-steam-fill');
+  const raw = (input?.value || '').trim();
+  if (!raw) { toast('Вставь ссылку Steam или AppID'); return; }
+  let appid = raw;
+  const m = raw.match(/store\.steampowered\.com\/app\/(\d+)/i) || raw.match(/\/app\/(\d+)/) || raw.match(/^(\d+)$/);
+  if (m) appid = m[1];
+  if (btn) { btn.disabled = true; btn.textContent = 'Загрузка…'; }
+  try {
+    const data = await fetchJSON(`api/steam_import.php?action=preview&appid=${encodeURIComponent(appid)}`);
+    if (!data.ok) throw new Error(data.error || 'Не удалось получить данные Steam');
+    const g = data.game || data.preview || data;
+    if ($('#sg-title') && g.title) $('#sg-title').value = g.title;
+    if ($('#sg-short') && (g.short_description || g.short_desc)) $('#sg-short').value = g.short_description || g.short_desc;
+    if ($('#sg-desc') && (g.description || g.about)) $('#sg-desc').value = g.description || g.about;
+    if ($('#sg-developer') && (g.developer || g.developers)) {
+      const d = g.developer || (Array.isArray(g.developers) ? g.developers.join(', ') : g.developers);
+      $('#sg-developer').value = d || '';
+    }
+    if ($('#sg-genre') && g.genre) {
+      const genreSel = $('#sg-genre');
+      const gstr = String(g.genre).split(/[,/]/)[0].trim();
+      const opt = [...genreSel.options].find(o => o.value === gstr || o.textContent === gstr);
+      if (opt) genreSel.value = opt.value;
+      else { genreSel.value = 'Другое'; }
+    }
+    if ($('#sg-price') && g.price != null) $('#sg-price').value = parseFloat(g.price) || 0;
+    if ($('#sg-cover-url') && (g.cover_url || g.header_image)) $('#sg-cover-url').value = g.cover_url || g.header_image;
+    if ($('#sg-banner-url') && (g.banner_url || g.header_image)) $('#sg-banner-url').value = g.banner_url || g.header_image;
+    // sys req minimal if object
+    const fillSys = (boxId, obj) => {
+      const box = $(boxId);
+      if (!box || !obj) return;
+      $$('input[data-k]', box).forEach(inp => {
+        const k = inp.dataset.k;
+        if (obj[k]) inp.value = obj[k];
+      });
+    };
+    fillSys('#sg-sys-min-fields', g.pc_requirements_min || g.sys_min || g.requirements_min);
+    fillSys('#sg-sys-rec-fields', g.pc_requirements_rec || g.sys_rec || g.requirements_rec);
+    toast('Данные Steam подставлены — проверь и дополни');
+  } catch (err) {
+    toast(err.message || 'Ошибка Steam');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Подтянуть'; }
   }
 }
 
@@ -5603,14 +6392,19 @@ async function submitGameForm() {
   const btn = $('#submit-game-send');
   if (btn) { btn.disabled = true; btn.textContent = 'Отправка...'; }
   try {
+    const err = validatePublishForm();
+    if (err) throw new Error(err);
     const fd = new FormData();
     fd.append('csrf_token', window.CSRF_TOKEN || '');
     fd.append('title', $('#sg-title')?.value?.trim() || '');
     fd.append('genre', $('#sg-genre')?.value || '');
-    fd.append('price', $('#sg-price')?.value || '0');
+    fd.append('price', String(parseInt(String($('#sg-price')?.value || '0').replace(/[^\d]/g, ''), 10) || 0));
     fd.append('short_description', $('#sg-short')?.value || '');
     fd.append('description', $('#sg-desc')?.value || '');
     fd.append('video_url', $('#sg-video')?.value || '');
+    fd.append('developer', $('#sg-developer')?.value || '');
+    if ($('#sg-cover-url')?.value) fd.append('cover_url', $('#sg-cover-url').value);
+    if ($('#sg-banner-url')?.value) fd.append('banner_url', $('#sg-banner-url').value);
     fd.append('sys_req_min', JSON.stringify(collectSysReq('#sg-sys-min-fields')));
     fd.append('sys_req_rec', JSON.stringify(collectSysReq('#sg-sys-rec-fields')));
     fd.append('languages', JSON.stringify(collectLanguages('#sg-lang-table')));
@@ -5620,8 +6414,15 @@ async function submitGameForm() {
     if (cover) fd.append('cover', cover);
     const banner = $('#sg-banner')?.files?.[0];
     if (banner) fd.append('banner', banner);
+    const logo = $('#sg-logo')?.files?.[0];
+    if (logo) fd.append('logo', logo);
+    const icon = $('#sg-icon')?.files?.[0];
+    if (icon) fd.append('icon', icon);
     const shots = $('#sg-shots')?.files;
     if (shots) for (let i = 0; i < shots.length; i++) fd.append('screenshots[]', shots[i]);
+    const flags = $$('.sg-content-flag').filter(c => c.checked).map(c => c.value);
+    fd.append('content_flags', flags.join(','));
+    fd.append('is_adult', flags.includes('adult') ? '1' : '0');
 
     const res = await fetch(`${SUBMIT_API}?action=submit`, { method: 'POST', body: fd });
     const data = await res.json();
@@ -6878,6 +7679,10 @@ document.addEventListener('DOMContentLoaded', () => {
   safe('initAvatarMenu', initAvatarMenu);
   safe('initStoreControls', initStoreControls);
   safe('initLibraryControls', initLibraryControls);
+  safe('initCatioSelects', initCatioSelects);
+  safe('initSegControls', initSegControls);
+  safe('initThemePicker', initThemePicker);
+  safe('initProfileControls', initProfileControls);
   safe('initSettingsView', initSettingsView);
   safe('initLightbox', initLightbox);
   safe('initHomeControls', initHomeControls);

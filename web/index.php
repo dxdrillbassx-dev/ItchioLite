@@ -129,6 +129,15 @@ if ($isAuthorized) {
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+  <script>
+    (function(){
+      try {
+        var t = localStorage.getItem('catio_theme') || 'dark';
+        if (t !== 'light' && t !== 'dark') t = 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch(e) {}
+    })();
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CATio</title>
@@ -271,11 +280,13 @@ if ($isAuthorized) {
         </button>
         <h1 class="head-title" id="head-title">Главная</h1>
         <div class="head-search" id="head-search">
-          <input type="text" id="head-search-input" placeholder="Поиск" aria-label="Поиск по вкладке" />
-          <button type="button" class="head-add-game" id="btn-add-game" title="Добавить игру" onclick="if(window.openSubmitRules){openSubmitRules();}else{alert('Скрипт ещё не загрузился');}">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
+          <svg class="head-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input type="text" id="head-search-input" placeholder="Поиск" aria-label="Поиск игр" autocomplete="off" />
+          <div class="head-search-drop" id="head-search-drop" hidden></div>
         </div>
+        <button type="button" class="head-add-game" id="btn-add-game" title="Добавить игру" onclick="if(window.openSubmitRules){openSubmitRules();}else{alert('Скрипт ещё не загрузился');}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
         </div>
       </header>
       <?php endif; ?>
@@ -294,13 +305,28 @@ if ($isAuthorized) {
         </div>
 
         <div class="home-pills" id="home-pills">
-          <button type="button" class="home-pill active" data-hsort="popular">🔥 Сейчас популярно</button>
-          <button type="button" class="home-pill" data-hsort="week">📈 Лучшие игры недели</button>
-          <button type="button" class="home-pill" data-hsort="new">✨ Новинки</button>
-          <button type="button" class="home-pill surprise" id="home-surprise">🎲 Удиви меня</button>
+          <button type="button" class="home-pill active" data-hsort="popular">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.2 6.6H21l-5.4 4 2.1 6.6L12 15.8 6.3 19.2l2.1-6.6L3 8.6h6.8L12 2z"/></svg>
+            Сейчас популярно
+          </button>
+          <button type="button" class="home-pill" data-hsort="week">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h7v7"/></svg>
+            Лучшие игры недели
+          </button>
+          <button type="button" class="home-pill" data-hsort="new">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+            Новинки
+          </button>
+          <button type="button" class="home-pill surprise" id="home-surprise">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h.01M15 9h.01M9 15c1.5 1.5 4.5 1.5 6 0"/></svg>
+            Удиви меня
+          </button>
         </div>
 
-        <h2 class="home-section-title" id="home-section-title">🔥 Сейчас популярно</h2>
+        <h2 class="home-section-title" id="home-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.2 6.6H21l-5.4 4 2.1 6.6L12 15.8 6.3 19.2l2.1-6.6L3 8.6h6.8L12 2z"/></svg>
+          Сейчас популярно
+        </h2>
         <div class="home-grid" id="home-grid"><div class="loading">Загрузка...</div></div>
       </section>
 
@@ -310,20 +336,19 @@ if ($isAuthorized) {
           <div class="store-main">
             <div class="store-head">
               <div class="store-count-line">
-                <b id="store-count">0</b> результатов
-                <span class="store-hint">Фильтры справа · поиск в шапке</span>
+                <div class="store-count-primary"><b id="store-count">0</b> результатов</div>
+                <div class="store-hint">Используйте боковую панель для уточнения поиска</div>
               </div>
-              <div class="store-head-actions">
-                <div class="store-view-toggle" role="group" aria-label="Вид каталога">
-                  <button type="button" class="store-view-btn active" data-mode="list" title="Список" aria-pressed="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-                  </button>
-                  <button type="button" class="store-view-btn" data-mode="grid" title="Сетка" aria-pressed="false">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                  </button>
-                </div>
-                <label class="sort-label">
-                  Сортировать по
+            </div>
+            <div id="store-list" class="store-list"><div class="loading">Загрузка каталога...</div></div>
+          </div>
+
+          <aside class="store-filters">
+            <!-- 1. Сортировка -->
+            <div class="filter-block filter-block-sort">
+              <div class="filter-block-body filter-block-body--open">
+                <label class="sort-label sort-label--side">
+                  <span>Сортировать по</span>
                   <select id="sort-select" class="sort-select" aria-label="Сортировка">
                     <option value="popular">Популярности</option>
                     <option value="new">Новизне</option>
@@ -334,10 +359,24 @@ if ($isAuthorized) {
                 </label>
               </div>
             </div>
-            <div id="store-list" class="store-list" data-mode="list"><div class="loading">Загрузка каталога...</div></div>
-          </div>
 
-          <aside class="store-filters">
+            <!-- 2. Современные / Классика (ретро, эмуляторы) -->
+            <div class="filter-block filter-block-era">
+              <div class="filter-block-body filter-block-body--open">
+                <div class="catalogue-mode-toggle" role="group" aria-label="Тип каталога">
+                  <button type="button" class="store-era-btn active" data-era="modern" aria-pressed="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    Современные
+                  </button>
+                  <button type="button" class="store-era-btn" data-era="classics" aria-pressed="false">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M10 8h4M10 12h4M10 16h2"/></svg>
+                    Классика
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Цена -->
             <div class="filter-block filter-block-price">
               <button type="button" class="filter-block-head">
                 <span class="filter-dot" style="background:#ef5b2c"></span>
@@ -351,6 +390,8 @@ if ($isAuthorized) {
                 </div>
               </div>
             </div>
+
+            <!-- 4. Жанры -->
             <div class="filter-block">
               <button type="button" class="filter-block-head">
                 <span class="filter-dot" style="background:#a78bfa"></span>
@@ -362,6 +403,8 @@ if ($isAuthorized) {
                 <div class="filter-opts" id="genre-opts"></div>
               </div>
             </div>
+
+            <!-- 5. Разработчики -->
             <div class="filter-block">
               <button type="button" class="filter-block-head">
                 <span class="filter-dot" style="background:#f472b6"></span>
@@ -373,6 +416,7 @@ if ($isAuthorized) {
                 <div class="filter-opts" id="dev-opts"></div>
               </div>
             </div>
+
             <button type="button" class="filter-clear-btn" id="store-clear-filters">Сбросить фильтры</button>
           </aside>
         </div>
@@ -639,7 +683,10 @@ if ($isAuthorized) {
           </div>
         </div>
 
-        <!-- Модалка редактирования профиля (как в Hydra) -->
+        </section>
+
+        <!-- Модалки профиля (вне view — доступны из настроек) -->
+<!-- Модалка редактирования профиля (как в Hydra) -->
         <div class="hp-modal hidden" id="hp-edit-modal">
           <div class="hp-modal-backdrop" id="hp-edit-backdrop"></div>
           <div class="hp-modal-box">
@@ -703,7 +750,6 @@ if ($isAuthorized) {
           </div>
         </div>
 
-      </section>
 
 <!-- ===== НАСТРОЙКИ (вкладка, как в Hydra) ===== -->
             <section id="view-settings" class="view <?php echo $currentView === 'settings' ? 'active' : ''; ?>">
@@ -732,27 +778,35 @@ if ($isAuthorized) {
               <h2 class="settings-title">Основные</h2>
               <p class="settings-sub">Профиль, язык и внешний вид</p>
 
-              <div class="settings-avatar-block">
-                <div class="settings-avatar-preview" id="settings-avatar-preview" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor, (int)($user['id'] ?? 0)); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></div>
-                <div class="settings-avatar-actions">
-                  <button type="button" class="hp-btn-edit" id="settings-avatar-upload">Загрузить аватар</button>
+              <div class="settings-profile-card" id="settings-profile-card">
+                <div class="settings-profile-card-banner" id="settings-profile-card-banner"<?php
+                  if (!empty($user['banner_url'])) {
+                    $bpos = htmlspecialchars($user['banner_pos'] ?? '50% 50%', ENT_QUOTES);
+                    $bzoom = max(1, min(3, (float)($user['banner_zoom'] ?? 1)));
+                    $bsize = ($bzoom <= 1.01) ? 'cover' : (round($bzoom * 100) . '%');
+                    $burl = htmlspecialchars($user['banner_url'], ENT_QUOTES);
+                    echo ' style="background-image:url(\'' . $burl . '\');background-position:' . $bpos . ';background-size:' . $bsize . ';"';
+                  }
+                ?>></div>
+                <div class="settings-profile-card-shade"></div>
+                <div class="settings-profile-card-body">
+                  <div class="settings-profile-card-preview">
+                    <div class="settings-avatar-preview" id="settings-avatar-preview" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor, (int)($user['id'] ?? 0)); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></div>
+                    <div class="settings-profile-card-meta">
+                      <div class="settings-profile-name" id="settings-display-name"><?php echo htmlspecialchars($user['username'] ?? ''); ?></div>
+                      <div class="settings-profile-hint">Имя, аватар и баннер профиля</div>
+                    </div>
+                  </div>
+                  <div class="settings-profile-card-actions">
+                    <button type="button" class="hp-btn-edit" id="settings-open-profile-edit">Редактировать профиль</button>
+                    <button type="button" class="hp-btn-edit" id="settings-open-banner-edit">Настроить баннер</button>
+                  </div>
                 </div>
+                <input type="hidden" id="settings-username" value="<?php echo htmlspecialchars($user['username'] ?? ''); ?>" />
                 <input type="file" id="settings-avatar-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+                <input type="file" id="settings-banner-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+                <div class="settings-banner-preview hidden" id="settings-banner-preview" <?php if (!empty($user['banner_url'])): ?>style="background-image:url('<?php echo htmlspecialchars($user['banner_url'], ENT_QUOTES); ?>')"<?php endif; ?>></div>
               </div>
-
-              <label class="settings-label">
-                <span>Отображаемое имя</span>
-                <input type="text" id="settings-username" class="auth-input" maxlength="32" value="<?php echo htmlspecialchars($user['username'] ?? ''); ?>" />
-              </label>
-
-              <label class="settings-label">
-                <span>Баннер профиля</span>
-                <div class="settings-banner-row">
-                  <div class="settings-banner-preview" id="settings-banner-preview" <?php if (!empty($user['banner_url'])): ?>style="background-image:url('<?php echo htmlspecialchars($user['banner_url'], ENT_QUOTES); ?>')"<?php endif; ?>></div>
-                  <button type="button" class="hp-btn-edit" id="settings-banner-upload">Загрузить баннер</button>
-                  <input type="file" id="settings-banner-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
-                </div>
-              </label>
 
               <label class="settings-label">
                 <span>Язык</span>
@@ -760,6 +814,21 @@ if ($isAuthorized) {
                   <option value="ru" selected>Русский</option>
                 </select>
               </label>
+
+              <div class="settings-label">
+                <span>Тема оформления</span>
+                <div class="theme-picker" id="theme-picker" role="group" aria-label="Тема">
+                  <button type="button" class="theme-option" data-theme="dark" title="Тёмная">
+                    <span class="theme-swatch theme-swatch--dark"></span>
+                    <span class="theme-option-label">Тёмная</span>
+                  </button>
+                  <button type="button" class="theme-option" data-theme="light" title="Светлая">
+                    <span class="theme-swatch theme-swatch--light"></span>
+                    <span class="theme-option-label">Светлая</span>
+                  </button>
+                </div>
+                <p class="settings-hint">Тема применяется сразу ко всему интерфейсу</p>
+              </div>
 
               <p id="settings-error" class="auth-error hidden"></p>
               <button type="button" class="auth-submit" id="settings-save-general">Сохранить</button>
@@ -1075,16 +1144,38 @@ function switchAuthTab(tab) {
     cb.addEventListener('change', sync);
     sync();
   }
-  document.getElementById('privacy-open-btn')?.addEventListener('click', (e) => {
-    e.preventDefault();
+
+  window.closePrivacyModal = function closePrivacyModal() {
     const m = document.getElementById('privacy-modal');
-    if (m) m.classList.remove('hidden');
-  });
-  document.getElementById('privacy-modal-close')?.addEventListener('click', () => {
-    document.getElementById('privacy-modal')?.classList.add('hidden');
-  });
-  document.querySelector('[data-close-privacy]')?.addEventListener('click', () => {
-    document.getElementById('privacy-modal')?.classList.add('hidden');
+    if (!m) return;
+    m.classList.add('is-closing');
+    window.setTimeout(function () {
+      m.classList.add('hidden');
+      m.classList.remove('is-closing');
+    }, 220);
+  };
+  window.openPrivacyModal = function openPrivacyModal() {
+    const m = document.getElementById('privacy-modal');
+    if (!m) return;
+    m.classList.remove('is-closing');
+    m.classList.remove('hidden');
+  };
+
+  // делегирование — работает даже если модалка ниже по DOM
+  document.addEventListener('click', function (e) {
+    const openBtn = e.target.closest('#privacy-open-btn');
+    if (openBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.openPrivacyModal();
+      return;
+    }
+    const closeBtn = e.target.closest('#privacy-modal-close, [data-close-privacy]');
+    if (closeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.closePrivacyModal();
+    }
   });
 })();
 
@@ -1388,38 +1479,110 @@ function socialAuth(provider) {
   </div>
 
   <!-- ===== МОДАЛКА АНКЕТЫ ИГРЫ ===== -->
-  <div class="submit-modal hidden" id="submit-form-modal">
+    <div class="submit-modal hidden" id="submit-form-modal">
     <div class="submit-modal-backdrop" data-close="form"></div>
-    <div class="submit-modal-box submit-modal-wide">
-      <div class="submit-modal-head">
-        <h2>Добавить игру</h2>
-        <button type="button" class="friends-modal-close" data-close="form">×</button>
+    <div class="submit-modal-box submit-modal-wide pub-modal-box">
+      <div class="submit-modal-head pub-modal-head">
+        <div>
+          <h2>Публикация игры</h2>
+          <p class="pub-modal-sub">Заполните карточку вручную или подтяните данные из Steam</p>
+        </div>
+        <button type="button" class="pub-modal-close" data-close="form" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
-      <div class="submit-modal-body">
-        <form id="submit-game-form" class="submit-form">
-          <div class="submit-grid">
-            <label class="settings-label"><span>Название *</span><input class="auth-input" name="title" id="sg-title" required maxlength="120" /></label>
-            <label class="settings-label"><span>Жанр *</span>
-              <select class="settings-select" name="genre" id="sg-genre" required>
-                <option value="">Выберите</option>
-                <option>Экшен</option><option>Приключения</option><option>RPG</option>
-                <option>Стратегия</option><option>Симулятор</option><option>Инди</option>
-                <option>Хоррор</option><option>Гонки</option><option>Спорт</option><option>Другое</option>
-              </select>
-            </label>
-            <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" name="price" id="sg-price" type="number" min="0" value="0" /></label>
-            <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" name="short_description" id="sg-short" maxlength="200" /></label>
-            <label class="settings-label full"><span>Описание *</span><textarea class="auth-input settings-textarea" name="description" id="sg-desc" rows="5" required></textarea></label>
-            <label class="settings-label"><span>Обложка *</span><input type="file" name="cover" id="sg-cover" accept="image/*" required /></label>
-            <label class="settings-label"><span>Шапка / баннер</span><input type="file" name="banner" id="sg-banner" accept="image/*" /></label>
-            <label class="settings-label full"><span>Скриншоты</span><input type="file" name="screenshots[]" id="sg-shots" accept="image/*" multiple /></label>
-            <label class="settings-label full"><span>Видео (YouTube URL)</span><input class="auth-input" name="video_url" id="sg-video" placeholder="https://youtube.com/..." /></label>
+      <div class="submit-modal-body pub-modal-body">
+        <form id="submit-game-form" class="submit-form pub-form">
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
+              <h3>Импорт из Steam</h3>
+            </div>
+            <div class="pub-steam-row">
+              <input class="auth-input" type="text" id="sg-steam-url" placeholder="Ссылка или AppID Steam…" />
+              <button type="button" class="hp-btn-edit" id="sg-steam-fill">Подтянуть</button>
+            </div>
+            <p class="pub-hint">Название, описание, жанр, обложка и системные требования заполнятся автоматически — можно править вручную.</p>
+          </section>
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+              <h3>Основное</h3>
+            </div>
+            <div class="submit-grid">
+              <label class="settings-label"><span>Название *</span><input class="auth-input" name="title" id="sg-title" required maxlength="120" /></label>
+              <label class="settings-label"><span>Жанр *</span>
+                <select class="settings-select" name="genre" id="sg-genre" required>
+                  <option value="">Выберите</option>
+                  <option>Экшен</option><option>Приключения</option><option>RPG</option>
+                  <option>Стратегия</option><option>Симулятор</option><option>Инди</option>
+                  <option>Хоррор</option><option>Гонки</option><option>Спорт</option><option>Другое</option>
+                </select>
+              </label>
+              <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" name="price" id="sg-price" type="text" inputmode="numeric" pattern="[0-9]*" value="0" maxlength="7" autocomplete="off" /></label>
+              <label class="settings-label"><span>Разработчик</span><input class="auth-input" name="developer" id="sg-developer" maxlength="120" /></label>
+              <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" name="short_description" id="sg-short" maxlength="200" /></label>
+              <label class="settings-label full"><span>Описание *</span><textarea class="auth-input settings-textarea" name="description" id="sg-desc" rows="5" required></textarea></label>
+            </div>
+          </section>
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
+              <h3>Медиа</h3>
+            </div>
+            <div class="pub-media-grid">
+              <div class="pub-file-card" data-for="sg-cover">
+                <div class="pub-file-preview" id="sg-cover-preview"><span>Обложка *</span></div>
+                <label class="pub-file-btn" for="sg-cover">Выбрать файл</label>
+                <input type="file" name="cover" id="sg-cover" class="pub-file-input" accept="image/*" required />
+                <div class="pub-file-name" id="sg-cover-name">PNG / JPG, 600×900</div>
+              </div>
+              <div class="pub-file-card" data-for="sg-banner">
+                <div class="pub-file-preview pub-file-preview--wide" id="sg-banner-preview"><span>Баннер / шапка</span></div>
+                <label class="pub-file-btn" for="sg-banner">Выбрать файл</label>
+                <input type="file" name="banner" id="sg-banner" class="pub-file-input" accept="image/*" />
+                <div class="pub-file-name" id="sg-banner-name">Широкий баннер</div>
+              </div>
+              <div class="pub-file-card" data-for="sg-logo">
+                <div class="pub-file-preview pub-file-preview--logo" id="sg-logo-preview"><span>Логотип</span></div>
+                <label class="pub-file-btn" for="sg-logo">Выбрать файл</label>
+                <input type="file" name="logo" id="sg-logo" class="pub-file-input" accept="image/*" />
+                <div class="pub-file-name" id="sg-logo-name">Прозрачный PNG</div>
+              </div>
+              <div class="pub-file-card" data-for="sg-icon">
+                <div class="pub-file-preview pub-file-preview--icon" id="sg-icon-preview"><span>Иконка</span></div>
+                <label class="pub-file-btn" for="sg-icon">Выбрать файл</label>
+                <input type="file" name="icon" id="sg-icon" class="pub-file-input" accept="image/*" />
+                <div class="pub-file-name" id="sg-icon-name">Квадрат 256×256</div>
+              </div>
+            </div>
+            <div class="settings-label full" style="margin-top:12px">
+              <span>Скриншоты</span>
+              <div class="pub-shots-row">
+                <label class="pub-file-btn" for="sg-shots">Выбрать скриншоты</label>
+                <input type="file" name="screenshots[]" id="sg-shots" class="pub-file-input" accept="image/*" multiple />
+                <div class="pub-shots-preview" id="sg-shots-preview"></div>
+              </div>
+            </div>
+            <label class="settings-label full" style="margin-top:10px"><span>Трейлер (YouTube URL)</span><input class="auth-input" name="video_url" id="sg-video" placeholder="https://youtube.com/..." /></label>
+            <input type="hidden" name="cover_url" id="sg-cover-url" />
+            <input type="hidden" name="banner_url" id="sg-banner-url" />
+          </section>
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+              <h3>Системные требования</h3>
+            </div>
             <div class="settings-label full">
-              <span>Системные требования — минимальные</span>
+              <span>Минимальные</span>
               <div class="sysreq-fields" id="sg-sys-min-fields">
-                <input class="auth-input" data-k="os" placeholder="ОС *" />
-                <input class="auth-input" data-k="cpu" placeholder="Процессор" />
-                <input class="auth-input" data-k="ram" placeholder="Оперативная память" />
+                <input class="auth-input" data-k="os" placeholder="ОС" />
+                <input class="auth-input" data-k="processor" placeholder="Процессор" />
+                <input class="auth-input" data-k="memory" placeholder="Оперативная память" />
                 <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
                 <input class="auth-input" data-k="directx" placeholder="DirectX" />
                 <input class="auth-input" data-k="storage" placeholder="Место на диске" />
@@ -1427,24 +1590,33 @@ function socialAuth(provider) {
                 <input class="auth-input" data-k="other" placeholder="Дополнительно" />
               </div>
             </div>
-            <div class="settings-label full">
-              <span>Системные требования — рекомендуемые</span>
+            <div class="settings-label full" style="margin-top:10px">
+              <span>Рекомендуемые</span>
               <div class="sysreq-fields" id="sg-sys-rec-fields">
-                <input class="auth-input" data-k="os" placeholder="ОС *" />
-                <input class="auth-input" data-k="cpu" placeholder="Процессор" />
-                <input class="auth-input" data-k="ram" placeholder="Оперативная память" />
+                <input class="auth-input" data-k="os" placeholder="ОС" />
+                <input class="auth-input" data-k="processor" placeholder="Процессор" />
+                <input class="auth-input" data-k="memory" placeholder="Оперативная память" />
                 <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
                 <input class="auth-input" data-k="directx" placeholder="DirectX" />
                 <input class="auth-input" data-k="storage" placeholder="Место на диске" />
                 <input class="auth-input" data-k="sound" placeholder="Звуковая карта" />
                 <input class="auth-input" data-k="other" placeholder="Дополнительно" />
               </div>
+            </div>
+          </section>
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+              <h3>Языки и управление</h3>
             </div>
             <div class="settings-label full">
               <span>Поддержка контроллеров</span>
               <div class="submit-checks">
                 <label class="settings-check"><input type="checkbox" value="xbox" class="sg-ctrl" /> Xbox</label>
                 <label class="settings-check"><input type="checkbox" value="playstation" class="sg-ctrl" /> PlayStation</label>
+                <label class="settings-check"><input type="checkbox" value="switch" class="sg-ctrl" /> Switch</label>
+                <label class="settings-check"><input type="checkbox" value="keyboard" class="sg-ctrl" /> Клавиатура</label>
               </div>
             </div>
             <div class="settings-label full">
@@ -1453,11 +1625,26 @@ function socialAuth(provider) {
                 <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
               </div>
             </div>
-            <label class="settings-check full" style="margin-top:4px">
-              <input type="checkbox" id="sg-adult" />
-              Игра содержит контент 18+
-            </label>
-          </div>
+          </section>
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <h3>Специфический контент</h3>
+            </div>
+            <p class="pub-hint">Отметьте, если в игре есть возрастной или чувствительный материал</p>
+            <div class="pub-content-flags">
+              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="adult" id="sg-adult" /><span>18+ / для взрослых</span></label>
+              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="violence" /><span>Насилие</span></label>
+              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="gore" /><span>Жестокость / кровь</span></label>
+              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="drugs" /><span>Наркотики / алкоголь</span></label>
+              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="language" /><span>Ненормативная лексика</span></label>
+              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="horror" /><span>Хоррор / пугающий контент</span></label>
+              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="gambling" /><span>Азартные механики</span></label>
+              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="prohibited" /><span>Запрещённые темы</span></label>
+            </div>
+          </section>
+
         </form>
       </div>
       <div class="submit-modal-foot">
@@ -1467,8 +1654,7 @@ function socialAuth(provider) {
     </div>
   </div>
 
-  <!-- ===== УСПЕХ ===== -->
-  <div class="submit-modal hidden" id="submit-done-modal">
+<div class="submit-modal hidden" id="submit-done-modal">
     <div class="submit-modal-backdrop" data-close="done"></div>
     <div class="submit-modal-box">
       <div class="submit-modal-body" style="text-align:center;padding:32px 20px">
@@ -1599,15 +1785,59 @@ function socialAuth(provider) {
 
   <div class="submit-modal hidden" id="privacy-modal">
     <div class="submit-modal-backdrop" data-close-privacy></div>
-    <div class="submit-modal-box">
+    <div class="submit-modal-box privacy-modal-box">
       <div class="submit-modal-head">
-        <h2>Обработка персональных данных</h2>
-        <button type="button" class="friends-modal-close" id="privacy-modal-close" aria-label="Закрыть">×</button>
+        <h2>Лицензионное соглашение</h2>
+        <button type="button" class="pub-modal-close" id="privacy-modal-close" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
-      <div class="submit-modal-body" style="max-height:60vh;overflow:auto;font-size:0.9rem;line-height:1.5;color:var(--text)">
-        <p>Регистрируясь в CATio, вы соглашаетесь на обработку персональных данных: имя пользователя, адрес электронной почты, технические данные сессии и сведения о библиотеке игр.</p>
-        <p>Данные используются для работы аккаунта, безопасности и функционирования сервиса. Мы не передаём их третьим лицам без законного основания.</p>
-        <p>Вы можете запросить удаление или уточнение данных, обратившись к администрации сервиса.</p>
+      <div class="submit-modal-body privacy-modal-body">
+        <div class="privacy-hero">
+          <div class="privacy-hero-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <div class="privacy-hero-title">CATio — защита ваших данных</div>
+            <div class="privacy-hero-sub">Кратко о том, что мы собираем и зачем</div>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#ef5b2c">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <h4>Какие данные</h4>
+            <p>Имя пользователя, e-mail, данные сессии, сведения о библиотеке и покупках — только то, что нужно для аккаунта.</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#6ea8fe">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+          </div>
+          <div>
+            <h4>Зачем это нужно</h4>
+            <p>Вход в аккаунт, безопасность, библиотека игр, уведомления и работа сервиса. Без лишней аналитики «для рекламы».</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#6fdf8b">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div>
+            <h4>Кому передаём</h4>
+            <p>Третьим лицам — только по закону или с вашего согласия. Мы не продаём персональные данные.</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#f0c14b">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+          </div>
+          <div>
+            <h4>Ваши права</h4>
+            <p>Можно запросить уточнение или удаление данных — напишите администрации CATio.</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>

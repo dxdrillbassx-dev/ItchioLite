@@ -32,6 +32,35 @@ function requireAuthUser(): array {
 try {
     switch ($action) {
 
+
+        // ===== ТЕКУЩИЙ ПОЛЬЗОВАТЕЛЬ (свежие данные профиля) =====
+        case 'me':
+            $user = requireAuthUser();
+            echo json_encode([
+                'ok' => true,
+                'user' => [
+                    'id' => (int)$user['id'],
+                    'username' => $user['username'],
+                    'email' => $user['email'] ?? '',
+                    'role' => $user['role'] ?? 'user',
+                    'balance' => (int)($user['balance'] ?? 0),
+                    'avatar' => $user['avatar'] ?? '',
+                    'avatar_color' => $user['avatar_color'] ?? '#ef5b2c',
+                    'avatar_url' => $user['avatar_url'] ?? '',
+                    'banner_url' => $user['banner_url'] ?? '',
+                    'banner_pos' => $user['banner_pos'] ?? '50% 50%',
+                    'banner_zoom' => (float)($user['banner_zoom'] ?? 1),
+                    'karma' => (int)($user['karma'] ?? 0),
+                    'friend_code' => $user['friend_code'] ?? '',
+                    'profile_visibility' => $user['profile_visibility'] ?? 'public',
+                    'media_visibility' => $user['media_visibility'] ?? 'public',
+                    'allow_friend_requests' => (int)($user['allow_friend_requests'] ?? 1),
+                    'is_admin' => (($user['role'] ?? '') === 'admin'),
+                    'created_at' => $user['created_at'] ?? null,
+                ],
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
         // ===== СТАТИСТИКА ПРОФИЛЯ (как в Steam: игр, отзывов, уровень) =====
         case 'stats':
             $user = requireAuthUser();
