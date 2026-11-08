@@ -245,6 +245,7 @@ if ($isAuthorized) {
         <?php if ($isAuthorized): ?>
         <div class="avatar-wrap">
           <button type="button" class="avatar" id="avatar-btn" aria-haspopup="true" aria-expanded="false" style="<?php echo avatarStyleAttr($avatarUrl, $avatarColor, (int)($user['id'] ?? 0)); ?>"><?php echo $avatarUrl ? '' : htmlspecialchars($avatarText); ?></button>
+          <span class="header-avatar-dot" id="header-avatar-dot" aria-hidden="true"></span>
           <div class="user-menu hidden" id="user-menu" role="menu">
             <div class="user-menu-head">
               <div class="user-menu-name"><?php echo htmlspecialchars($user['username']); ?></div>
@@ -284,6 +285,10 @@ if ($isAuthorized) {
           <input type="text" id="head-search-input" placeholder="Поиск" aria-label="Поиск игр" autocomplete="off" />
           <div class="head-search-drop" id="head-search-drop" hidden></div>
         </div>
+        <button type="button" class="head-cart" id="btn-cart" title="Корзина" aria-label="Корзина">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <span class="cart-badge hidden" id="cart-badge">0</span>
+        </button>
         <button type="button" class="head-add-game" id="btn-add-game" title="Добавить игру" onclick="if(window.openSubmitRules){openSubmitRules();}else{alert('Скрипт ещё не загрузился');}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
@@ -467,6 +472,38 @@ if ($isAuthorized) {
             <h3 class="downloads-history-title">Завершённые</h3>
             <div id="downloads-history" class="downloads-history">
               <p class="downloads-history-empty">Пока пусто</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== КОРЗИНА ===== -->
+      <section id="view-cart" class="view">
+        <div class="cart-page" id="cart-page">
+          <div class="cart-empty" id="cart-empty">
+            <div class="cart-empty-icon" aria-hidden="true">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+              </svg>
+            </div>
+            <p class="cart-empty-title">Корзина пуста</p>
+            <p class="cart-empty-sub">Загляни в каталог и добавь игры — они появятся здесь перед покупкой.</p>
+            <button type="button" class="btn-primary cart-empty-btn" id="cart-go-store">В каталог</button>
+          </div>
+          <div class="cart-content hidden" id="cart-content">
+            <div class="cart-list" id="cart-list"></div>
+            <div class="cart-bottom-bar gp-actionbar" id="cart-bottom-bar">
+              <div class="gp-action-left cart-bottom-total">
+                <div class="gp-playtime cart-bottom-label">Итого</div>
+                <div class="gp-last-play cart-total" id="cart-total">0 ₽</div>
+              </div>
+              <div class="gp-action-btns cart-bottom-actions">
+                <button type="button" class="gp-bar-btn icon cart-clear-icon" id="cart-clear" title="Очистить корзину" aria-label="Очистить корзину">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                </button>
+                <button type="button" class="gp-bar-btn primary cart-checkout-btn" id="cart-checkout">Оформить покупку</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1339,6 +1376,20 @@ function socialAuth(provider) {
 
         <div class="friends-search-results hidden" id="friends-search-results"></div>
 
+        <div class="friends-code-panel hidden" id="friends-code-panel">
+          <div class="friends-code-found hidden" id="friends-code-found"></div>
+          <div class="friends-code-actions">
+            <button type="button" class="fc-btn primary" id="friends-code-request" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+              Отправить заявку
+            </button>
+            <button type="button" class="fc-btn" id="friends-code-profile" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Профиль
+            </button>
+          </div>
+        </div>
+
         <div class="friends-section" id="friends-incoming-section" style="display:none">
           <button type="button" class="friends-section-toggle open" data-sec="incoming">
             <span class="friends-chevron">▾</span> ЗАЯВКИ <span class="friends-sec-count" id="friends-incoming-count">0</span>
@@ -1449,6 +1500,121 @@ function socialAuth(provider) {
     </div>
   </div>
 
+
+
+
+  <!-- ===== ВЫБОР ДРУГА ДЛЯ ПОДАРКА ===== -->
+  <div class="cart-modal-overlay hidden" id="gift-friend-modal" aria-hidden="true">
+    <div class="cart-modal gift-friend-modal">
+      <div class="cart-modal-head">
+        <h3>Подарок другу</h3>
+        <button type="button" class="pub-modal-close" id="gift-friend-close" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="cart-modal-body">
+        <div class="gift-friend-search-wrap friends-search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="gift-friend-search" class="friends-search" placeholder="Поиск по имени" autocomplete="off" />
+        </div>
+        <div class="gift-friend-list" id="gift-friend-list"><div class="loading">Загрузка...</div></div>
+      </div>
+      <div class="cart-modal-foot">
+        <button type="button" class="cart-modal-btn" id="gift-friend-cancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== МОДАЛКА ПОДТВЕРЖДЕНИЯ ПОКУПКИ ===== -->
+  <div class="cart-modal-overlay hidden" id="checkout-modal" aria-hidden="true">
+    <div class="cart-modal checkout-modal">
+      <div class="cart-modal-head">
+        <h3>Подтверждение покупки</h3>
+        <button type="button" class="pub-modal-close" id="checkout-modal-close" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="cart-modal-body">
+        <div class="checkout-alert hidden" id="checkout-alert" role="alert"></div>
+        <div class="cart-modal-list" id="checkout-modal-list"></div>
+        <div class="checkout-total-row">
+          <span>К оплате</span>
+          <strong id="checkout-modal-total">0 ₽</strong>
+        </div>
+        <label class="checkout-agree">
+          <input type="checkbox" id="checkout-agree-cb" />
+          <span>Я согласен(на) с <button type="button" class="auth-consent-link" id="refund-policy-open">условиями покупки и возврата</button></span>
+        </label>
+      </div>
+      <div class="cart-modal-foot">
+        <button type="button" class="cart-modal-btn" id="checkout-cancel">Отменить</button>
+        <button type="button" class="cart-modal-btn primary" id="checkout-confirm" disabled>Приобрести</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== УСЛОВИЯ ПОКУПКИ / ВОЗВРАТА ===== -->
+  <div class="submit-modal hidden" id="refund-policy-modal">
+    <div class="submit-modal-backdrop" data-close-refund></div>
+    <div class="submit-modal-box privacy-modal-box">
+      <div class="submit-modal-head">
+        <h2>Условия покупки и возврата</h2>
+        <button type="button" class="pub-modal-close" data-close-refund aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body privacy-modal-body">
+        <div class="privacy-hero">
+          <div class="privacy-hero-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <div class="privacy-hero-title">CATio — покупки в каталоге</div>
+            <div class="privacy-hero-sub">Как работает оплата, доступ к играм и возврат средств</div>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#ef5b2c">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          </div>
+          <div>
+            <h4>Оплата</h4>
+            <p>Средства списываются с баланса аккаунта CATio. После успешной оплаты игра появляется в вашей библиотеке.</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#f0c14b">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          </div>
+          <div>
+            <h4>Без автоматического возврата</h4>
+            <p>По умолчанию деньги за покупку <strong>не возвращаются</strong>. Покупка считается окончательной после подтверждения.</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#6ea8fe">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <div>
+            <h4>Исключение: меньше 3 часов</h4>
+            <p>Возврат возможен, если наиграно <strong>меньше 3 часов</strong> и есть веская причина (техническая проблема, несоответствие описанию, случайная покупка и т.п.). Решение принимает поддержка.</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#6fdf8b">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div>
+            <h4>Как запросить возврат</h4>
+            <p>Напишите в поддержку через профиль, укажите игру и причину. Мы рассмотрим обращение в разумные сроки.</p>
+          </div>
+        </div>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close-refund>Закрыть</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== МОДАЛКА ПРАВИЛ ПУБЛИКАЦИИ ===== -->
   <div class="submit-modal hidden" id="submit-rules-modal">

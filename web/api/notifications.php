@@ -61,10 +61,19 @@ try {
         case 'badge':
             $user = requireAuthN();
             $uid = (int)$user['id'];
-            $notif = (int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id = $uid AND is_read = 0")->fetchColumn();
-            $msgs = (int)$pdo->query("SELECT COUNT(*) FROM messages WHERE receiver_id = $uid AND is_read = 0")->fetchColumn();
-            // pending friend requests incoming
-            $req = (int)$pdo->query("SELECT COUNT(*) FROM friendships WHERE friend_id = $uid AND status = 'pending' AND requested_by != $uid")->fetchColumn();
+            $notif = 0;
+            $msgs = 0;
+            $req = 0;
+            try {
+                $notif = (int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id = $uid AND is_read = 0")->fetchColumn();
+            } catch (Throwable $e) {}
+            try {
+                $msgs = (int)$pdo->query("SELECT COUNT(*) FROM messages WHERE receiver_id = $uid AND is_read = 0")->fetchColumn();
+            } catch (Throwable $e) {}
+            // входящие заявки без requested_by (колонки может не быть)
+            try {
+                $req = (int)$pdo->query("SELECT COUNT(*) FROM friendships WHERE friend_id = $uid AND status = 'pending'")->fetchColumn();
+            } catch (Throwable $e) {}
             echo json_encode([
                 'ok' => true,
                 'notifications' => $notif,

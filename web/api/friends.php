@@ -221,6 +221,35 @@ try {
             break;
         }
 
+        case 'owns_games': {
+            $me = requireUserF();
+            $raw = $_GET['game_ids'] ?? '';
+            if (is_array($raw)) $ids = array_map('intval', $raw);
+            else $ids = array_filter(array_map('intval', preg_split('/[,\s]+/', (string)$raw)));
+            $ids = array_values(array_unique(array_filter($ids)));
+            $owns = [];
+            if ($ids) {
+                $stF = $pdo->prepare("SELECT u.id FROM friendships f
+                    JOIN users u ON u.id = IF(f.user_id = ?, f.friend_id, f.user_id)
+                    WHERE f.status = 'accepted' AND (f.user_id = ? OR f.friend_id = ?)");
+                $stF->execute([(int)$me['id'], (int)$me['id'], (int)$me['id']]);
+                $friendIds = array_map(fn($r) => (int)$r['id'], $stF->fetchAll());
+                if ($friendIds) {
+                    $in = implode(',', array_fill(0, count($ids), '?'));
+                    $st = $pdo->prepare("SELECT user_id, game_id FROM library WHERE game_id IN ($in) AND user_id IN (" . implode(',', array_fill(0, count($friendIds), '?')) . ")");
+                    $st->execute([...$ids, ...$friendIds]);
+                    foreach ($st->fetchAll() as $row) {
+                        $uid = (int)$row['user_id'];
+                        $gid = (int)$row['game_id'];
+                        if (!isset($owns[$uid])) $owns[$uid] = [];
+                        $owns[$uid][] = $gid;
+                    }
+                }
+            }
+            echo json_encode(['ok' => true, 'owns' => $owns], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
         case 'search': {
             $me = requireUserF();
             $q = trim($_GET['q'] ?? '');
@@ -261,11 +290,21 @@ try {
                 $pdo->prepare("UPDATE friendships SET status = 'accepted' WHERE
                     ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)) AND status = 'pending'")
                     ->execute([$to, (int)$me['id'], (int)$me['id'], $to]);
+                try {
+                    $meta = json_encode(['from_id' => (int)$me['id'], 'from_username' => $me['username'] ?? ''], JSON_UNESCAPED_UNICODE);
+                    $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?, 'friend_accepted', ?, ?, ?)")
+                        ->execute([$to, 'Заявка принята', ($me['username'] ?? 'Пользователь') . ' принял(а) вашу заявку в друзья', $meta]);
+                } catch (Throwable $e) {}
                 echo json_encode(['ok' => true, 'status' => 'friends'], JSON_UNESCAPED_UNICODE);
                 break;
             }
             $pdo->prepare("INSERT INTO friendships (user_id, friend_id, status) VALUES (?, ?, 'pending')")
                 ->execute([(int)$me['id'], $to]);
+            try {
+                $meta = json_encode(['from_id' => (int)$me['id'], 'from_username' => $me['username'] ?? ''], JSON_UNESCAPED_UNICODE);
+                $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?, 'friend_request', ?, ?, ?)")
+                    ->execute([$to, 'Заявка в друзья', 'Пользователь ' . ($me['username'] ?? '') . ' хочет добавить вас в друзья', $meta]);
+            } catch (Throwable $e) {}
             echo json_encode(['ok' => true, 'status' => 'outgoing'], JSON_UNESCAPED_UNICODE);
             break;
         }
@@ -284,6 +323,11 @@ try {
             if ($accept) {
                 $pdo->prepare("UPDATE friendships SET status = 'accepted' WHERE user_id = ? AND friend_id = ? AND status = 'pending'")
                     ->execute([$from, (int)$me['id']]);
+                try {
+                    $meta = json_encode(['from_id' => (int)$me['id'], 'from_username' => $me['username'] ?? ''], JSON_UNESCAPED_UNICODE);
+                    $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?, 'friend_accepted', ?, ?, ?)")
+                        ->execute([$from, 'Заявка принята', ($me['username'] ?? 'Пользователь') . ' принял(а) вашу заявку в друзья', $meta]);
+                } catch (Throwable $e) {}
             } else {
                 $pdo->prepare("DELETE FROM friendships WHERE user_id = ? AND friend_id = ? AND status = 'pending'")
                     ->execute([$from, (int)$me['id']]);

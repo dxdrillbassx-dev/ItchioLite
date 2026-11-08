@@ -117,10 +117,22 @@ function formatStatNum(n) {
   const v = parseInt(n, 10) || 0;
   return v.toLocaleString('ru-RU');
 }
-function formatPrice(price) {
-  const p = parseFloat(price);
-  if (p === 0) return { text: 'Бесплатно', className: 'free' };
-  return { text: `${p.toFixed(0)} ₽`, className: 'paid' };
+function formatPrice(price, discountPercent) {
+  const p = parseFloat(price) || 0;
+  const disc = Math.min(100, Math.max(0, parseInt(discountPercent, 10) || 0));
+  if (p === 0) return { text: 'Бесплатно', className: 'free', original: null, final: 0, discount: 0 };
+  if (disc > 0) {
+    const final = Math.round(p * (100 - disc) / 100);
+    return {
+      text: `${final} ₽`,
+      className: 'paid sale',
+      original: `${Math.round(p)} ₽`,
+      final,
+      discount: disc,
+      originalNum: Math.round(p)
+    };
+  }
+  return { text: `${Math.round(p)} ₽`, className: 'paid', original: null, final: Math.round(p), discount: 0 };
 }
 
 function formatSize(bytes) {
@@ -130,6 +142,335 @@ function formatSize(bytes) {
   if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' МБ';
   return (b / 1024 / 1024 / 1024).toFixed(2) + ' ГБ';
 }
+
+// ---------- Корзина (localStorage) ----------
+function cartStorageKey() {
+  const uid = (window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.id)
+    || (window.CURRENT_USER && window.CURRENT_USER.id)
+    || 'guest';
+  return 'itch_cart_v1_u' + uid;
+}
+const CART_KEY = 'itch_cart_v1'; // legacy fallback
+window.__lastGameForCart = null; // текущая игра на странице — для синхронизации кнопки
+
+function getCart() {
+  try {
+    const raw = localStorage.getItem(cartStorageKey());
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCart(items) {
+  localStorage.setItem(cartStorageKey(), JSON.stringify(items || []));
+  updateCartBadge();
+  try {
+    if (window.__lastGameForCart && typeof refreshBuyButton === 'function') {
+      refreshBuyButton(window.__lastGameForCart);
+    }
+  } catch (e) {}
+  try {
+    const modal = document.getElementById('cart-add-modal');
+    if (modal && typeof renderCartModalBody === 'function') {
+      renderCartModalBody(modal);
+    }
+  } catch (e) {}
+  window.dispatchEvent(new CustomEvent('cart:changed'));
+}
+
+function cartCount() {
+  return getCart().reduce((sum, x) => sum + (parseInt(x.qty, 10) || 1), 0);
+}
+
+function cartQty(gameId) {
+  const id = String(gameId);
+  const item = getCart().find(x => String(x.id) === id);
+  return item ? (parseInt(item.qty, 10) || 1) : 0;
+}
+
+function isInCart(gameId) {
+  return cartQty(gameId) > 0;
+}
+
+function addToCart(game) {
+  if (!game || !game.id) return false;
+  const items = getCart();
+  const id = String(game.id);
+  const existing = items.find(x => String(x.id) === id);
+  const priceInfo = formatPrice(game.price, game.discount_percent);
+  if (existing) {
+    existing.qty = (parseInt(existing.qty, 10) || 1) + 1;
+    existing.title = game.title || existing.title;
+    existing.cover = game.cover_src || game.cover_url || game.banner_url || existing.cover || '';
+    existing.price = game.price;
+    existing.discount_percent = game.discount_percent || 0;
+    existing.finalPrice = priceInfo.final;
+    existing.genre = game.genre || existing.genre || '';
+    existing.developer = game.developer_name || game.developer || existing.developer || '';
+  } else {
+    items.push({
+      id: game.id,
+      title: game.title || 'Игра',
+      cover: game.cover_src || game.cover_url || game.banner_url || '',
+      price: game.price,
+      discount_percent: game.discount_percent || 0,
+      finalPrice: priceInfo.final,
+      genre: game.genre || '',
+      developer: game.developer_name || game.developer || '',
+      forAccount: 'self',
+      qty: 1,
+      addedAt: Date.now()
+    });
+  }
+  saveCart(items);
+  return true;
+}
+
+function removeFromCart(gameId, opts = {}) {
+  const id = String(gameId);
+  const items = getCart();
+  const idx = items.findIndex(x => String(x.id) === id);
+  if (idx < 0) return;
+  if (opts && opts.one && (parseInt(items[idx].qty, 10) || 1) > 1) {
+    items[idx].qty = (parseInt(items[idx].qty, 10) || 1) - 1;
+  } else {
+    items.splice(idx, 1);
+  }
+  saveCart(items);
+}
+
+function setCartForAccount(gameId, value) {
+  const id = String(gameId);
+  const items = getCart();
+  const item = items.find(x => String(x.id) === id);
+  if (!item) return;
+  item.forAccount = value === 'friend' ? 'friend' : 'self';
+  if (item.forAccount !== 'friend') {
+    delete item.giftTo;
+    delete item.giftToName;
+  }
+  saveCart(items);
+}
+function setCartGiftFriend(gameId, friendId, friendName) {
+  const id = String(gameId);
+  const items = getCart();
+  const item = items.find(x => String(x.id) === id);
+  if (!item) return;
+  item.forAccount = 'friend';
+  item.giftTo = +friendId;
+  item.giftToName = friendName || '';
+  saveCart(items);
+}
+function setAllGiftFriends(friendId, friendName) {
+  const items = getCart();
+  items.forEach(item => {
+    if (item.forAccount === 'friend') {
+      item.giftTo = +friendId;
+      item.giftToName = friendName || '';
+    }
+  });
+  saveCart(items);
+}
+
+function clearCart() {
+  saveCart([]);
+}
+
+async function syncCartPrices() {
+  const items = getCart();
+  if (!items.length) return items;
+  let map = {};
+  try {
+    if (Array.isArray(storeCache) && storeCache.length) {
+      storeCache.forEach(g => { map[+g.id] = g; });
+    } else {
+      const data = await fetchJSON(`${API_BASE}?action=list`);
+      (data.games || []).forEach(g => { map[+g.id] = g; });
+    }
+  } catch (e) {}
+  let changed = false;
+  items.forEach(it => {
+    const g = map[+it.id];
+    if (!g) return;
+    const price = parseFloat(g.price);
+    const disc = parseInt(g.discount_percent, 10) || 0;
+    if (!Number.isNaN(price) && (Number(it.price) !== price || (parseInt(it.discount_percent, 10) || 0) !== disc)) {
+      it.price = price;
+      it.discount_percent = disc;
+      if (g.cover_url) it.cover = g.cover_url;
+      if (g.title) it.title = g.title;
+      changed = true;
+    }
+  });
+  if (changed) saveCart(items);
+  return items;
+}
+
+
+function updateCartBadge() {
+  const badge = document.getElementById('cart-badge');
+  const btn = document.getElementById('btn-cart');
+  const n = cartCount();
+  if (badge) {
+    badge.textContent = n > 0 ? String(n) : '';
+    badge.classList.toggle('hidden', n === 0);
+  }
+  if (btn) btn.classList.toggle('has-items', n > 0);
+}
+
+function renderPriceBlock(priceInfo) {
+  if (priceInfo.className === 'free') {
+    return `<span class="cart-price free">Бесплатно</span>`;
+  }
+  if (priceInfo.discount > 0) {
+    return `<span class="cart-price-block">
+      <span class="cart-discount">-${priceInfo.discount}%</span>
+      <span class="cart-price-col">
+        <span class="cart-price-old">${escapeHtml(priceInfo.original)}</span>
+        <span class="cart-price sale">${escapeHtml(priceInfo.text)}</span>
+      </span>
+    </span>`;
+  }
+  return `<span class="cart-price">${escapeHtml(priceInfo.text)}</span>`;
+}
+
+function cartModalRowHtml(item) {
+  const pi = formatPrice(item.price, item.discount_percent);
+  const qty = parseInt(item.qty, 10) || 1;
+  const forVal = item.forAccount === 'friend' ? 'friend' : 'self';
+  const rows = [];
+  for (let i = 0; i < qty; i++) {
+    rows.push(`
+      <div class="cart-modal-game" data-id="${item.id}" data-copy="${i}">
+        <img class="cart-modal-cover" src="${escapeHtml(item.cover || '')}" alt="" onerror="this.style.opacity=0.35" />
+        <div class="cart-modal-meta">
+          <div class="cart-modal-title">${escapeHtml(item.title || 'Игра')}</div>
+          <div class="cart-modal-account">
+            <select class="cart-modal-for" data-id="${item.id}" aria-label="Для кого">
+              <option value="self" ${forVal === 'self' ? 'selected' : ''}>Для моего аккаунта</option>
+              <option value="friend" ${forVal === 'friend' ? 'selected' : ''}>В подарок другу</option>
+            </select>
+          </div>
+          <div class="cart-modal-actions">
+            <button type="button" class="cart-modal-link add" data-id="${item.id}">Добавить</button>
+            <span class="cart-modal-act-sep">|</span>
+            <button type="button" class="cart-modal-link remove" data-id="${item.id}">Удалить</button>
+          </div>
+        </div>
+        <div class="cart-modal-side-price">${renderPriceBlock(pi)}</div>
+      </div>`);
+  }
+  return rows.join('');
+}
+
+function renderCartModalBody(modal) {
+  if (!modal) return;
+  const list = modal.querySelector('#cart-modal-list');
+  const openBtn = modal.querySelector('#cart-open');
+  const items = getCart();
+  if (!items.length) {
+    modal.remove();
+    return;
+  }
+  if (list) list.innerHTML = items.map(cartModalRowHtml).join('');
+  if (openBtn) openBtn.textContent = 'Открыть корзину (' + cartCount() + ')';
+  try {
+    let total = 0;
+    items.forEach(item => {
+      const pi = formatPrice(item.price, item.discount_percent);
+      total += (pi.final || 0) * (parseInt(item.qty, 10) || 1);
+    });
+    const tEl = modal.querySelector('#cart-add-modal-total');
+    if (tEl) tEl.textContent = total > 0 ? `${Math.round(total)} ₽` : 'Бесплатно';
+  } catch (e) {}
+  try { initCatioSelects(modal); } catch (e) {}
+
+  list && list.querySelectorAll('.cart-modal-for').forEach(sel => {
+    sel.addEventListener('change', () => setCartForAccount(sel.dataset.id, sel.value));
+  });
+  list && list.querySelectorAll('.cart-modal-link.add').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const item = getCart().find(x => String(x.id) === String(id));
+      if (!item) return;
+      addToCart({
+        id: item.id,
+        title: item.title,
+        cover_src: item.cover,
+        price: item.price,
+        discount_percent: item.discount_percent,
+        genre: item.genre,
+        developer_name: item.developer
+      });
+    });
+  });
+  list && list.querySelectorAll('.cart-modal-link.remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      removeFromCart(btn.dataset.id, { one: true });
+    });
+  });
+}
+
+function showAddToCartModal(game) {
+  const existing = document.getElementById('cart-add-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'cart-add-modal';
+  modal.className = 'cart-modal-overlay';
+  modal.setAttribute('aria-hidden', 'false');
+  // та же вёрстка, что у «Подтверждение покупки»
+  modal.innerHTML = `
+    <div class="cart-modal checkout-modal" role="dialog" aria-labelledby="cart-modal-title">
+      <div class="cart-modal-head">
+        <h3 id="cart-modal-title">Добавлено в корзину!</h3>
+        <button type="button" class="pub-modal-close" id="cart-add-modal-close" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="cart-modal-body">
+        <div id="cart-modal-list" class="cart-modal-list"></div>
+        <div class="checkout-total-row">
+          <span>В корзине</span>
+          <strong id="cart-add-modal-total">0 ₽</strong>
+        </div>
+      </div>
+      <div class="cart-modal-foot">
+        <button type="button" class="cart-modal-btn" id="cart-continue">Продолжить покупки</button>
+        <button type="button" class="cart-modal-btn primary" id="cart-open">Открыть корзину (${cartCount()})</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  renderCartModalBody(modal);
+  try { initCatioSelects(modal); } catch (e) {}
+
+  // сумма
+  try {
+    let total = 0;
+    getCart().forEach(item => {
+      const pi = formatPrice(item.price, item.discount_percent);
+      const qty = parseInt(item.qty, 10) || 1;
+      total += (pi.final || 0) * qty;
+    });
+    const tEl = modal.querySelector('#cart-add-modal-total');
+    if (tEl) tEl.textContent = total > 0 ? `${Math.round(total)} ₽` : 'Бесплатно';
+  } catch (e) {}
+
+  const close = () => {
+    modal.remove();
+  };
+  modal.querySelector('#cart-add-modal-close')?.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  modal.querySelector('#cart-continue')?.addEventListener('click', close);
+  modal.querySelector('#cart-open')?.addEventListener('click', () => {
+    close();
+    if (typeof showView === 'function') showView('cart');
+  });
+}
+
+
 
 
 function iconSvg(name, size=16) {
@@ -236,6 +577,7 @@ const VIEW_TITLES = {
   community: 'Мастерская',
   library: 'Библиотека',
   downloads: 'Загрузки',
+  cart: 'Корзина',
   notifications: 'Уведомления',
   profile: 'Профиль',
   settings: 'Настройки',
@@ -282,7 +624,7 @@ function showView(name, gameId, opts) {
   // Поиск в шапке есть не во всех вкладках
   const headSearch = $('#head-search');
   if (headSearch) {
-    headSearch.style.display = (name === 'game' || name === 'auth' || name === 'settings' || name === 'achievements') ? 'none' : '';
+    headSearch.style.display = (name === 'game' || name === 'auth' || name === 'settings' || name === 'achievements' || name === 'cart') ? 'none' : '';
   }
 
   const main = $('.main');
@@ -297,6 +639,7 @@ function showView(name, gameId, opts) {
   if (name === 'community') loadWorkshop();
   if (name === 'notifications') loadNotifications();
   if (name === 'downloads') renderDownloadsView();
+  if (name === 'cart') renderCartPage();
   if (name === 'profile') {
     if (opts && opts.foreign) {
       // чужой профиль — loadProfile не вызываем
@@ -306,7 +649,10 @@ function showView(name, gameId, opts) {
     }
   }
   if (name === 'admin') loadAdminPending();
-  if (name === 'game' && gameId) loadGamePage(gameId);
+  if (name === 'game') {
+    const gid = gameId || window.__lastGameForCart?.id || window.GAME_ID_FROM_URL || 0;
+    if (gid) loadGamePage(gid);
+  }
 }
 
 function gotoView(name) {
@@ -639,10 +985,34 @@ function sideLibAddOptimistic(game) {
 }
 
 function sideLibRemoveOptimistic(gameId) {
-  if (!Array.isArray(sideLibCache)) return;
-  sideLibCache = sideLibCache.filter(g => +g.id !== +gameId);
-  renderSideLibrary();
-  loadSideLibrary();
+  const id = +gameId;
+  if (Array.isArray(sideLibCache)) {
+    sideLibCache = sideLibCache.filter(g => +g.id !== id);
+    try { renderSideLibrary($('#side-lib-search')?.value || ''); } catch (e) {}
+  }
+  // убрать из кэша каталога / карточек
+  try {
+    if (Array.isArray(storeCache)) {
+      const g = storeCache.find(x => +x.id === id);
+      if (g) g.owned = false;
+    }
+  } catch (e) {}
+  // перерисовать плюсики в открытом каталоге
+  try {
+    $$(`.game-item__plus-wrapper[data-id="${id}"], .btn-get[data-id="${id}"]`).forEach(btn => {
+      btn.disabled = false;
+      btn.classList.remove('is-owned', 'owned');
+      btn.classList.add('is-add');
+      btn.title = 'В корзину';
+      if (btn.classList.contains('game-item__plus-wrapper')) {
+        btn.innerHTML = '<svg class="gi-icon gi-plus" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
+      } else {
+        btn.textContent = 'В корзину';
+      }
+    });
+  } catch (e) {}
+  // фоновая синхронизация
+  try { loadSideLibrary(); } catch (e) {}
 }
 
 
@@ -817,7 +1187,13 @@ function initContentHead() {
   if (back) {
     back.addEventListener('click', () => {
       const cur = getViewFromUrl();
-      showView(prevView && prevView !== cur ? prevView : 'home');
+      const target = prevView && prevView !== cur ? prevView : 'home';
+      if (target === 'game') {
+        const gid = window.__lastGameForCart?.id || window.GAME_ID_FROM_URL || 0;
+        showView('game', gid || undefined);
+      } else {
+        showView(target);
+      }
     });
   }
 
@@ -1103,13 +1479,44 @@ function clearStoreFilters() {
   renderStoreList();
 }
 
+function storeRowPriceHtml(price) {
+  if (price.className === 'free') {
+    return ''; // бесплатные — без приписки в каталоге
+  }
+  if (price.discount > 0) {
+    return `<span class="store-row-price sale">
+      <span class="store-row-discount">-${price.discount}%</span>
+      <span class="store-row-price-col">
+        <span class="store-row-price-old">${escapeHtml(price.original)}</span>
+        <span class="store-row-price-final">${escapeHtml(price.text)}</span>
+      </span>
+    </span>`;
+  }
+  return `<span class="store-row-price paid">${escapeHtml(price.text)}</span>`;
+}
+
 function createStoreRow(game) {
-  const price = formatPrice(game.price);
+  const price = formatPrice(game.price, game.discount_percent);
   const row = document.createElement('article');
   row.className = 'store-row game-item';
   row.dataset.id = game.id;
   const cover = escapeHtml(game.banner_url || game.cover_url || game.cover_src || ('media.php?type=cover&id=' + game.id));
   const genres = escapeHtml((game.genre || '').split(/[,/|]/).map(s => s.trim()).filter(Boolean).slice(0, 4).join(', ') || '—');
+  const inCart = !game.owned && typeof isInCart === 'function' && isInCart(game.id);
+  const purchased = !!(game.purchased || game.owned);
+  // плюс только если не в библиотеке и не в корзине; галочка только если в библиотеке
+  let actionBtn = '';
+  if (game.owned) {
+    actionBtn = `<button type="button" class="game-item__plus-wrapper is-owned" data-id="${game.id}" title="В библиотеке" disabled>
+      <svg class="gi-icon gi-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </button>`;
+  } else if (!inCart) {
+    const title = (purchased || price.className === 'free') ? 'В библиотеку' : 'В корзину';
+    actionBtn = `<button type="button" class="game-item__plus-wrapper is-add" data-id="${game.id}" title="${title}">
+      <svg class="gi-icon gi-plus" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>`;
+  }
+  // inCart → кнопки нет
   row.innerHTML = `
     <div class="game-item__content-link">
       <div class="game-item__cover-wrapper">
@@ -1119,38 +1526,50 @@ function createStoreRow(game) {
         <h3 class="store-row-title">${escapeHtml(game.title)}</h3>
         <div class="game-item__genres">${genres}</div>
       </div>
+      ${(!game.owned && price.className !== 'free') ? `<div class="store-row-price-wrap">${storeRowPriceHtml(price)}</div>` : ''}
+      ${actionBtn}
     </div>
-    <button type="button" class="game-item__plus-wrapper ${game.owned ? 'is-owned' : 'is-add'}" data-id="${game.id}" title="${game.owned ? 'В библиотеке' : 'В библиотеку'}" ${game.owned ? 'disabled' : ''}>
-      ${game.owned
-        ? '<svg class="gi-icon gi-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
-        : '<svg class="gi-icon gi-plus" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>'}
-    </button>
   `;
   const plus = row.querySelector('.game-item__plus-wrapper');
   row.addEventListener('click', (e) => {
-    if (e.target.closest('.game-item__plus-wrapper')) return;
+    if (e.target.closest('.game-item__plus-wrapper') || e.target.closest('.store-row-price-wrap')) return;
     gotoGame(game.id);
   });
-  plus.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (game.owned || plus.disabled) return;
-    plus.disabled = true;
-    try {
-      const data = await postJSON(`${API_BASE}?action=buy`, { game_id: game.id });
-      if (!data.ok) throw new Error(data.error || 'Не удалось оформить');
-      if (data.balance !== undefined) updateBalance(data.balance);
-      game.owned = true;
-      // обновить в кэше
-      const cached = storeCache.find(g => String(g.id) === String(game.id));
-      if (cached) cached.owned = true;
-      markStoreRowOwned(plus);
-      try { sideLibAddOptimistic(game); } catch (err) {}
-      toast(data.message || `«${game.title}» добавлена в библиотеку`);
-    } catch (err) {
-      plus.disabled = false;
-      toast(err.message || 'Ошибка');
-    }
-  });
+  if (plus) {
+    plus.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (game.owned || plus.disabled) return;
+
+      // Уже куплена, но не в библиотеке → вернуть в библиотеку без оплаты
+      if (game.purchased || price.className === 'free') {
+        plus.disabled = true;
+        try {
+          const data = await postJSON(`${API_BASE}?action=buy`, { game_id: game.id });
+          if (!data.ok) throw new Error(data.error || 'Не удалось оформить');
+          if (data.balance !== undefined) updateBalance(data.balance);
+          game.owned = true;
+          game.purchased = true;
+          const cached = storeCache.find(g => String(g.id) === String(game.id));
+          if (cached) { cached.owned = true; cached.purchased = true; }
+          markStoreRowOwned(plus);
+          try { sideLibAddOptimistic(game); } catch (err) {}
+          toast(data.message || `«${game.title}» добавлена в библиотеку`);
+        } catch (err) {
+          plus.disabled = false;
+          toast(err.message || 'Ошибка');
+        }
+        return;
+      }
+
+      // Платные некупленные → в корзину, иконку убрать
+      const ok = typeof addToCart === 'function' && addToCart(game);
+      if (ok) {
+        plus.remove(); // пока в корзине — ни плюса, ни галочки
+        if (typeof showAddToCartModal === 'function') showAddToCartModal(game);
+        else toast('Добавлено в корзину');
+      }
+    });
+  }
   return row;
 }
 
@@ -1164,7 +1583,7 @@ function markStoreRowOwned(plusBtn) {
 }
 
 function createStoreGridCard(game) {
-  const price = formatPrice(game.price);
+  const price = formatPrice(game.price, game.discount_percent);
   const card = document.createElement('article');
   card.className = 'store-grid-card';
   card.dataset.id = game.id;
@@ -1245,7 +1664,7 @@ function createGameCard(game) {
   card.className = 'game-card';
   card.dataset.id = game.id;
 
-  const price = formatPrice(game.price);
+  const price = formatPrice(game.price, game.discount_percent);
   const tags = tagsToArray(game.tags).slice(0, 3);
 
   card.innerHTML = `
@@ -1286,14 +1705,29 @@ function paintCardButton(btn, game, price) {
     btn.classList.add('owned');
     btn.disabled = false;
   } else {
-    btn.textContent = price.className === 'free' ? 'В библиотеку' : 'Купить';
+    const inCart = price.className !== 'free' && typeof isInCart === 'function' && isInCart(game.id);
+    btn.textContent = price.className === 'free' ? 'В библиотеку' : (inCart ? 'В корзине' : 'В корзину');
     btn.classList.remove('owned');
     btn.disabled = false;
   }
 }
 
 async function buyFromCard(btn, game, price) {
-  if (game.owned) return; // уже есть — кнопка просто ярлык
+  if (game.owned) return;
+  // Платные — в корзину
+  if (price.className !== 'free') {
+    if (typeof isInCart === 'function' && isInCart(game.id)) {
+      if (typeof showView === 'function') showView('cart');
+      return;
+    }
+    const ok = typeof addToCart === 'function' && addToCart(game);
+    if (ok) {
+      btn.textContent = 'В корзине';
+      if (typeof showAddToCartModal === 'function') showAddToCartModal(game);
+      else toast('Добавлено в корзину');
+    }
+    return;
+  }
   btn.disabled = true;
   const oldText = btn.textContent;
   btn.textContent = 'Оформляем...';
@@ -1304,8 +1738,7 @@ async function buyFromCard(btn, game, price) {
     game.owned = true;
     paintCardButton(btn, game, price);
     sideLibAddOptimistic(game);
-    // Бейдж «В библиотеке» на обложке
-    const cover = btn.closest('.game-card').querySelector('.game-cover');
+    const cover = btn.closest('.game-card')?.querySelector('.game-cover');
     if (cover && !cover.querySelector('.card-badge.owned')) {
       const badge = document.createElement('span');
       badge.className = 'card-badge owned';
@@ -1585,7 +2018,8 @@ async function openGameAchievementsPage(gameId, gameTitle) {
 
 function renderGamePage(wrap, data) {
   const g = data.game;
-  const price = formatPrice(g.price);
+  window.__lastGameForCart = g;
+  const price = formatPrice(g.price, g.discount_percent);
   const tags = tagsToArray(g.tags);
   const shots = data.screenshots || [];
   const videos = data.videos || [];
@@ -1641,7 +2075,7 @@ function renderGamePage(wrap, data) {
       statusMain = 'Вы ещё не играли в ' + (g.title || 'эту игру');
     }
   } else {
-    statusMain = hasBuilds ? ('Добавьте «' + (g.title || 'игру') + '» в библиотеку') : 'Нет файлов для скачивания';
+    statusMain = 'Вы ещё не играли в ' + (g.title || 'эту игру');
   }
   const actionLeft = `<div class="gp-playtime">${escapeHtml(statusMain)}</div>`
     + (statusSub ? `<div class="gp-last-play">${escapeHtml(statusSub)}</div>` : '');
@@ -1678,6 +2112,37 @@ function renderGamePage(wrap, data) {
               <span>Облачное сохранение</span>
             </button>`;
 
+  const inCart = !g.owned && isInCart(g.id);
+
+  // Единый модуль «цена + кнопка» как в Steam
+  let purchaseMod = '';
+  if (!g.owned) {
+    if (price.className === 'free') {
+      purchaseMod = `<div class="gp-purchase-mod">
+        <button type="button" class="gp-purchase-btn free" id="btn-buy-game">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          Получить бесплатно
+        </button>
+      </div>`;
+    } else {
+      const priceInner = price.discount > 0
+        ? `<span class="gp-purchase-discount">-${price.discount}%</span>
+           <span class="gp-purchase-prices">
+             <span class="gp-purchase-old">${escapeHtml(price.original)}</span>
+             <span class="gp-purchase-final">${escapeHtml(price.text)}</span>
+           </span>`
+        : `<span class="gp-purchase-final only">${escapeHtml(price.text)}</span>`;
+      purchaseMod = `<div class="gp-purchase-mod ${inCart ? 'is-in-cart' : ''}">
+        <div class="gp-purchase-price">${priceInner}</div>
+        <button type="button" class="gp-purchase-btn ${inCart ? 'in-cart' : ''}" id="btn-buy-game">
+          ${inCart
+            ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg> В корзине`
+            : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg> В корзину`}
+        </button>
+      </div>`;
+    }
+  }
+
   const actionBtns = g.owned
     ? `<button type="button" class="${dlClass}" id="btn-buy-game"${dlDisabled} title="${dlTitle}">
          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1687,12 +2152,7 @@ function renderGamePage(wrap, data) {
        <button type="button" class="gp-bar-btn icon gp-like-btn ${g.is_liked || g.liked ? 'liked' : ''}" id="gp-like" title="${g.is_liked || g.liked ? 'Убрать лайк' : 'Лайк'}">${iconSvg('heart',16)}</button>
        <button type="button" class="gp-bar-btn icon ${isPinnedGame ? 'is-pinned' : ''}" id="gp-share" title="${isPinnedGame ? 'Открепить' : 'Закрепить'}">${isPinnedGame ? pinSvgPinned : pinSvg}</button>
        ${settingsOrEditBtn}`
-    : `${price.className === 'paid' ? `<span class="gp-price">${escapeHtml(price.text)}</span>` : ''}
-       <button type="button" class="gp-bar-btn primary" id="btn-buy-game">
-         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-         Добавить в библиотеку
-       </button>
-       ${adminEditBar}`;
+    : `${adminEditBar}${purchaseMod}`;
 
   wrap.innerHTML = `
     <div class="gp">
@@ -2350,15 +2810,27 @@ function refreshBuyButton(g) {
   const btn = $('#btn-buy-game');
   const note = $('#buy-note');
   if (!btn) return;
-  const price = formatPrice(g.price);
+  const price = formatPrice(g.price, g.discount_percent);
+  const mod = btn.closest('.gp-purchase-mod');
   if (g.owned) {
     btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Скачать`;
     btn.classList.add('owned');
-    // disabled если нет сборок (ставится при рендере)
+    btn.classList.remove('in-cart');
+    if (mod) mod.classList.remove('is-in-cart');
     if (note) note.textContent = '';
-  } else {
-    btn.textContent = price.className === 'free' ? 'Получить бесплатно' : `Купить за ${price.text}`;
+  } else if (isInCart(g.id)) {
+    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg> В корзине`;
+    btn.classList.add('in-cart');
     btn.classList.remove('owned');
+    if (mod) mod.classList.add('is-in-cart');
+  } else {
+    if (price.className === 'free') {
+      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M5 12h14"/></svg> Получить бесплатно`;
+    } else {
+      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg> В корзину`;
+    }
+    btn.classList.remove('owned', 'in-cart');
+    if (mod) mod.classList.remove('is-in-cart');
     if (note) note.textContent = '';
   }
 }
@@ -2384,21 +2856,42 @@ function initBuyButton(wrap, g) {
       }
       return;
     }
-    btn.disabled = true;
-    btn.textContent = 'Оформляем...';
-    try {
-      const data = await postJSON(`${API_BASE}?action=buy`, { game_id: g.id });
-      if (!data.ok) throw new Error(data.error || 'Не удалось оформить');
-      if (data.balance !== undefined) updateBalance(data.balance);
-      g.owned = true;
-      toast(data.message || 'Добавлено в библиотеку');
-      sideLibAddOptimistic(g);
-      loadGamePage(g.id);
-    } catch (err) {
-      toast(err.message || 'Ошибка покупки');
-    } finally {
-      btn.disabled = false;
-      if (!g.owned) refreshBuyButton(g);
+
+    const price = formatPrice(g.price, g.discount_percent);
+
+    // Бесплатные — сразу в библиотеку
+    if (price.className === 'free') {
+      btn.disabled = true;
+      btn.textContent = 'Оформляем...';
+      try {
+        const data = await postJSON(`${API_BASE}?action=buy`, { game_id: g.id });
+        if (!data.ok) throw new Error(data.error || 'Не удалось оформить');
+        if (data.balance !== undefined) updateBalance(data.balance);
+        g.owned = true;
+        toast(data.message || 'Добавлено в библиотеку');
+        sideLibAddOptimistic(g);
+        loadGamePage(g.id);
+      } catch (err) {
+        toast(err.message || 'Ошибка');
+      } finally {
+        btn.disabled = false;
+        if (!g.owned) refreshBuyButton(g);
+      }
+      return;
+    }
+
+    // Платные — в корзину
+    if (isInCart(g.id)) {
+      showView('cart');
+      return;
+    }
+    const added = addToCart(g);
+    if (added) {
+      refreshBuyButton(g);
+      showAddToCartModal(g);
+    } else {
+      toast('Уже в корзине');
+      showView('cart');
     }
   });
 }
@@ -2562,6 +3055,7 @@ function openAdminGameEditModal(g) {
                 </select>
               </label>
               <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="age-price" type="number" min="0" step="1" /></label>
+              <label class="settings-label"><span>Скидка (%)</span><input class="auth-input" id="age-discount" type="number" min="0" max="100" step="1" placeholder="0" /></label>
               <label class="settings-label"><span>Разработчик</span><input class="auth-input" id="age-developer" maxlength="120" /></label>
               <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="age-short" maxlength="200" /></label>
               <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="age-desc" rows="5"></textarea></label>
@@ -2665,6 +3159,7 @@ function openAdminGameEditModal(g) {
   const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
   setVal('age-title', g.title || '');
   setVal('age-price', g.price ?? 0);
+  setVal('age-discount', g.discount_percent ?? 0);
   setVal('age-developer', g.developer_name || g.developer || '');
   setVal('age-short', g.short_description || '');
   setVal('age-desc', g.description || '');
@@ -2720,6 +3215,7 @@ function openAdminGameEditModal(g) {
       fd.append('title', document.getElementById('age-title')?.value || '');
       fd.append('genre', document.getElementById('age-genre')?.value || '');
       fd.append('price', document.getElementById('age-price')?.value || '0');
+      fd.append('discount_percent', document.getElementById('age-discount')?.value || '0');
       fd.append('developer', document.getElementById('age-developer')?.value || '');
       fd.append('short_description', document.getElementById('age-short')?.value || '');
       fd.append('description', document.getElementById('age-desc')?.value || '');
@@ -2741,6 +3237,7 @@ function openAdminGameEditModal(g) {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Ошибка сохранения');
         toast('Сохранено для всех');
+        try { if (typeof refreshBadge === 'function') refreshBadge(); } catch (e) {}
         modal.classList.add('hidden');
         homeCache = null;
         storeCache = [];
@@ -2769,6 +3266,11 @@ function openAdminGameEditModal(g) {
         modal.classList.add('hidden');
         homeCache = null;
         storeCache = [];
+        try {
+          const gid = +modal.dataset.gameId;
+          if (typeof sideLibRemoveOptimistic === 'function') sideLibRemoveOptimistic(gid);
+          else if (typeof loadSideLibrary === 'function') loadSideLibrary();
+        } catch (e) {}
         if (typeof gotoView === 'function') gotoView('home');
         else if (typeof showView === 'function') showView('home');
       } catch (e) {
@@ -4217,7 +4719,8 @@ function selectOptionIcon(value, label) {
   if (/оцен|rating|star/.test(l)) return SELECT_OPTION_ICONS.rating;
   if (/цен[аеы]|price|₽|\$/.test(l)) return SELECT_OPTION_ICONS.price;
   if (/назван|title|^name$/.test(l) || v === 'title' || v === 'name') return SELECT_OPTION_ICONS.title;
-  if (/друг|friend/.test(l)) return SELECT_OPTION_ICONS.friends;
+  if (/друг|friend|подарок/.test(l)) return SELECT_OPTION_ICONS.friends;
+  if (/моего аккаунт|self|себе/.test(l)) return SELECT_OPTION_ICONS.public;
   if (/скрыт|hidden|private/.test(l)) return SELECT_OPTION_ICONS.hidden;
   if (/всем|public|открыт/.test(l)) return SELECT_OPTION_ICONS.public;
   // жанры и прочее — без дефолтного кружка
@@ -4275,7 +4778,8 @@ function enhanceSelect(sel) {
   wrap.appendChild(sel);
   sel.classList.add('select-native-hidden');
   sel.setAttribute('tabindex', '-1');
-  sel.style.cssText = 'position:absolute!important;opacity:0!important;pointer-events:none!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;';
+  sel.setAttribute('aria-hidden', 'true');
+  sel.style.cssText = 'position:absolute!important;left:-9999px!important;top:0!important;opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important;margin:0!important;padding:0!important;border:0!important;clip:rect(0,0,0,0)!important;overflow:hidden!important;appearance:none!important;';
 
   const sync = () => {
     const opt = sel.options[sel.selectedIndex];
@@ -4373,7 +4877,7 @@ function enhanceSelect(sel) {
 }
 
 function initCatioSelects(root = document) {
-  const nodes = root.querySelectorAll('select.settings-select, select.sort-select, select.hp-select, select#settings-lang, select#sort-select, select#library-sort, select#hp-sort, select#hp-platform, select#settings-profile-vis, select#settings-media-vis');
+  const nodes = root.querySelectorAll('select.settings-select, select.sort-select, select.hp-select, select.cart-modal-for, select#settings-lang, select#sort-select, select#library-sort, select#hp-sort, select#hp-platform, select#settings-profile-vis, select#settings-media-vis');
   nodes.forEach(enhanceSelect);
 }
 
@@ -4679,6 +5183,7 @@ function initAvatarMenu() {
     void menu.offsetWidth;
     menu.classList.add('is-open');
     btn.setAttribute('aria-expanded', 'true');
+    try { if (typeof refreshBadge === 'function') refreshBadge(); } catch (e) {}
   }
   function closeMenu() {
     if (menu.classList.contains('hidden') || menuClosing) return;
@@ -5711,32 +6216,48 @@ const EMOJI_LIST = '😀😁😂🤣😊😍🤩😘😜🤔😴😎🥳😇🫠
 let notifFilter = 'all';
 let badgeTimer = null;
 
+function setMenuBadge(selector, count) {
+  const n = parseInt(count, 10) || 0;
+  $$(selector).forEach(el => {
+    if (n > 0) {
+      el.textContent = n > 99 ? '99+' : String(n);
+      el.classList.remove('hidden');
+      el.style.display = '';
+      el.setAttribute('aria-hidden', 'false');
+    } else {
+      el.textContent = '0';
+      el.classList.add('hidden');
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden', 'true');
+    }
+  });
+}
+
+function setAvatarDots(show) {
+  $$('.side-avatar-dot, .header-avatar-dot, #side-avatar-dot, #header-avatar-dot').forEach(dot => {
+    if (!dot) return;
+    if (show) {
+      dot.classList.add('visible');
+      dot.style.display = 'block';
+    } else {
+      dot.classList.remove('visible');
+      dot.style.display = 'none';
+    }
+  });
+}
+
 async function refreshBadge() {
   try {
     const data = await fetchJSON(`${NOTIF_API}?action=badge`);
-    if (!data.ok) return;
-    const total = data.total || 0;
-    const notifN = data.notifications || 0;
-    const reqN = data.requests || 0;
+    if (!data || !data.ok) return;
+    const notifN = parseInt(data.notifications, 10) || 0;
+    const reqN = parseInt(data.requests, 10) || 0;
+    const msgN = parseInt(data.messages, 10) || 0;
+    const total = parseInt(data.total, 10) || (notifN + reqN + msgN);
 
-    $$('.friends-menu-badge').forEach(el => {
-      const n = reqN || 0;
-      if (n > 0) {
-        el.textContent = n > 99 ? '99+' : String(n);
-        el.classList.remove('hidden');
-      } else {
-        el.classList.add('hidden');
-      }
-    });
-
-    $$('.notif-menu-badge').forEach(el => {
-      if (notifN > 0) {
-        el.textContent = notifN > 99 ? '99+' : String(notifN);
-        el.classList.remove('hidden');
-      } else {
-        el.classList.add('hidden');
-      }
-    });
+    setMenuBadge('.friends-menu-badge', reqN);
+    setMenuBadge('.notif-menu-badge', notifN);
+    setMenuBadge('.messages-menu-badge, .msg-menu-badge', msgN);
 
     const tabBadge = $('#notif-tab-badge');
     if (tabBadge) {
@@ -5744,17 +6265,17 @@ async function refreshBadge() {
       if (n > 0) {
         tabBadge.textContent = String(n);
         tabBadge.classList.remove('hidden');
+        tabBadge.style.display = '';
       } else {
         tabBadge.classList.add('hidden');
+        tabBadge.style.display = 'none';
       }
     }
 
-    const dot = $('#side-avatar-dot');
-    if (dot) {
-      if (total > 0) dot.classList.add('visible');
-      else dot.classList.remove('visible');
-    }
-  } catch (e) {}
+    setAvatarDots(total > 0);
+  } catch (e) {
+    console.warn('refreshBadge', e);
+  }
 }
 
 async function loadNotifications() {
@@ -5778,19 +6299,41 @@ async function loadNotifications() {
       friend_request: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>',
       friend_accepted: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>',
       message: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+      sale: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+      system: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     };
     const defaultIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
-    list.innerHTML = items.map(n => `
-      <div class="notif-item ${n.is_read ? '' : 'unread'}" data-id="${n.id}" data-type="${escapeHtml(n.type)}"
-           data-from="${n.meta && n.meta.from_id ? n.meta.from_id : ''}"
-           data-username="${n.meta && n.meta.from_username ? escapeHtml(n.meta.from_username) : ''}">
+    list.innerHTML = items.map(n => {
+      const meta = n.meta || {};
+      const gid = meta.game_id || '';
+      const isSale = n.type === 'sale' || (gid && (n.type === 'system' || /скидк/i.test(n.title || '')));
+      const isDeleted = n.type === 'game_deleted' || /удален/i.test(n.title || '');
+      const wantBanner = isSale || isDeleted;
+      let banner = meta.banner_url || meta.cover_url || '';
+      // после удаления игры media.php уже не найдёт карточку — пробуем локальную копию
+      const localDeleted = gid ? ('uploads/notif/deleted_' + gid + '.jpg') : '';
+      if (!banner || /media\.php/.test(String(banner))) {
+        if (meta.deleted && localDeleted) banner = localDeleted;
+        else if (gid) banner = localDeleted || ('media.php?type=hero&id=' + gid);
+      }
+      const bannerCls = isDeleted ? 'notif-item-banner is-deleted' : 'notif-item-banner';
+      const bannerHtml = (wantBanner && banner)
+        ? `<div class="${bannerCls}" aria-hidden="true"><img src="${escapeHtml(banner)}" alt="" loading="lazy" onerror="this.onerror=null;const g=${gid||0};if(g){this.src='uploads/notif/deleted_'+g+'.jpg';this.onerror=function(){this.parentElement&&this.parentElement.remove();};}else if(this.parentElement)this.parentElement.remove();" /></div>`
+        : '';
+      return `
+      <div class="notif-item ${n.is_read ? '' : 'unread'} ${wantBanner && banner ? 'has-banner' : ''} ${isDeleted ? 'is-deleted' : ''}" data-id="${n.id}" data-type="${escapeHtml(n.type)}"
+           data-from="${meta.from_id || ''}"
+           data-username="${meta.from_username ? escapeHtml(meta.from_username) : ''}"
+           data-game-id="${gid}">
         <div class="notif-item-icon">${iconMap[n.type] || defaultIcon}</div>
         <div class="notif-item-body">
           <div class="notif-item-title">${escapeHtml(n.title)}</div>
           <div class="notif-item-text">${escapeHtml(n.body)}</div>
           <div class="notif-item-time">${escapeHtml(formatDateTime(n.created_at))}</div>
         </div>
-      </div>`).join('');
+        ${bannerHtml}
+      </div>`;
+    }).join('');
 
     $$('.notif-item', list).forEach(item => {
       item.addEventListener('click', async () => {
@@ -5800,10 +6343,13 @@ async function loadNotifications() {
         const type = item.dataset.type;
         const from = item.dataset.from;
         const uname = item.dataset.username;
+        const gameId = item.dataset.gameId;
         if (type === 'message' && from) {
           openChat(+from, uname);
         } else if ((type === 'friend_request' || type === 'friend_accepted') && uname) {
           openUserProfile(uname, from);
+        } else if ((type === 'sale' || type === 'system') && gameId) {
+          if (typeof gotoGame === 'function') gotoGame(+gameId);
         }
         refreshBadge();
         if (notifFilter === 'unread') loadNotifications();
@@ -5847,7 +6393,12 @@ function initNotificationsUI() {
 
   refreshBadge();
   if (badgeTimer) clearInterval(badgeTimer);
-  badgeTimer = setInterval(refreshBadge, 15000);
+  badgeTimer = setInterval(refreshBadge, 3000);
+  // мгновенно обновлять при возврате во вкладку
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshBadge();
+  });
+  window.addEventListener('focus', () => refreshBadge());
 }
 
 function initChatExtras() {
@@ -7917,6 +8468,463 @@ function setProfileRoleBadge(user) {
   badge.textContent = r.text;
 }
 
+// ---------- Корзина: страница и UI ----------
+async function renderCartPage() {
+  const empty = $('#cart-empty');
+  const content = $('#cart-content');
+  const list = $('#cart-list');
+  const totalEl = $('#cart-total');
+  if (!list) return;
+
+  try { await syncCartPrices(); } catch (e) {}
+  const items = getCart();
+  if (!items.length) {
+    if (empty) empty.classList.remove('hidden');
+    if (content) content.classList.add('hidden');
+    return;
+  }
+  if (empty) empty.classList.add('hidden');
+  if (content) content.classList.remove('hidden');
+
+  let total = 0;
+  // карточки как в модалке «Добавлено в корзину»
+  list.innerHTML = items.map(item => {
+    const pi = formatPrice(item.price, item.discount_percent);
+    const qty = parseInt(item.qty, 10) || 1;
+    total += (pi.final || 0) * qty;
+    const forVal = item.forAccount === 'friend' ? 'friend' : 'self';
+    const copies = [];
+    for (let i = 0; i < qty; i++) {
+      copies.push(`
+      <div class="cart-page-row store-row game-item" data-id="${item.id}" data-copy="${i}">
+        <div class="cart-page-row-inner">
+          <div class="cart-page-cover-wrap">
+            <img class="cart-page-cover" src="${escapeHtml(item.cover || '')}" alt="" onerror="this.style.opacity=0.35" />
+          </div>
+          <div class="cart-page-details">
+            <h3 class="cart-page-title">${escapeHtml(item.title || 'Игра')}</h3>
+            <div class="cart-page-account">
+              <select class="cart-modal-for" data-id="${item.id}" aria-label="Для кого">
+                <option value="self" ${forVal === 'self' ? 'selected' : ''}>Для моего аккаунта</option>
+                <option value="friend" ${forVal === 'friend' ? 'selected' : ''}>В подарок другу</option>
+              </select>
+            </div>
+          </div>
+          <div class="cart-page-side">
+            <div class="cart-page-price">${renderPriceBlock(pi)}</div>
+            <div class="cart-modal-actions cart-page-actions">
+              <button type="button" class="cart-modal-link add" data-id="${item.id}">Добавить</button>
+              <span class="cart-modal-act-sep">|</span>
+              <button type="button" class="cart-modal-link remove" data-id="${item.id}">Удалить</button>
+            </div>
+          </div>
+        </div>
+      </div>`);
+    }
+    return copies.join('');
+  }).join('');
+
+  if (totalEl) totalEl.textContent = total > 0 ? `${Math.round(total)} ₽` : 'Бесплатно';
+
+  list.querySelectorAll('.cart-modal-for').forEach(sel => {
+    sel.addEventListener('change', () => setCartForAccount(sel.dataset.id, sel.value));
+  });
+  list.querySelectorAll('.cart-modal-link.add').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const item = getCart().find(x => String(x.id) === String(id));
+      if (!item) return;
+      addToCart({ id: item.id, title: item.title, price: item.price, discount_percent: item.discount_percent, cover: item.cover, cover_url: item.cover });
+      renderCartPage();
+    });
+  });
+  list.querySelectorAll('.cart-modal-link.remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      removeFromCart(btn.dataset.id, { one: true });
+      renderCartPage();
+    });
+  });
+  list.querySelectorAll('.cart-page-cover, .cart-page-title').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => {
+      const id = el.closest('[data-id]')?.dataset.id;
+      if (id) gotoGame(id);
+    });
+  });
+  try { initCatioSelects(list); } catch (e) {}
+}
+
+function setCheckoutAlert(msg, type) {
+  const el = document.getElementById('checkout-alert');
+  if (!el) return;
+  if (!msg) {
+    el.className = 'checkout-alert hidden';
+    el.textContent = '';
+    return;
+  }
+  el.className = 'checkout-alert' + (type === 'error' ? ' is-error' : type === 'ok' ? ' is-ok' : '');
+  el.textContent = msg;
+}
+
+async function openCheckoutModal() {
+  try { await syncCartPrices(); } catch (e) {}
+  const items = getCart();
+  if (!items.length) {
+    toast('Корзина пуста');
+    return;
+  }
+  const modal = $('#checkout-modal');
+  const list = $('#checkout-modal-list');
+  const totalEl = $('#checkout-modal-total');
+  const cb = $('#checkout-agree-cb');
+  const confirmBtn = $('#checkout-confirm');
+  if (!modal || !list) {
+    doCheckoutPurchase();
+    return;
+  }
+  let total = 0;
+  list.innerHTML = items.map(item => {
+    const pi = formatPrice(item.price, item.discount_percent);
+    const qty = parseInt(item.qty, 10) || 1;
+    total += (pi.final || 0) * qty;
+    let sub = 'Для моего аккаунта';
+    if (item.forAccount === 'friend') {
+      sub = item.giftToName
+        ? ('В подарок ' + item.giftToName)
+        : 'В подарок другу';
+    }
+    return `
+      <div class="cart-modal-game">
+        <img class="cart-modal-cover" src="${escapeHtml(item.cover || '')}" alt="" onerror="this.style.opacity=0.35" />
+        <div class="cart-modal-meta">
+          <div class="cart-modal-title">${escapeHtml(item.title || 'Игра')}${qty > 1 ? ` ×${qty}` : ''}</div>
+          <div class="cart-modal-sub">${escapeHtml(sub)}</div>
+        </div>
+        <div class="cart-modal-side-price">${renderPriceBlock(pi)}</div>
+      </div>`;
+  }).join('');
+  if (totalEl) totalEl.textContent = total > 0 ? `${Math.round(total)} ₽` : 'Бесплатно';
+  if (cb) cb.checked = false;
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Приобрести';
+  }
+  setCheckoutAlert('');
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeCheckoutModal() {
+  const modal = $('#checkout-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+  setCheckoutAlert('');
+}
+
+async function openGiftFriendModal() {
+  const modal = document.getElementById('gift-friend-modal');
+  const list = document.getElementById('gift-friend-list');
+  if (!modal || !list) {
+    openCheckoutModal();
+    return;
+  }
+  list.innerHTML = '<div class="loading">Загрузка...</div>';
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  try {
+    const giftIds = [...new Set(getCart().filter(i => i.forAccount === 'friend').map(i => +i.id).filter(Boolean))];
+    window.__giftGameIds = giftIds;
+    const data = await fetchJSON(`${FRIENDS_API}?action=list`);
+    const friends = data.friends || [];
+    let owns = {};
+    if (giftIds.length) {
+      try {
+        const ownData = await fetchJSON(`${FRIENDS_API}?action=owns_games&game_ids=${giftIds.join(',')}`);
+        owns = ownData.owns || {};
+      } catch (e) {}
+    }
+    window.__giftOwnsMap = owns;
+    window.__giftFriendsCache = friends;
+    renderGiftFriendList(friends, '');
+  } catch (e) {
+    list.innerHTML = '<div class="empty-hint">Не удалось загрузить друзей</div>';
+  }
+}
+
+function renderGiftFriendList(friends, q) {
+  const list = document.getElementById('gift-friend-list');
+  if (!list) return;
+  const query = (q || '').trim().toLowerCase();
+  const filtered = query
+    ? friends.filter(u => String(u.username || '').toLowerCase().includes(query))
+    : friends;
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty-hint">Нет друзей для подарка</div>';
+    return;
+  }
+  const ownsMap = window.__giftOwnsMap || {};
+  const giftIds = window.__giftGameIds || [];
+  list.innerHTML = filtered.map(u => {
+    const owned = ownsMap[String(u.id)] || ownsMap[u.id] || [];
+    const ownedSet = new Set((owned || []).map(Number));
+    const ownsAny = giftIds.some(gid => ownedSet.has(+gid));
+    const ownsAll = giftIds.length > 0 && giftIds.every(gid => ownedSet.has(+gid));
+    const disabled = ownsAny; // нельзя выбрать, если уже есть хотя бы одна из игр
+    let statusCls = 'gift-friend-status';
+    let status;
+    if (ownsAll || ownsAny) {
+      status = ownsAll ? 'Уже владеет' : 'Уже есть в библиотеке';
+      statusCls += ' is-owns';
+    } else if (u.is_online) {
+      status = 'В сети';
+      statusCls += ' is-online';
+    } else {
+      status = 'Не в сети';
+      statusCls += ' is-offline';
+    }
+    return `
+    <button type="button" class="gift-friend-row${disabled ? ' is-disabled' : ''}" data-id="${u.id}" data-name="${escapeHtml(u.username || '')}" ${disabled ? 'disabled' : ''}>
+      <span class="gift-friend-av" style="${typeof friendAvatarStyle === 'function' ? friendAvatarStyle(u) : ''}">${typeof friendAvatarText === 'function' ? friendAvatarText(u) : escapeHtml((u.username||'?')[0])}</span>
+      <span class="gift-friend-meta">
+        <span class="gift-friend-name">${escapeHtml(u.username || '')}</span>
+        <span class="${statusCls}">${escapeHtml(status)}</span>
+      </span>
+    </button>`;
+  }).join('');
+  list.querySelectorAll('.gift-friend-row:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setAllGiftFriends(btn.dataset.id, btn.dataset.name);
+      closeGiftFriendModal();
+      openCheckoutModal();
+    });
+  });
+}
+
+function closeGiftFriendModal() {
+  const modal = document.getElementById('gift-friend-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+async function doCheckoutPurchase() {
+  const items = getCart();
+  if (!items.length) {
+    toast('Корзина пуста');
+    return;
+  }
+  const cb = document.getElementById('checkout-agree-cb');
+  if (cb && !cb.checked) {
+    setCheckoutAlert('Нужно согласиться с условиями покупки и возврата', 'error');
+    return;
+  }
+  const missingGift = items.some(it => it.forAccount === 'friend' && !it.giftTo);
+  if (missingGift) {
+    setCheckoutAlert('Выберите друга для подарка', 'error');
+    closeCheckoutModal();
+    openGiftFriendModal();
+    return;
+  }
+
+  const btn = $('#checkout-confirm') || $('#cart-checkout');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Оформляем...';
+  }
+  setCheckoutAlert('');
+
+  let ok = 0, fail = 0;
+  const boughtIds = [];
+  const errors = [];
+  const remaining = [];
+
+  for (const item of items) {
+    const qty = parseInt(item.qty, 10) || 1;
+    let itemOk = true;
+    for (let i = 0; i < qty; i++) {
+      try {
+        const payload = { game_id: item.id };
+        if (item.forAccount === 'friend' && item.giftTo) payload.gift_to = +item.giftTo;
+        const data = await postJSON(`${API_BASE}?action=buy`, payload);
+        if (data.ok) {
+          ok++;
+          boughtIds.push(+item.id);
+          if (data.balance !== undefined) updateBalance(data.balance);
+          if (!data.gift) {
+            sideLibAddOptimistic({ id: item.id, title: item.title, cover_url: item.cover, owned: true, purchased: true });
+            try {
+              if (Array.isArray(storeCache)) {
+                const g = storeCache.find(x => +x.id === +item.id);
+                if (g) { g.owned = true; g.purchased = true; }
+              }
+            } catch (e) {}
+            if (window.__lastGameForCart && +window.__lastGameForCart.id === +item.id) {
+              window.__lastGameForCart.owned = true;
+              window.__lastGameForCart.purchased = true;
+            }
+          }
+        } else {
+          itemOk = false;
+          fail++;
+          errors.push(data.error || 'Не удалось оформить');
+          break;
+        }
+      } catch (e) {
+        itemOk = false;
+        fail++;
+        errors.push((e && e.message) || 'Ошибка сети');
+        break;
+      }
+    }
+    if (!itemOk) remaining.push(item);
+  }
+
+  if (remaining.length) {
+    saveCart(remaining);
+  } else {
+    clearCart();
+  }
+  renderCartPage();
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Приобрести';
+  }
+
+  if (fail && ok === 0) {
+    // ничего не купилось — модалку оставляем, показываем алерт
+    const msg = errors.find(x => /средств|баланс/i.test(x)) || errors[0] || 'Не удалось оформить покупку';
+    setCheckoutAlert(msg, 'error');
+    // снять disabled у кнопки если галочка стоит
+    if (cb && cb.checked) btn && (btn.disabled = false);
+    return;
+  }
+
+  closeCheckoutModal();
+  if (ok && !fail) toast(ok === 1 ? 'Готово' : `Оформлено: ${ok}`);
+  else if (ok && fail) toast(`Оформлено: ${ok}, с ошибкой: ${fail}`);
+  else if (fail) toast('Не удалось оформить покупку');
+
+  if (ok && typeof loadSideLibrary === 'function') loadSideLibrary();
+  try {
+    if ($('#view-store')?.classList.contains('active') && typeof renderStoreList === 'function') renderStoreList();
+  } catch (e) {}
+  try {
+    const last = window.__lastGameForCart;
+    if (last && boughtIds.includes(+last.id) && typeof loadGamePage === 'function') {
+      loadGamePage(last.id);
+    }
+  } catch (e) {}
+}
+
+function checkoutCart() {
+  const items = getCart();
+  if (!items.length) {
+    toast('Корзина пуста');
+    return;
+  }
+  const needGift = items.some(it => it.forAccount === 'friend' && !it.giftTo);
+  if (needGift) openGiftFriendModal();
+  else openCheckoutModal();
+}
+
+function openRefundPolicyModal() {
+  const m = document.getElementById('refund-policy-modal');
+  if (!m) return;
+  m.classList.remove('hidden');
+  m.style.zIndex = '10050';
+  m.style.pointerEvents = 'auto';
+  m.style.opacity = '1';
+  m.style.visibility = 'visible';
+}
+function closeRefundPolicyModal() {
+  const m = document.getElementById('refund-policy-modal');
+  if (!m) return;
+  m.classList.add('hidden');
+  m.style.zIndex = '';
+  m.style.pointerEvents = '';
+  m.style.opacity = '';
+  m.style.visibility = '';
+}
+
+function initCartUI() {
+  // смена аккаунта → другая корзина
+  window.addEventListener('auth:changed', () => {
+    try { updateCartBadge(); renderCartPage(); } catch (e) {}
+  });
+  // если AUTH_STATE выставляется без события — перечитать при focus
+  window.addEventListener('focus', () => {
+    try { updateCartBadge(); } catch (e) {}
+  });
+  window.addEventListener('cart:changed', () => {
+    try {
+      if ($('#view-store')?.classList.contains('active') && typeof renderStoreList === 'function') {
+        renderStoreList();
+      }
+    } catch (e) {}
+  });
+
+  updateCartBadge();
+  const cartBtn = $('#btn-cart');
+  if (cartBtn) {
+    cartBtn.addEventListener('click', () => showView('cart'));
+  }
+  const goStore = $('#cart-go-store');
+  if (goStore) goStore.addEventListener('click', () => showView('store'));
+  const clearBtn = $('#cart-clear');
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    if (confirm('Очистить корзину?')) {
+      clearCart();
+      renderCartPage();
+    }
+  });
+  const checkout = $('#cart-checkout');
+  if (checkout) checkout.addEventListener('click', checkoutCart);
+
+  // подтверждение покупки
+  document.getElementById('checkout-modal-close')?.addEventListener('click', closeCheckoutModal);
+  document.getElementById('checkout-cancel')?.addEventListener('click', closeCheckoutModal);
+  document.getElementById('checkout-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'checkout-modal') closeCheckoutModal();
+  });
+  document.getElementById('checkout-agree-cb')?.addEventListener('change', () => {
+    setCheckoutAlert('');
+  });
+  document.getElementById('checkout-confirm')?.addEventListener('click', () => {
+    if (!document.getElementById('checkout-agree-cb')?.checked) {
+      setCheckoutAlert('Нужно согласиться с условиями покупки и возврата', 'error');
+      return;
+    }
+    doCheckoutPurchase();
+  });
+
+  // условия покупки — делегирование, чтобы не ломалось
+  document.addEventListener('click', (e) => {
+    const openBtn = e.target.closest('#refund-policy-open');
+    if (openBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      openRefundPolicyModal();
+      return;
+    }
+    if (e.target.closest('[data-close-refund]')) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeRefundPolicyModal();
+    }
+  });
+
+  document.getElementById('gift-friend-close')?.addEventListener('click', closeGiftFriendModal);
+  document.getElementById('gift-friend-cancel')?.addEventListener('click', closeGiftFriendModal);
+  document.getElementById('gift-friend-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'gift-friend-modal') closeGiftFriendModal();
+  });
+  document.getElementById('gift-friend-search')?.addEventListener('input', (e) => {
+    renderGiftFriendList(window.__giftFriendsCache || [], e.target.value);
+  });
+}
+
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -7927,6 +8935,7 @@ document.addEventListener('DOMContentLoaded', () => {
   safe('initWebNav', initWebNav);
   safe('initClientNav', initClientNav);
   safe('initAvatarMenu', initAvatarMenu);
+  safe('initCartUI', initCartUI);
   safe('initStoreControls', initStoreControls);
   safe('initLibraryControls', initLibraryControls);
   safe('initCatioSelects', initCatioSelects);

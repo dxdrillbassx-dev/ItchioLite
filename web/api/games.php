@@ -276,14 +276,26 @@ function ownsGame(PDO $pdo, int $userId, int $gameId): bool {
     return (bool)$stmt->fetchColumn();
 }
 
+function hasPurchased(PDO $pdo, int $userId, int $gameId): bool {
+    try {
+        $stmt = $pdo->prepare("SELECT 1 FROM purchases WHERE user_id = ? AND game_id = ? LIMIT 1");
+        $stmt->execute([$userId, $gameId]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function attachUserState(PDO $pdo, array $row, ?array $user): array {
     $row['owned'] = false;
+    $row['purchased'] = false;
     $row['user_rating'] = null;
     $row['is_pinned'] = 0;
     $row['is_liked'] = 0;
     $row['liked'] = false;
     if ($user) {
         $row['owned'] = ownsGame($pdo, (int)$user['id'], (int)$row['id']);
+        $row['purchased'] = $row['owned'] || hasPurchased($pdo, (int)$user['id'], (int)$row['id']);
         $stmt = $pdo->prepare("SELECT value FROM ratings WHERE user_id = ? AND game_id = ?");
         $stmt->execute([(int)$user['id'], (int)$row['id']]);
         $v = $stmt->fetchColumn();
@@ -403,7 +415,7 @@ try {
         }
         $stmt = $pdo->prepare("
             SELECT g.id, g.title, g.slug, g.short_description, g.description,
-                   g.price, g.category, g.genre, g.tags, g.rating,
+                   g.price, g.discount_percent, g.category, g.genre, g.tags, g.rating,
                    g.cover_url, g.banner_url, g.cover_emoji, g.cover_color,
                    g.developer_name, g.download_count, g.created_at, g.is_adult,
                    (SELECT COUNT(*) FROM comments c WHERE c.game_id = g.id) AS comments_count,
@@ -417,13 +429,23 @@ try {
         $games = $stmt->fetchAll();
 
         $ownedIds = [];
+        $purchasedIds = [];
         if ($user) {
             $st = $pdo->prepare("SELECT game_id FROM library WHERE user_id = ?");
             $st->execute([(int)$user['id']]);
             $ownedIds = array_map('intval', array_column($st->fetchAll(), 'game_id'));
+            try {
+                $st = $pdo->prepare("SELECT DISTINCT game_id FROM purchases WHERE user_id = ?");
+                $st->execute([(int)$user['id']]);
+                $purchasedIds = array_map('intval', array_column($st->fetchAll(), 'game_id'));
+            } catch (Throwable $e) {
+                $purchasedIds = [];
+            }
         }
         foreach ($games as &$g) {
-            $g['owned'] = in_array((int)$g['id'], $ownedIds, true);
+            $gid = (int)$g['id'];
+            $g['owned'] = in_array($gid, $ownedIds, true);
+            $g['purchased'] = $g['owned'] || in_array($gid, $purchasedIds, true);
             $g['cover_src'] = !empty($g['cover_url']) ? $g['cover_url'] : ('media.php?type=cover&id=' . $g['id']);
         }
         unset($g);
@@ -910,7 +932,7 @@ try {
         $user = requireAuth();
         $stmt = $pdo->prepare("
             SELECT g.id, g.title, g.slug, g.short_description, g.description,
-                   g.price, g.category, g.genre, g.tags, g.rating,
+                   g.price, g.discount_percent, g.category, g.genre, g.tags, g.rating,
                    g.cover_url, g.banner_url, g.icon_url, g.cover_emoji, g.cover_color,
                    g.developer_name, g.download_count,
                    l.added_at, l.last_played, l.playtime_minutes, l.is_pinned, l.pinned_order, COALESCE(l.ach_unlocked,0) AS ach_unlocked, COALESCE(NULLIF(l.ach_total,0), g.ach_count, 0) AS ach_total, g.steam_appid, g.ach_count AS game_ach_count,
@@ -947,8 +969,9 @@ try {
         $body = jsonBody();
         checkCsrf($body);
         $gameId = (int)($body['game_id'] ?? 0);
+        $giftTo = (int)($body['gift_to'] ?? 0);
 
-        $stmt = $pdo->prepare("SELECT id, title, price FROM games WHERE id = ? AND is_published = 1 AND COALESCE(status, 'published') NOT IN ('pending','rejected','draft')");
+        $stmt = $pdo->prepare("SELECT id, title, price, discount_percent, cover_url, banner_url FROM games WHERE id = ? AND is_published = 1 AND COALESCE(status, 'published') NOT IN ('pending','rejected','draft')");
         $stmt->execute([$gameId]);
         $game = $stmt->fetch();
         if (!$game) {
@@ -956,44 +979,135 @@ try {
             echo json_encode(['ok' => false, 'error' => 'Игра не найдена'], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        if (ownsGame($pdo, (int)$user['id'], $gameId)) {
-            echo json_encode(['ok' => true, 'already' => true, 'balance' => (int)$user['balance']], JSON_UNESCAPED_UNICODE);
+        $uid = (int)$user['id'];
+        $isGift = $giftTo > 0 && $giftTo !== $uid;
+        $targetUid = $isGift ? $giftTo : $uid;
+
+        if ($isGift) {
+            // только принятые друзья
+            $stF = $pdo->prepare("SELECT 1 FROM friendships WHERE status = 'accepted' AND ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)) LIMIT 1");
+            $stF->execute([$uid, $giftTo, $giftTo, $uid]);
+            if (!$stF->fetch()) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Подарить можно только другу'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $stU = $pdo->prepare("SELECT id, username FROM users WHERE id = ?");
+            $stU->execute([$giftTo]);
+            $friendRow = $stU->fetch();
+            if (!$friendRow) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Пользователь не найден'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+        }
+
+        // для себя: уже в библиотеке
+        if (!$isGift && ownsGame($pdo, $uid, $gameId)) {
+            echo json_encode(['ok' => true, 'already' => true, 'owned' => true, 'purchased' => true, 'balance' => (int)$user['balance']], JSON_UNESCAPED_UNICODE);
             exit;
         }
 
-        $price = (float)$game['price'];
+        // Уже покупал (себе) раньше — вернуть в библиотеку без списания
+        if (!$isGift && hasPurchased($pdo, $uid, $gameId)) {
+            try {
+                $pdo->prepare("INSERT INTO library (user_id, game_id) VALUES (?, ?)")->execute([$uid, $gameId]);
+            } catch (Throwable $e) {}
+            echo json_encode([
+                'ok' => true,
+                'already' => false,
+                'restored' => true,
+                'owned' => true,
+                'purchased' => true,
+                'balance' => (int)$user['balance'],
+                'message' => '«' . $game['title'] . '» снова добавлена в библиотеку',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // подарок: если у друга уже покупка — просто в библиотеку, без списания у дарителя
+        if ($isGift && hasPurchased($pdo, $targetUid, $gameId)) {
+            try {
+                $pdo->prepare("INSERT INTO library (user_id, game_id) VALUES (?, ?)")->execute([$targetUid, $gameId]);
+            } catch (Throwable $e) {}
+            echo json_encode([
+                'ok' => true,
+                'already' => false,
+                'restored' => true,
+                'gift' => true,
+                'owned' => false,
+                'purchased' => false,
+                'balance' => (int)$user['balance'],
+                'message' => 'У друга уже есть эта игра — вернули в библиотеку',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($isGift && ownsGame($pdo, $targetUid, $gameId)) {
+            echo json_encode(['ok' => true, 'already' => true, 'gift' => true, 'balance' => (int)$user['balance'], 'message' => 'У друга уже есть эта игра'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $basePrice = (float)$game['price'];
+        $discount = min(100, max(0, (int)($game['discount_percent'] ?? 0)));
+        $price = $discount > 0 ? round($basePrice * (100 - $discount) / 100, 2) : $basePrice;
         $pdo->beginTransaction();
         try {
             if ($price > 0) {
-                // Списываем только если хватает средств (атомарно)
                 $stmt = $pdo->prepare("UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?");
-                $stmt->execute([(int)round($price), (int)$user['id'], (int)round($price)]);
+                $stmt->execute([(int)round($price), $uid, (int)round($price)]);
                 if ($stmt->rowCount() === 0) {
                     $pdo->rollBack();
-                    echo json_encode(['ok' => false, 'error' => 'Не хватает средств. Пополни баланс в профиле.'], JSON_UNESCAPED_UNICODE);
+                    echo json_encode(['ok' => false, 'error' => 'Не хватает средств. Пополни баланс в профиле.', 'code' => 'no_funds'], JSON_UNESCAPED_UNICODE);
                     exit;
                 }
             }
             $pdo->prepare("INSERT INTO library (user_id, game_id) VALUES (?, ?)")
-                ->execute([(int)$user['id'], $gameId]);
+                ->execute([$targetUid, $gameId]);
             $pdo->prepare("INSERT INTO purchases (user_id, game_id, price_paid) VALUES (?, ?, ?)")
-                ->execute([(int)$user['id'], $gameId, $price]);
+                ->execute([$targetUid, $gameId, $price]);
             $pdo->commit();
         } catch (Throwable $e) {
             $pdo->rollBack();
             throw $e;
         }
 
+        if ($isGift) {
+            try {
+                $banner = $game['banner_url'] ?: ($game['cover_url'] ?: ('media.php?type=hero&id=' . $gameId));
+                $meta = json_encode([
+                    'game_id' => $gameId,
+                    'from_user_id' => $uid,
+                    'from_username' => $user['username'] ?? '',
+                    'title' => $game['title'],
+                    'banner_url' => $banner,
+                    'cover_url' => $banner,
+                ], JSON_UNESCAPED_UNICODE);
+                $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?, 'gift', ?, ?, ?)")
+                    ->execute([
+                        $targetUid,
+                        'Подарок: «' . $game['title'] . '»',
+                        ($user['username'] ?? 'Друг') . ' подарил(а) вам «' . $game['title'] . '». Игра уже в библиотеке.',
+                        $meta,
+                    ]);
+            } catch (Throwable $e) {}
+        }
+
         $stmt = $pdo->prepare("SELECT balance FROM users WHERE id = ?");
-        $stmt->execute([(int)$user['id']]);
+        $stmt->execute([$uid]);
 
         echo json_encode([
             'ok' => true,
             'already' => false,
+            'owned' => !$isGift,
+            'purchased' => !$isGift,
+            'gift' => $isGift,
+            'gift_to' => $isGift ? $giftTo : null,
             'balance' => (int)$stmt->fetchColumn(),
-            'message' => $price > 0
-                ? '«' . $game['title'] . '» куплена и добавлена в библиотеку'
-                : '«' . $game['title'] . '» добавлена в библиотеку',
+            'message' => $isGift
+                ? ('Подарок «' . $game['title'] . '» отправлен')
+                : ($price > 0
+                    ? '«' . $game['title'] . '» куплена и добавлена в библиотеку'
+                    : '«' . $game['title'] . '» добавлена в библиотеку'),
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -1011,9 +1125,11 @@ try {
         }
         $stmt = $pdo->prepare("DELETE FROM library WHERE user_id = ? AND game_id = ?");
         $stmt->execute([(int)$user['id'], $gameId]);
+        $stillPurchased = hasPurchased($pdo, (int)$user['id'], $gameId);
         echo json_encode([
             'ok' => true,
             'removed' => $stmt->rowCount() > 0,
+            'purchased' => $stillPurchased,
             'message' => 'Игра убрана из библиотеки',
         ], JSON_UNESCAPED_UNICODE);
         exit;

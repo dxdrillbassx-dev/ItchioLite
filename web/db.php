@@ -348,6 +348,8 @@ function getDB() {
         } catch (Throwable $e) { /* already TEXT */ }
         ensureColumn($pdo, 'games', 'review_note', "VARCHAR(512) DEFAULT NULL");
         ensureColumn($pdo, 'games', 'is_adult', "TINYINT(1) NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'games', 'discount_percent', "TINYINT UNSIGNED NOT NULL DEFAULT 0");
+        ensureColumn($pdo, 'friendships', 'requested_by', "INT UNSIGNED NULL DEFAULT NULL");
 
         $pdo->exec("CREATE TABLE IF NOT EXISTS game_media (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

@@ -219,9 +219,10 @@ try {
                 break;
             }
             $id = (int)($_POST['id'] ?? 0);
-            $st = $pdo->prepare("SELECT id FROM games WHERE id = ?");
+            $st = $pdo->prepare("SELECT id, title, price, discount_percent FROM games WHERE id = ?");
             $st->execute([$id]);
-            if (!$st->fetch()) {
+            $oldGame = $st->fetch();
+            if (!$oldGame) {
                 http_response_code(404);
                 echo json_encode(['ok'=>false,'error'=>'Не найдено'], JSON_UNESCAPED_UNICODE);
                 break;
@@ -238,21 +239,61 @@ try {
                 'controllers' => trim($_POST['controllers'] ?? ''),
                 'languages' => trim($_POST['languages'] ?? ''),
                 'price' => (float)($_POST['price'] ?? 0),
+                'discount_percent' => max(0, min(100, (int)($_POST['discount_percent'] ?? 0))),
                 'review_note' => trim($_POST['review_note'] ?? ''),
                 'is_adult' => !empty($_POST['is_adult']) ? 1 : 0,
                 'developer' => trim($_POST['developer'] ?? ''),
             ];
             $pdo->prepare("
                 UPDATE games SET title=?, short_description=?, description=?, genre=?, video_url=?,
-                  sys_req_min=?, sys_req_rec=?, controllers=?, languages=?, price=?, review_note=?, is_adult=?,
+                  sys_req_min=?, sys_req_rec=?, controllers=?, languages=?, price=?, discount_percent=?, review_note=?, is_adult=?,
                   developer=?, developer_name=?
                 WHERE id=?
             ")->execute([
                 $fields['title'], $fields['short_description'], $fields['description'], $fields['genre'],
                 $fields['video_url'], $fields['sys_req_min'], $fields['sys_req_rec'], $fields['controllers'],
-                $fields['languages'], $fields['price'], $fields['review_note'], $fields['is_adult'],
+                $fields['languages'], $fields['price'], $fields['discount_percent'], $fields['review_note'], $fields['is_adult'],
                 $fields['developer'], $fields['developer'], $id,
             ]);
+
+            // Уведомление всем пользователям, если появилась/выросла скидка
+            $oldDisc = (int)($oldGame['discount_percent'] ?? 0);
+            $newDisc = (int)$fields['discount_percent'];
+            if ($newDisc > 0 && $newDisc > $oldDisc && (float)$fields['price'] > 0) {
+                $gameTitle = $fields['title'] ?: ($oldGame['title'] ?? 'Игра');
+                $base = (float)$fields['price'];
+                $final = (int)round($base * (100 - $newDisc) / 100);
+                $title = 'Скидка −' . $newDisc . '%';
+                $body = '«' . $gameTitle . '» теперь ' . $final . ' ₽ вместо ' . (int)round($base) . ' ₽';
+                $banner = '';
+                $cover = '';
+                try {
+                    $stB = $pdo->prepare("SELECT banner_url, cover_url FROM games WHERE id = ?");
+                    $stB->execute([$id]);
+                    $img = $stB->fetch();
+                    if ($img) {
+                        $banner = trim((string)($img['banner_url'] ?? ''));
+                        $cover = trim((string)($img['cover_url'] ?? ''));
+                    }
+                } catch (Throwable $e) {}
+                // hero → cover → media hero endpoint (не SVG-котик если есть файл/URL)
+                if ($banner === '') $banner = $cover;
+                if ($banner === '') $banner = 'media.php?type=hero&id=' . $id;
+                $meta = json_encode([
+                    'game_id' => $id,
+                    'discount' => $newDisc,
+                    'banner_url' => $banner,
+                    'cover_url' => $cover ?: $banner,
+                    'title' => $gameTitle,
+                ], JSON_UNESCAPED_UNICODE);
+                try {
+                    $users = $pdo->query("SELECT id FROM users")->fetchAll(PDO::FETCH_COLUMN);
+                    $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?, 'sale', ?, ?, ?)");
+                    foreach ($users as $uid) {
+                        $ins->execute([(int)$uid, $title, $body, $meta]);
+                    }
+                } catch (Throwable $e) { /* ignore notify errors */ }
+            }
 
             $base = dirname(__DIR__) . '/uploads/games';
             if (!empty($_FILES['cover']['tmp_name'])) {
@@ -396,6 +437,59 @@ try {
             try { $pdo->prepare("DELETE FROM comments WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
             try { $pdo->prepare("DELETE FROM ratings WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
             try { $pdo->prepare("DELETE FROM library WHERE game_id = ?")->execute([$id]); } catch (Throwable $e) {}
+            // баннер для уведомления — локальная копия, пока есть уведомления
+            $bannerKeep = trim((string)($game['banner_url'] ?? ''));
+            if ($bannerKeep === '') $bannerKeep = trim((string)($game['cover_url'] ?? ''));
+            $coversDir = dirname(__DIR__) . '/covers';
+            $notifDir = dirname(__DIR__) . '/uploads/notif';
+            if (!is_dir($notifDir)) @mkdir($notifDir, 0775, true);
+            $savedBanner = '';
+            foreach (['hero', 'cover'] as $kind) {
+                foreach (['jpg','jpeg','png','webp'] as $ext) {
+                    $src = $coversDir . "/{$kind}_{$id}.{$ext}";
+                    if (is_file($src)) {
+                        $destName = "deleted_{$id}.{$ext}";
+                        $dest = $notifDir . '/' . $destName;
+                        if (@copy($src, $dest)) $savedBanner = 'uploads/notif/' . $destName;
+                        break 2;
+                    }
+                }
+            }
+            // скачать удалённый URL, если локального файла нет
+            if ($savedBanner === '' && $bannerKeep !== '' && preg_match('~^https?://~i', $bannerKeep)) {
+                $bin = null;
+                if (function_exists('curl_init')) {
+                    $ch = curl_init($bannerKeep);
+                    curl_setopt_array($ch, [
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_FOLLOWLOCATION => true,
+                        CURLOPT_TIMEOUT => 20,
+                        CURLOPT_SSL_VERIFYPEER => false,
+                        CURLOPT_USERAGENT => 'Mozilla/5.0 CATio/1.0',
+                    ]);
+                    $bin = curl_exec($ch);
+                    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+                    if (!$bin || $code >= 400 || strlen($bin) < 500) $bin = null;
+                }
+                if ($bin) {
+                    $destName = 'deleted_' . $id . '.jpg';
+                    $dest = $notifDir . '/' . $destName;
+                    if (@file_put_contents($dest, $bin) !== false) $savedBanner = 'uploads/notif/' . $destName;
+                }
+            }
+            if ($savedBanner === '' && $bannerKeep !== '' && !preg_match('~media\.php~i', $bannerKeep)) {
+                // относительный путь в uploads — скопировать
+                $rel = ltrim(str_replace(['\\','..'], ['/',''], $bannerKeep), '/');
+                $srcPath = dirname(__DIR__) . '/' . $rel;
+                if (is_file($srcPath)) {
+                    $ext = pathinfo($srcPath, PATHINFO_EXTENSION) ?: 'jpg';
+                    $destName = 'deleted_' . $id . '.' . $ext;
+                    if (@copy($srcPath, $notifDir . '/' . $destName)) $savedBanner = 'uploads/notif/' . $destName;
+                }
+            }
+            if ($savedBanner === '') $savedBanner = $bannerKeep ?: ('uploads/notif/deleted_' . $id . '.jpg');
+
             $pdo->prepare("DELETE FROM games WHERE id = ?")->execute([$id]);
 
             $root = dirname(__DIR__) . '/';
@@ -404,13 +498,35 @@ try {
                 $path = $root . ltrim(str_replace(['\\','..'], ['/',''], $u), '/');
                 if (is_file($path)) @unlink($path);
             }
+            // обновить баннеры во ВСЕХ старых уведомлениях по этой игре (скидки и т.д.)
+            try {
+                $stN = $pdo->query("SELECT id, meta_json FROM notifications WHERE meta_json IS NOT NULL AND meta_json != ''");
+                $upd = $pdo->prepare("UPDATE notifications SET meta_json = ? WHERE id = ?");
+                while ($row = $stN->fetch()) {
+                    $meta = json_decode($row['meta_json'], true);
+                    if (!is_array($meta)) continue;
+                    if ((int)($meta['game_id'] ?? 0) !== $id) continue;
+                    $meta['banner_url'] = $savedBanner ?? '';
+                    $meta['cover_url'] = $savedBanner ?? '';
+                    $meta['title'] = $meta['title'] ?? $gameTitle;
+                    $meta['deleted'] = true;
+                    $upd->execute([json_encode($meta, JSON_UNESCAPED_UNICODE), (int)$row['id']]);
+                }
+            } catch (Throwable $e) {}
+
             // всем пользователям — об удалении
             try {
                 $users = $pdo->query("SELECT id FROM users")->fetchAll();
                 $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)");
                 $titleN = 'Игра удалена';
                 $bodyN = 'Карточка «' . $gameTitle . '» была удалена из каталога';
-                $meta = json_encode(['game_id' => $id], JSON_UNESCAPED_UNICODE);
+                $meta = json_encode([
+                    'game_id' => $id,
+                    'banner_url' => $savedBanner ?? '',
+                    'cover_url' => $savedBanner ?? '',
+                    'title' => $gameTitle,
+                    'deleted' => true,
+                ], JSON_UNESCAPED_UNICODE);
                 foreach ($users as $u) {
                     $ins->execute([(int)$u['id'], 'game_deleted', $titleN, $bodyN, $meta]);
                 }
