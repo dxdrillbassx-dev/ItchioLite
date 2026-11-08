@@ -3101,15 +3101,17 @@ body.web .main {
 .filter-opts {
   max-height: 230px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
 }
 .filter-opt {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 5px 2px;
-  font-size: 0.82rem;
+  gap: 7px;
+  padding: 3px 2px;
+  font-size: 0.8rem;
+  line-height: 1.25;
   color: var(--text);
   cursor: pointer;
 }
@@ -6584,7 +6586,7 @@ button.avatar,
   cursor: pointer; text-align: left;
 }
 .gp-side-body { padding: 0 14px 14px; }
-.gp-side-card.collapsed .gp-side-body { display: none; }
+/* collapse via max-height/opacity animation, not display:none */
 .gp-stat-row {
   display: flex; justify-content: space-between; gap: 10px;
   padding: 7px 0; font-size: 0.85rem;
@@ -10371,16 +10373,28 @@ body:not(.client) .gp {
 #view-store .filter-opts {
   max-height: 220px !important;
   overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch !important;
 }
 #view-store .filter-opt {
-  min-height: 28px !important;
-  font-size: 0.84rem !important;
+  min-height: 22px !important;
+  font-size: 0.8rem !important;
   color: var(--text) !important;
-  padding: 6px 0 !important;
-  border-bottom: 1px solid rgba(255,255,255,0.04) !important;
+  padding: 3px 0 !important;
+  line-height: 1.25 !important;
+  border-bottom: none !important;
+  gap: 7px !important;
 }
 #view-store .filter-opt:last-child {
   border-bottom: none !important;
+}
+#view-store .filter-block:not(.filter-block-sort):not(.filter-block-era) .filter-block-body {
+  padding: 8px 12px 10px !important;
+}
+#view-store .filter-search {
+  margin-bottom: 6px !important;
+  padding: 6px 10px !important;
+  font-size: 0.78rem !important;
 }
 
 #view-store .filter-price-pills {
@@ -11034,10 +11048,10 @@ select.auth-input {
 .game-collapsible-body,
 .side-card-body {
   overflow: hidden !important;
-  max-height: 640px;
+  max-height: 2000px;
   opacity: 1;
   transition:
-    max-height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 0.32s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.2s ease,
     padding 0.22s ease,
     margin 0.22s ease,
@@ -11805,3 +11819,97 @@ select.select-native-hidden,
 @media (max-width: 560px) {
   .pub-media-grid, .pub-content-flags { grid-template-columns: 1fr; }
 }
+
+
+/* Submit rules / form footer buttons (same style as Отмена) */
+#submit-rules-next.hp-btn-edit,
+#submit-game-send.hp-btn-edit {
+  min-width: 120px;
+}
+.hp-btn-edit:disabled,
+#submit-rules-next:disabled,
+#submit-game-send:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
+/* Admin edit modal — как публикация */
+#admin-game-edit-modal .pub-modal-box { max-width: 720px !important; }
+#admin-game-edit-modal .pub-modal-body { max-height: min(70vh, 640px); }
+#admin-game-edit-modal .admin-edit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+#admin-game-edit-modal .admin-edit-foot-right {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+
+/* Catio select: no icon when empty */
+.catio-select__value:not(:has(.catio-select__ico)) .catio-select__txt,
+.catio-select__option:not(:has(.catio-select__ico)) .catio-select__txt {
+  margin-left: 0;
+}
+.catio-select__ico:empty { display: none; }
+.catio-select__menu {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Pin crossed when pinned */
+.hp-game-pin.pinned svg,
+.gp-bar-btn.is-pinned svg {
+  opacity: 0.95;
+}
+.gp-bar-btn.is-pinned {
+  color: var(--accent);
+}
+
+/* Controller logos from assets/controllers */
+.gp-brand-logo--img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+}
+.gp-brand-logo-fallback {
+  display: none;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+}
+.gp-brand-logo-fallback .gp-brand-logo {
+  width: 28px;
+  height: 28px;
+}
+
+/* Admin edit sysreq grid */
+#admin-game-edit-modal .sysreq-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+#admin-game-edit-modal .sysreq-edit-grid .auth-input {
+  width: 100%;
+}
+
+#game-langs .gp-side-body { padding-bottom: 16px !important; }
+#game-langs:not(.collapsed) .gp-side-body,
+#game-sysreq:not(.collapsed) .gp-side-body {
+  max-height: none !important;
+  overflow: visible !important;
+}
+.gp-side-head .chev {
+  display: inline-block;
+  transition: transform 0.22s ease;
+}
+.gp-side-card.collapsed .gp-side-head .chev { transform: rotate(-90deg); }
+.lang-display tr:last-child td { padding-bottom: 10px; border-bottom: none; }

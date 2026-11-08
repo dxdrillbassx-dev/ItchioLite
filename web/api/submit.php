@@ -240,15 +240,18 @@ try {
                 'price' => (float)($_POST['price'] ?? 0),
                 'review_note' => trim($_POST['review_note'] ?? ''),
                 'is_adult' => !empty($_POST['is_adult']) ? 1 : 0,
+                'developer' => trim($_POST['developer'] ?? ''),
             ];
             $pdo->prepare("
                 UPDATE games SET title=?, short_description=?, description=?, genre=?, video_url=?,
-                  sys_req_min=?, sys_req_rec=?, controllers=?, languages=?, price=?, review_note=?, is_adult=?
+                  sys_req_min=?, sys_req_rec=?, controllers=?, languages=?, price=?, review_note=?, is_adult=?,
+                  developer=?, developer_name=?
                 WHERE id=?
             ")->execute([
                 $fields['title'], $fields['short_description'], $fields['description'], $fields['genre'],
                 $fields['video_url'], $fields['sys_req_min'], $fields['sys_req_rec'], $fields['controllers'],
-                $fields['languages'], $fields['price'], $fields['review_note'], $fields['is_adult'], $id,
+                $fields['languages'], $fields['price'], $fields['review_note'], $fields['is_adult'],
+                $fields['developer'], $fields['developer'], $id,
             ]);
 
             $base = dirname(__DIR__) . '/uploads/games';
@@ -322,6 +325,17 @@ try {
                 $pdo->prepare("UPDATE games SET status='published', is_published=1, category=IF(category='' OR category IS NULL,'game',category) WHERE id=?")->execute([$id]);
                 $note = 'Игра «' . $g['title'] . '» опубликована';
                 $type = 'game_published';
+                // всем пользователям — о добавлении игры
+                try {
+                    $users = $pdo->query("SELECT id FROM users")->fetchAll();
+                    $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)");
+                    $titleN = 'Новая игра в каталоге';
+                    $bodyN = 'Добавлена игра «' . $g['title'] . '»';
+                    $meta = json_encode(['game_id' => $id], JSON_UNESCAPED_UNICODE);
+                    foreach ($users as $u) {
+                        $ins->execute([(int)$u['id'], 'game_added', $titleN, $bodyN, $meta]);
+                    }
+                } catch (Throwable $e) {}
             } else {
                 $pdo->prepare("UPDATE games SET status='rejected', is_published=0, review_note=? WHERE id=?")
                     ->execute([trim($body['note'] ?? ''), $id]);
@@ -336,9 +350,6 @@ try {
             }
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
             break;
-
-        default:
-            http_response_code(400);
 
         case 'delete_game':
             if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false]); break; }
@@ -355,7 +366,7 @@ try {
                 echo json_encode(['ok'=>false,'error'=>'Нет id'], JSON_UNESCAPED_UNICODE);
                 break;
             }
-            $st = $pdo->prepare("SELECT cover_url, banner_url FROM games WHERE id = ?");
+            $st = $pdo->prepare("SELECT title, cover_url, banner_url FROM games WHERE id = ?");
             $st->execute([$id]);
             $game = $st->fetch();
             if (!$game) {
@@ -363,6 +374,7 @@ try {
                 echo json_encode(['ok'=>false,'error'=>'Игра не найдена'], JSON_UNESCAPED_UNICODE);
                 break;
             }
+            $gameTitle = (string)($game['title'] ?? 'Игра');
             // media files (best-effort)
             $urls = [];
             try {
@@ -392,10 +404,23 @@ try {
                 $path = $root . ltrim(str_replace(['\\','..'], ['/',''], $u), '/');
                 if (is_file($path)) @unlink($path);
             }
+            // всем пользователям — об удалении
+            try {
+                $users = $pdo->query("SELECT id FROM users")->fetchAll();
+                $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)");
+                $titleN = 'Игра удалена';
+                $bodyN = 'Карточка «' . $gameTitle . '» была удалена из каталога';
+                $meta = json_encode(['game_id' => $id], JSON_UNESCAPED_UNICODE);
+                foreach ($users as $u) {
+                    $ins->execute([(int)$u['id'], 'game_deleted', $titleN, $bodyN, $meta]);
+                }
+            } catch (Throwable $e) {}
+
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
             break;
 
-
+        default:
+            http_response_code(400);
             echo json_encode(['ok'=>false,'error'=>'Unknown action'], JSON_UNESCAPED_UNICODE);
     }
 } catch (Throwable $e) {

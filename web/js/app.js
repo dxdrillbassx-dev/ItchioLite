@@ -1358,18 +1358,21 @@ function initStoreControls() {
     clearBtn.addEventListener('click', clearStoreFilters);
   }
 
-  // Сворачивание блоков фильтров
+  // Сворачивание блоков фильтров (один раз на head)
   $$('.filter-block-head').forEach(head => {
-    head.addEventListener('click', () => {
+    if (head.dataset.boundFilterToggle === '1') return;
+    head.dataset.boundFilterToggle = '1';
+    head.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       const block = head.closest('.filter-block');
       if (!block) return;
       const body = block.querySelector('.filter-block-body');
       const willCollapse = !block.classList.contains('collapsed');
       if (body) {
         if (willCollapse) {
-          // зафиксировать текущую высоту → 0
           body.style.maxHeight = body.scrollHeight + 'px';
-          body.offsetHeight; // reflow
+          body.offsetHeight;
           block.classList.add('collapsed');
           body.style.maxHeight = '0px';
           body.style.paddingTop = '0px';
@@ -1381,8 +1384,8 @@ function initStoreControls() {
           body.style.paddingBottom = '';
           body.style.opacity = '1';
           body.style.maxHeight = body.scrollHeight + 'px';
-          const onEnd = (e) => {
-            if (e.propertyName !== 'max-height') return;
+          const onEnd = (ev) => {
+            if (ev.propertyName !== 'max-height') return;
             body.style.maxHeight = '';
             body.removeEventListener('transitionend', onEnd);
           };
@@ -1392,6 +1395,18 @@ function initStoreControls() {
         block.classList.toggle('collapsed');
       }
     });
+  });
+
+  // Скролл списка жанров/разработчиков не должен закрывать блок
+  $$('#genre-opts, #dev-opts, .filter-opts').forEach(box => {
+    if (!box || box.dataset.boundFilterScroll === '1') return;
+    box.dataset.boundFilterScroll = '1';
+    box.addEventListener('wheel', (e) => {
+      e.stopPropagation();
+    }, { passive: true });
+    box.addEventListener('touchmove', (e) => {
+      e.stopPropagation();
+    }, { passive: true });
   });
 }
 
@@ -1647,6 +1662,8 @@ function renderGamePage(wrap, data) {
   const dlTitle = hasBuilds ? 'Скачать' : 'Нет файлов для скачивания';
 
   const pinSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`;
+  const pinSvgPinned = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/><path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+  const isPinnedGame = !!(+g.is_pinned);
 
   const settingsOrEditBtn = isWebBrowser
     ? adminEditBar
@@ -1668,7 +1685,7 @@ function renderGamePage(wrap, data) {
        </button>
        <span class="gp-bar-sep" aria-hidden="true"></span>
        <button type="button" class="gp-bar-btn icon gp-like-btn ${g.is_liked || g.liked ? 'liked' : ''}" id="gp-like" title="${g.is_liked || g.liked ? 'Убрать лайк' : 'Лайк'}">${iconSvg('heart',16)}</button>
-       <button type="button" class="gp-bar-btn icon" id="gp-share" title="Закрепить">${pinSvg}</button>
+       <button type="button" class="gp-bar-btn icon ${isPinnedGame ? 'is-pinned' : ''}" id="gp-share" title="${isPinnedGame ? 'Открепить' : 'Закрепить'}">${isPinnedGame ? pinSvgPinned : pinSvg}</button>
        ${settingsOrEditBtn}`
     : `${price.className === 'paid' ? `<span class="gp-price">${escapeHtml(price.text)}</span>` : ''}
        <button type="button" class="gp-bar-btn primary" id="btn-buy-game">
@@ -1881,20 +1898,87 @@ function renderGamePage(wrap, data) {
   // side card collapse
   // achievements временно отключены (нагрузка)
   $$('.gp-side-head', wrap).forEach(btn => {
+    if (btn.dataset.boundSideAnim === '1') return;
+    btn.dataset.boundSideAnim = '1';
     btn.addEventListener('click', () => {
-      btn.parentElement.classList.toggle('collapsed');
+      const card = btn.closest('.gp-side-card') || btn.parentElement;
+      if (!card) return;
+      const body = card.querySelector('.gp-side-body');
+      const willCollapse = !card.classList.contains('collapsed');
+      if (body) {
+        if (willCollapse) {
+          body.style.maxHeight = body.scrollHeight + 'px';
+          body.offsetHeight;
+          card.classList.add('collapsed');
+          body.style.maxHeight = '0px';
+          body.style.opacity = '0';
+        } else {
+          card.classList.remove('collapsed');
+          body.style.opacity = '1';
+          body.style.maxHeight = body.scrollHeight + 'px';
+          const onEnd = (ev) => {
+            if (ev.propertyName !== 'max-height') return;
+            // длинные списки языков — не режем
+            body.style.maxHeight = '';
+            body.removeEventListener('transitionend', onEnd);
+          };
+          body.addEventListener('transitionend', onEnd);
+        }
+      } else {
+        card.classList.toggle('collapsed');
+      }
     });
   });
 
   const shareBtn = $('#gp-share', wrap);
   if (shareBtn) {
+    const pinSvgOpen = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`;
+    const pinSvgDone = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/><path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+    const applyPinUi = (pinned) => {
+      shareBtn.classList.toggle('is-pinned', !!pinned);
+      shareBtn.title = pinned ? 'Открепить' : 'Закрепить';
+      shareBtn.innerHTML = pinned ? pinSvgDone : pinSvgOpen;
+      shareBtn.dataset.pinned = pinned ? '1' : '0';
+    };
+    applyPinUi(!!(+g.is_pinned));
     shareBtn.addEventListener('click', async () => {
-      const url = location.href.split('#')[0];
+      if (!window.AUTH_STATE || !window.AUTH_STATE.authorized) {
+        toast('Войди в аккаунт, чтобы закрепить игру');
+        return;
+      }
+      if (!g.owned) {
+        toast('Сначала добавь игру в библиотеку');
+        return;
+      }
+      const currentlyPinned = shareBtn.dataset.pinned === '1' || !!(+g.is_pinned);
+      const nextPinned = !currentlyPinned;
+      // мгновенно меняем кнопку
+      applyPinUi(nextPinned);
+      shareBtn.disabled = true;
       try {
-        if (navigator.clipboard) await navigator.clipboard.writeText(url);
-        toast('Ссылка скопирована');
+        const res = await postJSON(`${USER_API}?action=pin`, {
+          game_id: +g.id,
+          pinned: nextPinned ? 1 : 0,
+        });
+        if (!res.ok) throw new Error(res.error || 'Ошибка');
+        g.is_pinned = nextPinned ? 1 : 0;
+        if (Array.isArray(profileLibraryCache)) {
+          const item = profileLibraryCache.find(x => +x.id === +g.id);
+          if (item) {
+            item.is_pinned = g.is_pinned;
+            item.pinned_order = nextPinned ? Date.now() : 0;
+          }
+        }
+        if (Array.isArray(sideLibCache)) {
+          const item = sideLibCache.find(x => +x.id === +g.id);
+          if (item) item.is_pinned = g.is_pinned;
+        }
+        toast(nextPinned ? 'Игра закреплена' : 'Игра откреплена');
       } catch (e) {
-        prompt('Ссылка на игру', url);
+        applyPinUi(currentlyPinned); // откат
+        toast(e.message || 'Не удалось изменить закрепление');
+      } finally {
+        shareBtn.disabled = false;
       }
     });
   }
@@ -1962,26 +2046,47 @@ function renderGamePage(wrap, data) {
   });
 }
 
+function brandLogoHtml(kind, title, svgFallback) {
+  // PNG из web/assets/controllers/{xbox,playstation,switch,keyboard}.png
+  // Если файла нет — onerror покажет SVG-фолбэк
+  const src = `assets/controllers/${kind}.png`;
+  return `<span class="gp-ctrl-ico" title="${title}">
+    <img class="gp-brand-logo gp-brand-logo--img" src="${src}" alt="${title}" width="28" height="28"
+      onerror="this.onerror=null;this.style.display='none';const f=this.nextElementSibling;if(f)f.style.display='inline-flex';" />
+    <span class="gp-brand-logo-fallback" style="display:none">${svgFallback}</span>
+  </span>`;
+}
+
 function renderControllerSupport(raw) {
   const s = String(raw || '').toLowerCase();
-  const hasX = /xbox|xinput|controller|gamepad|full/.test(s) || s.includes('xbox');
+  const hasX = /xbox|xinput/.test(s);
   const hasP = /playstation|dualshock|dualsense|ps4|ps5|\bps\b/.test(s);
-  const hasAny = hasX || hasP || (s && s !== 'none' && s !== '0');
+  const hasSw = /switch|nintendo/.test(s);
+  const hasKb = /keyboard|клавиатур|mouse|мышь/.test(s);
+  const hasAny = hasX || hasP || hasSw || hasKb || (s && s !== 'none' && s !== '0');
   if (!hasAny && !s) {
     return `<div class="gp-ctrl-none">Нет данных о поддержке контроллера</div>`;
   }
-  const full = /full|полная|complete/.test(s) || (hasX && hasP) || hasAny;
-  // Чистые SVG-логотипы Xbox / PlayStation (без лишнего $ перед тегом)
-  const icoXbox = `<svg class="gp-brand-logo" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.102 21.033C6.211 22.881 8.977 24 12 24c3.026 0 5.792-1.119 7.898-2.967 1.877-1.912-4.356-9.104-7.899-9.104-3.54 0-9.776 7.193-7.897 9.104zm9.102-19.16c-.282-.408-.549-.645-.736-.766a1.036 1.036 0 0 0-.213-.105c.016.015.15.117.285.297.116.155.247.38.373.67L12 3.73l-.971-1.762c.126-.29.257-.515.373-.67.135-.18.269-.282.285-.297a1.036 1.036 0 0 0-.213.105c-.187.121-.454.358-.736.767C9.713 3.306 8.5 5.327 8.5 8.253c0 1.54.393 3.18 1.223 4.528.825 1.34 1.95 2.293 2.277 2.293s1.452-.953 2.277-2.293c.83-1.348 1.223-2.989 1.223-4.528 0-2.926-1.213-4.947-2.238-6.379z"/></svg>`;
-  const icoPS = `<svg class="gp-brand-logo" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.5v9.4l2.9 1.05V6.2c0-.7.32-1.15.8-1.15.53 0 .82.45.82 1.15v6.4c2.5 1.2 4.43 0 4.43-3.28 0-3.37-1.93-4.64-4.43-3.43V2.3C19.4 1.44 24 3.75 24 9.08c0 5.6-4.16 8.53-10 7.25V22.5L3.5 18.95V1.5L9.5 3.5v4zM3.5 14.2l4.4 1.55v2.15L3.5 16.4v-2.2zm13.2-1.85c1.35.55 2.05 1.45 2.05 2.7 0 1.7-1.15 2.75-3.15 2.05v-3.55c.4-.4.7-.8 1.1-1.2z"/></svg>`;
+  const full = /full|полная|complete/.test(s) || (hasX && hasP);
+  const icoXboxSvg = `<svg class="gp-brand-logo" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.102 21.033C6.211 22.881 8.977 24 12 24c3.026 0 5.792-1.119 7.898-2.967 1.877-1.912-4.356-9.104-7.899-9.104-3.54 0-9.776 7.193-7.897 9.104zm9.102-19.16c-.282-.408-.549-.645-.736-.766a1.036 1.036 0 0 0-.213-.105c.016.015.15.117.285.297.116.155.247.38.373.67L12 3.73l-.971-1.762c.126-.29.257-.515.373-.67.135-.18.269-.282.285-.297a1.036 1.036 0 0 0-.213.105c-.187.121-.454.358-.736.767C9.713 3.306 8.5 5.327 8.5 8.253c0 1.54.393 3.18 1.223 4.528.825 1.34 1.95 2.293 2.277 2.293s1.452-.953 2.277-2.293c.83-1.348 1.223-2.989 1.223-4.528 0-2.926-1.213-4.947-2.238-6.379z"/></svg>`;
+  const icoPSSvg = `<svg class="gp-brand-logo" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.5v9.4l2.9 1.05V6.2c0-.7.32-1.15.8-1.15.53 0 .82.45.82 1.15v6.4c2.5 1.2 4.43 0 4.43-3.28 0-3.37-1.93-4.64-4.43-3.43V2.3C19.4 1.44 24 3.75 24 9.08c0 5.6-4.16 8.53-10 7.25V22.5L3.5 18.95V1.5L9.5 3.5v4zM3.5 14.2l4.4 1.55v2.15L3.5 16.4v-2.2zm13.2-1.85c1.35.55 2.05 1.45 2.05 2.7 0 1.7-1.15 2.75-3.15 2.05v-3.55c.4-.4.7-.8 1.1-1.2z"/></svg>`;
+  const icons = [];
+  if (hasX || (!hasP && !hasSw && !hasKb && hasAny)) icons.push(brandLogoHtml('xbox', 'Xbox', icoXboxSvg));
+  if (hasP || (!hasX && !hasSw && !hasKb && hasAny)) icons.push(brandLogoHtml('playstation', 'PlayStation', icoPSSvg));
+  if (hasSw) icons.push(brandLogoHtml('switch', 'Switch', icoXboxSvg));
+  if (hasKb) icons.push(brandLogoHtml('keyboard', 'Клавиатура', icoXboxSvg));
+  if (!icons.length) {
+    icons.push(brandLogoHtml('xbox', 'Xbox', icoXboxSvg));
+    icons.push(brandLogoHtml('playstation', 'PlayStation', icoPSSvg));
+  }
   return `
     <div class="gp-ctrl-icons">
-      <span class="gp-ctrl-ico" title="Xbox">${icoXbox}</span>
-      <span class="gp-ctrl-ico" title="PlayStation">${icoPS}</span>
+      ${icons.join('')}
     </div>
     <div class="gp-ctrl-badge ${full ? 'full' : 'partial'}">${full ? 'ПОЛНАЯ ПОДДЕРЖКА' : 'ЧАСТИЧНАЯ ПОДДЕРЖКА'}</div>
-    <p class="gp-ctrl-note">${full ? 'Отлично работает с контроллерами Xbox и PlayStation.' : (escapeHtml(raw) || 'Поддержка контроллера заявлена разработчиком.')}</p>`;
+    <p class="gp-ctrl-note">${full ? 'Отлично работает с контроллерами Xbox и PlayStation.' : (escapeHtml(raw) || 'Поддержка контроллера заявлена.')}</p>`;
 }
+
 
 function renderCommentsThreaded(comments, viewer, gameId) {
   const box = $('#comments-list');
@@ -2430,29 +2535,101 @@ function openAdminGameEditModal(g) {
     modal.className = 'submit-modal hidden';
     modal.innerHTML = `
       <div class="submit-modal-backdrop" id="age-backdrop"></div>
-      <div class="submit-modal-box submit-modal-wide" role="dialog" aria-modal="true">
-        <div class="submit-modal-head">
-          <h2>Редактирование карточки</h2>
-          <button type="button" class="friends-modal-close" id="admin-edit-close" aria-label="Закрыть">×</button>
-        </div>
-        <div class="submit-modal-body">
-          <div class="submit-grid">
-            <label class="settings-label"><span>Название</span><input class="auth-input" id="age-title" maxlength="120" /></label>
-            <label class="settings-label"><span>Жанр</span><input class="auth-input" id="age-genre" /></label>
-            <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="age-price" type="number" min="0" step="1" /></label>
-            <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="age-short" maxlength="200" /></label>
-            <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="age-desc" rows="6"></textarea></label>
-            <label class="settings-label full"><span>Видео URL</span><input class="auth-input" id="age-video" placeholder="https://youtube.com/..." /></label>
-            <label class="settings-label"><span>Новая обложка</span><input type="file" id="age-cover" accept="image/*" /></label>
-            <label class="settings-label"><span>Новый баннер</span><input type="file" id="age-banner" accept="image/*" /></label>
+      <div class="submit-modal-box submit-modal-wide pub-modal-box" role="dialog" aria-modal="true">
+        <div class="submit-modal-head pub-modal-head">
+          <div>
+            <h2>Редактирование карточки</h2>
+            <p class="pub-modal-sub">Те же поля, что при публикации — изменения сразу видны всем</p>
           </div>
+          <button type="button" class="pub-modal-close" id="admin-edit-close" aria-label="Закрыть">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="submit-modal-body pub-modal-body">
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+              <h3>Основное</h3>
+            </div>
+            <div class="submit-grid">
+              <label class="settings-label"><span>Название</span><input class="auth-input" id="age-title" maxlength="120" /></label>
+              <label class="settings-label"><span>Жанр</span>
+                <select class="settings-select" id="age-genre">
+                  <option value="">Выберите</option>
+                  <option>Экшен</option><option>Приключения</option><option>RPG</option>
+                  <option>Стратегия</option><option>Симулятор</option><option>Инди</option>
+                  <option>Хоррор</option><option>Гонки</option><option>Спорт</option><option>Другое</option>
+                </select>
+              </label>
+              <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="age-price" type="number" min="0" step="1" /></label>
+              <label class="settings-label"><span>Разработчик</span><input class="auth-input" id="age-developer" maxlength="120" /></label>
+              <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="age-short" maxlength="200" /></label>
+              <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="age-desc" rows="5"></textarea></label>
+            </div>
+          </section>
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
+              <h3>Медиа</h3>
+            </div>
+            <div class="submit-grid">
+              <label class="settings-label"><span>Новая обложка</span><input type="file" id="age-cover" accept="image/*" /></label>
+              <label class="settings-label"><span>Новый баннер</span><input type="file" id="age-banner" accept="image/*" /></label>
+              <label class="settings-label full"><span>Видео URL</span><input class="auth-input" id="age-video" placeholder="https://youtube.com/..." /></label>
+            </div>
+          </section>
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+              <h3>Системные требования</h3>
+            </div>
+            <div class="submit-grid">
+              <div class="settings-label full" id="age-sys-min-fields">
+                <span>Минимальные</span>
+                <div class="sysreq-edit-grid" data-sys="min"></div>
+              </div>
+              <div class="settings-label full" id="age-sys-rec-fields">
+                <span>Рекомендованные</span>
+                <div class="sysreq-edit-grid" data-sys="rec"></div>
+              </div>
+            </div>
+          </section>
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+              <h3>Языки и управление</h3>
+            </div>
+            <div class="settings-label full">
+              <span>Поддержка контроллеров</span>
+              <div class="submit-checks">
+                <label class="settings-check"><input type="checkbox" value="xbox" class="age-ctrl" /> Xbox</label>
+                <label class="settings-check"><input type="checkbox" value="playstation" class="age-ctrl" /> PlayStation</label>
+                <label class="settings-check"><input type="checkbox" value="switch" class="age-ctrl" /> Switch</label>
+                <label class="settings-check"><input type="checkbox" value="keyboard" class="age-ctrl" /> Клавиатура</label>
+              </div>
+            </div>
+            <div class="settings-label full">
+              <span>Языки</span>
+              <div class="lang-table" id="age-lang-table">
+                <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
+              </div>
+            </div>
+          </section>
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <h3>Контент</h3>
+            </div>
+            <label class="settings-check"><input type="checkbox" id="age-adult" /> 18+ / для взрослых</label>
+            <label class="settings-label full" style="margin-top:10px"><span>Заметка модератора</span><input class="auth-input" id="age-note" /></label>
+          </section>
           <div id="age-error" class="gp-comment-error hidden" style="margin-top:12px"></div>
         </div>
         <div class="submit-modal-foot admin-edit-foot">
           <button type="button" class="btn-danger" id="age-delete">Удалить карточку</button>
           <div class="admin-edit-foot-right">
             <button type="button" class="hp-btn-edit" id="age-cancel">Отмена</button>
-            <button type="button" class="auth-submit" id="age-save">Сохранить</button>
+            <button type="button" class="hp-btn-edit" id="age-save">Сохранить</button>
           </div>
         </div>
       </div>`;
@@ -2467,13 +2644,58 @@ function openAdminGameEditModal(g) {
     });
   }
 
+  const ensureSysFields = (containerId) => {
+    const box = document.querySelector(containerId);
+    if (!box) return;
+    // если уже есть input[data-k] — не трогаем
+    if (box.querySelector('input[data-k]')) return;
+    const keys = [
+      ['os', 'ОС'], ['processor', 'Процессор'], ['memory', 'Оперативная память'],
+      ['gpu', 'Видеокарта'], ['directx', 'DirectX'], ['storage', 'Место на диске'],
+      ['sound', 'Звуковая карта'], ['other', 'Дополнительно'],
+    ];
+    const grid = box.querySelector('.sysreq-edit-grid') || box;
+    grid.innerHTML = keys.map(([k, label]) =>
+      `<input class="auth-input" data-k="${k}" placeholder="${label}" />`
+    ).join('');
+  };
+  ensureSysFields('#age-sys-min-fields');
+  ensureSysFields('#age-sys-rec-fields');
+
   const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
   setVal('age-title', g.title || '');
-  setVal('age-genre', g.genre || '');
   setVal('age-price', g.price ?? 0);
+  setVal('age-developer', g.developer_name || g.developer || '');
   setVal('age-short', g.short_description || '');
   setVal('age-desc', g.description || '');
   setVal('age-video', g.video_url || '');
+  setVal('age-note', g.review_note || '');
+
+  const genreSel = document.getElementById('age-genre');
+  if (genreSel) {
+    const gv = (g.genre || '').trim();
+    let found = false;
+    [...genreSel.options].forEach(o => {
+      if (o.value === gv || o.textContent === gv) { o.selected = true; found = true; }
+    });
+    if (gv && !found) {
+      const opt = document.createElement('option');
+      opt.value = gv; opt.textContent = gv; opt.selected = true;
+      genreSel.appendChild(opt);
+    }
+    try { initCatioSelects(modal); } catch (e) {}
+  }
+
+  try { fillSysReq('#age-sys-min-fields', g.sys_req_min); } catch (e) {}
+  try { fillSysReq('#age-sys-rec-fields', g.sys_req_rec); } catch (e) {}
+  try { renderLangTable('#age-lang-table', g.languages); } catch (e) {}
+
+  const ctrls = String(g.controllers || '').toLowerCase().split(/[,;|\s]+/).filter(Boolean);
+  modal.querySelectorAll('.age-ctrl').forEach(cb => {
+    cb.checked = ctrls.includes(cb.value) || ctrls.some(c => c.includes(cb.value));
+  });
+  const adult = document.getElementById('age-adult');
+  if (adult) adult.checked = !!(+g.is_adult);
 
   const coverInput = document.getElementById('age-cover');
   const bannerInput = document.getElementById('age-banner');
@@ -2498,14 +2720,16 @@ function openAdminGameEditModal(g) {
       fd.append('title', document.getElementById('age-title')?.value || '');
       fd.append('genre', document.getElementById('age-genre')?.value || '');
       fd.append('price', document.getElementById('age-price')?.value || '0');
+      fd.append('developer', document.getElementById('age-developer')?.value || '');
       fd.append('short_description', document.getElementById('age-short')?.value || '');
       fd.append('description', document.getElementById('age-desc')?.value || '');
       fd.append('video_url', document.getElementById('age-video')?.value || '');
-      fd.append('sys_req_min', g.sys_req_min || '');
-      fd.append('sys_req_rec', g.sys_req_rec || '');
-      fd.append('controllers', g.controllers || '');
-      fd.append('languages', typeof g.languages === 'string' ? g.languages : JSON.stringify(g.languages || []));
-      fd.append('review_note', '');
+      fd.append('sys_req_min', JSON.stringify(collectSysReq('#age-sys-min-fields')));
+      fd.append('sys_req_rec', JSON.stringify(collectSysReq('#age-sys-rec-fields')));
+      fd.append('controllers', [...modal.querySelectorAll('.age-ctrl:checked')].map(c => c.value).join(','));
+      fd.append('languages', JSON.stringify(collectLanguages('#age-lang-table')));
+      fd.append('review_note', document.getElementById('age-note')?.value || '');
+      fd.append('is_adult', document.getElementById('age-adult')?.checked ? '1' : '');
       fd.append('delete_media', '');
       const cover = document.getElementById('age-cover')?.files?.[0];
       if (cover) fd.append('cover', cover);
@@ -2546,7 +2770,7 @@ function openAdminGameEditModal(g) {
         homeCache = null;
         storeCache = [];
         if (typeof gotoView === 'function') gotoView('home');
-        else showView('home');
+        else if (typeof showView === 'function') showView('home');
       } catch (e) {
         toast(e.message || 'Ошибка удаления');
       } finally {
@@ -2555,6 +2779,7 @@ function openAdminGameEditModal(g) {
     };
   }
 }
+
 
 function bindAdminGameEdit(g, viewer) {
   const btn = $('#gp-admin-edit');
@@ -3979,21 +4204,24 @@ const SELECT_OPTION_ICONS = {
 };
 
 function selectOptionIcon(value, label) {
-  const v = String(value || '').toLowerCase();
-  const l = String(label || '').toLowerCase();
+  const v = String(value || '').toLowerCase().trim();
+  const l = String(label || '').toLowerCase().trim();
+  // пустой плейсхолдер («Выберите») — без иконки
+  if (!v) return '';
   if (SELECT_OPTION_ICONS[v]) return SELECT_OPTION_ICONS[v];
   if (/windows|win/.test(v+l)) return SELECT_OPTION_ICONS.windows;
   if (/linux/.test(v+l)) return SELECT_OPTION_ICONS.linux;
   if (/mac|osx|darwin/.test(v+l)) return SELECT_OPTION_ICONS.mac;
   if (/популяр|popular/.test(l)) return SELECT_OPTION_ICONS.popular;
-  if (/нов|new/.test(l)) return SELECT_OPTION_ICONS.new;
+  if (/^нов|\bnew\b/.test(l)) return SELECT_OPTION_ICONS.new;
   if (/оцен|rating|star/.test(l)) return SELECT_OPTION_ICONS.rating;
-  if (/цен|price/.test(l)) return SELECT_OPTION_ICONS.price;
-  if (/назван|title|name|а-я/.test(l)) return SELECT_OPTION_ICONS.title;
+  if (/цен[аеы]|price|₽|\$/.test(l)) return SELECT_OPTION_ICONS.price;
+  if (/назван|title|^name$/.test(l) || v === 'title' || v === 'name') return SELECT_OPTION_ICONS.title;
   if (/друг|friend/.test(l)) return SELECT_OPTION_ICONS.friends;
   if (/скрыт|hidden|private/.test(l)) return SELECT_OPTION_ICONS.hidden;
   if (/всем|public|открыт/.test(l)) return SELECT_OPTION_ICONS.public;
-  return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>';
+  // жанры и прочее — без дефолтного кружка
+  return '';
 }
 
 const CATIO_SELECT_CHEVRON = '<svg class="catio-select__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
@@ -4052,7 +4280,8 @@ function enhanceSelect(sel) {
   const sync = () => {
     const opt = sel.options[sel.selectedIndex];
     if (opt) {
-      val.innerHTML = `<span class="catio-select__ico">${selectOptionIcon(opt.value, opt.textContent)}</span><span class="catio-select__txt">${opt.textContent}</span>`;
+      const ico = selectOptionIcon(opt.value, opt.textContent);
+      val.innerHTML = (ico ? `<span class=\"catio-select__ico\">${ico}</span>` : '') + `<span class=\"catio-select__txt\">${opt.textContent}</span>`;
     } else {
       val.textContent = '';
     }
@@ -4069,7 +4298,8 @@ function enhanceSelect(sel) {
       o.type = 'button';
       o.className = 'catio-select__option' + (opt.selected ? ' is-active' : '');
       o.dataset.value = opt.value;
-      o.innerHTML = `<span class="catio-select__ico">${selectOptionIcon(opt.value, opt.textContent)}</span><span class="catio-select__txt">${opt.textContent}</span>`;
+      const ico = selectOptionIcon(opt.value, opt.textContent);
+      o.innerHTML = (ico ? `<span class="catio-select__ico">${ico}</span>` : '') + `<span class="catio-select__txt">${opt.textContent}</span>`;
       o.setAttribute('role', 'option');
       o.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -4159,8 +4389,28 @@ document.addEventListener('keydown', (e) => {
     });
   }
 });
-window.addEventListener('scroll', () => {
-  document.querySelectorAll('.catio-select.is-open').forEach(w => w.classList.remove('is-open'));
+window.addEventListener('scroll', (e) => {
+  // скролл внутри самого меню не должен закрывать список
+  const t = e.target;
+  if (t && t.closest && t.closest('.catio-select__menu')) return;
+  document.querySelectorAll('.catio-select.is-open').forEach(w => {
+    const menu = w.querySelector('.catio-select__menu');
+    if (menu && (t === menu || menu.contains(t))) return;
+    w.classList.remove('is-open');
+    if (menu) {
+      menu.style.position = '';
+      menu.style.left = '';
+      menu.style.top = '';
+      menu.style.width = '';
+    }
+  });
+}, true);
+
+// колесо внутри меню — не всплывает к window-scroll-closer
+document.addEventListener('wheel', (e) => {
+  if (e.target && e.target.closest && e.target.closest('.catio-select__menu')) {
+    e.stopPropagation();
+  }
 }, true);
 
 

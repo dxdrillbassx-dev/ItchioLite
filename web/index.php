@@ -1453,27 +1453,67 @@ function socialAuth(provider) {
   <!-- ===== МОДАЛКА ПРАВИЛ ПУБЛИКАЦИИ ===== -->
   <div class="submit-modal hidden" id="submit-rules-modal">
     <div class="submit-modal-backdrop" data-close="rules"></div>
-    <div class="submit-modal-box">
+    <div class="submit-modal-box privacy-modal-box">
       <div class="submit-modal-head">
         <h2>Правила публикации</h2>
-        <button type="button" class="friends-modal-close" data-close="rules">×</button>
+        <button type="button" class="pub-modal-close" data-close="rules" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
-      <div class="submit-modal-body">
-        <ul class="submit-rules">
-          <li>Загружайте только игры, на которые у вас есть права.</li>
-          <li>Запрещены вредоносные файлы, кражи контента и NSFW без пометки.</li>
-          <li>Обложка и описание должны соответствовать игре.</li>
-          <li>После отправки игра проходит модерацию администратором.</li>
-          <li>Админ может править материалы перед публикацией или отклонить заявку.</li>
-        </ul>
-        <label class="settings-check">
+      <div class="submit-modal-body privacy-modal-body">
+        <div class="privacy-hero">
+          <div class="privacy-hero-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+          </div>
+          <div>
+            <div class="privacy-hero-title">CATio — правила каталога</div>
+            <div class="privacy-hero-sub">Коротко о том, что можно публиковать и как проходит модерация</div>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#ef5b2c">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <h4>Права на контент</h4>
+            <p>Загружайте только игры, на которые у вас есть права. Запрещены кражи чужого контента и вредоносные файлы.</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#6ea8fe">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <div>
+            <h4>Обложка и описание</h4>
+            <p>Обложка, скриншоты и текст должны соответствовать игре. NSFW — только с явной пометкой 18+.</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#6fdf8b">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          </div>
+          <div>
+            <h4>Модерация</h4>
+            <p>После отправки игра проходит проверку. Админ может поправить материалы перед публикацией или отклонить заявку.</p>
+          </div>
+        </div>
+        <div class="privacy-point">
+          <div class="privacy-point-ico" style="--c:#f0c14b">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          </div>
+          <div>
+            <h4>Ответственность</h4>
+            <p>Нарушение правил может привести к отклонению заявки и ограничению публикации для аккаунта.</p>
+          </div>
+        </div>
+        <label class="settings-check" style="margin-top:14px">
           <input type="checkbox" id="submit-agree" />
           Я согласен(на) с правилами публикации
         </label>
       </div>
       <div class="submit-modal-foot">
         <button type="button" class="hp-btn-edit" data-close="rules">Отмена</button>
-        <button type="button" class="auth-submit" id="submit-rules-next" disabled>Дальше</button>
+        <button type="button" class="hp-btn-edit" id="submit-rules-next" disabled>Дальше</button>
       </div>
     </div>
   </div>
@@ -1649,7 +1689,7 @@ function socialAuth(provider) {
       </div>
       <div class="submit-modal-foot">
         <button type="button" class="hp-btn-edit" data-close="form">Отмена</button>
-        <button type="button" class="auth-submit" id="submit-game-send">Отправить на модерацию</button>
+        <button type="button" class="hp-btn-edit" id="submit-game-send">Отправить на модерацию</button>
       </div>
     </div>
   </div>
