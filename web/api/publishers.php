@@ -55,16 +55,28 @@ try {
 
         case 'mine': {
             $user = requireUserP();
+            $uid = (int)$user['id'];
+            // все издательства, где user в members ИЛИ owner
             $stmt = $pdo->prepare("
-                SELECT p.*, pm.role AS my_role,
-                  (SELECT COUNT(*) FROM games g WHERE g.publisher_id = p.id AND g.is_published = 1) AS games_count,
-                  (SELECT COUNT(*) FROM publisher_members m WHERE m.publisher_id = p.id) AS members_count
-                FROM publishers p
-                INNER JOIN publisher_members pm ON pm.publisher_id = p.id AND pm.user_id = ?
-                ORDER BY p.name ASC
+              SELECT DISTINCT p.id, p.name, p.slug, p.description, p.avatar_url, p.banner_url, p.owner_id,
+                COALESCE(pm.role, CASE WHEN p.owner_id = ? THEN 'owner' ELSE 'member' END) AS my_role
+              FROM publishers p
+              LEFT JOIN publisher_members pm ON pm.publisher_id = p.id AND pm.user_id = ?
+              WHERE p.owner_id = ? OR pm.user_id = ?
+              ORDER BY p.name ASC
             ");
-            $stmt->execute([(int)$user['id']]);
-            jsonOut(['ok' => true, 'publishers' => $stmt->fetchAll()]);
+            $stmt->execute([$uid, $uid, $uid, $uid]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            // починить membership для owner
+            foreach ($rows as $r) {
+                if ((int)($r['owner_id'] ?? 0) === $uid) {
+                    try {
+                        $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')")
+                            ->execute([(int)$r['id'], $uid]);
+                    } catch (Throwable $e) {}
+                }
+            }
+            jsonOut(['ok' => true, 'publishers' => $rows]);
         }
 
         case 'get': {

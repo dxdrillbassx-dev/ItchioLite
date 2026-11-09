@@ -123,6 +123,13 @@ try {
 
             $coverUrl = null;
             try { $coverUrl = saveUpload('cover', $coverDir, $imgAllowed, 5); } catch (Throwable $e) {}
+            // импорт пакета: обложка уже лежит в uploads/game_packs/...
+            if (!$coverUrl) {
+                $cu = trim((string)($_POST['cover_url'] ?? ''));
+                if ($cu !== '' && (str_starts_with($cu, 'uploads/') || str_starts_with($cu, '/uploads/'))) {
+                    $coverUrl = ltrim($cu, '/');
+                }
+            }
             if (!$coverUrl) {
                 http_response_code(400);
                 echo json_encode(['ok'=>false,'error'=>'Нужна обложка'], JSON_UNESCAPED_UNICODE);
@@ -130,14 +137,28 @@ try {
             }
             $bannerUrl = null;
             try { $bannerUrl = saveUpload('banner', $bannerDir, $imgAllowed, 8); } catch (Throwable $e) {}
+            if (!$bannerUrl) {
+                $bu = trim((string)($_POST['banner_url'] ?? ''));
+                if ($bu !== '' && (str_starts_with($bu, 'uploads/') || str_starts_with($bu, '/uploads/'))) {
+                    $bannerUrl = ltrim($bu, '/');
+                }
+            }
             $logoDir = $base . '/logos';
             $iconDir = $base . '/icons';
             if (!is_dir($logoDir)) @mkdir($logoDir, 0755, true);
             if (!is_dir($iconDir)) @mkdir($iconDir, 0755, true);
             $logoUrl = null;
             try { $logoUrl = saveUpload('logo', $logoDir, $imgAllowed, 4); } catch (Throwable $e) {}
+            if (!$logoUrl) {
+                $lu = trim((string)($_POST['logo_url'] ?? ''));
+                if ($lu !== '' && str_starts_with(ltrim($lu, '/'), 'uploads/')) $logoUrl = ltrim($lu, '/');
+            }
             $iconUrl = null;
             try { $iconUrl = saveUpload('icon', $iconDir, $imgAllowed, 3); } catch (Throwable $e) {}
+            if (!$iconUrl) {
+                $iu = trim((string)($_POST['icon_url'] ?? ''));
+                if ($iu !== '' && str_starts_with(ltrim($iu, '/'), 'uploads/')) $iconUrl = ltrim($iu, '/');
+            }
 
             $slug = slugify($title) . '-' . substr(uniqid(), -4);
             $stmt = $pdo->prepare("
@@ -155,6 +176,80 @@ try {
             ]);
             $gameId = (int)$pdo->lastInsertId();
 
+            // trailers from pack (local uploads paths)
+            $trailerUrls = trim((string)($_POST['trailer_urls'] ?? ''));
+            if ($trailerUrls !== '') {
+                $order = 0;
+                $trailDir = $base . '/trailers';
+                if (!is_dir($trailDir)) @mkdir($trailDir, 0755, true);
+                foreach (preg_split('/\r\n|\r|\n/', $trailerUrls) as $su) {
+                    $su = trim($su);
+                    if ($su === '') continue;
+                    $su = ltrim($su, '/');
+                    if (!str_starts_with($su, 'uploads/')) continue;
+                    $src = dirname(__DIR__) . '/' . $su;
+                    if (!is_file($src)) {
+                        $alt = __DIR__ . '/../' . $su;
+                        if (is_file($alt)) $src = $alt;
+                    }
+                    $finalUrl = $su;
+                    if (is_file($src)) {
+                        $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION) ?: 'mp4');
+                        $name = uniqid('trail_', true) . '.' . $ext;
+                        if (@copy($src, $trailDir . '/' . $name)) {
+                            $finalUrl = 'uploads/games/trailers/' . $name;
+                        }
+                    }
+                    try {
+                        $pdo->prepare("INSERT INTO game_media (game_id, kind, url, sort_order) VALUES (?,?,?,?)")
+                            ->execute([$gameId, 'trailer', $finalUrl, $order++]);
+                    } catch (Throwable $e) {}
+                    // если video_url пуст — ставим первый трейлер
+                    if ($order === 1) {
+                        try {
+                            $pdo->prepare("UPDATE games SET video_url = COALESCE(NULLIF(video_url,''), ?) WHERE id = ?")
+                                ->execute([$finalUrl, $gameId]);
+                        } catch (Throwable $e) {}
+                    }
+                }
+            }
+            // screenshots from pack (urls) — копируем в постоянную папку
+            $shotUrls = trim((string)($_POST['screenshot_urls'] ?? ''));
+            if ($shotUrls !== '') {
+                $order = 0;
+                if (!is_dir($shotDir)) @mkdir($shotDir, 0755, true);
+                foreach (preg_split('/\r\n|\r|\n/', $shotUrls) as $su) {
+                    $su = trim($su);
+                    if ($su === '') continue;
+                    $su = ltrim($su, '/');
+                    if (!str_starts_with($su, 'uploads/')) continue;
+                    $src = dirname(__DIR__) . '/' . $su;
+                    if (!is_file($src)) {
+                        $alt = __DIR__ . '/../' . $su;
+                        if (is_file($alt)) $src = $alt;
+                    }
+                    $finalUrl = $su;
+                    if (is_file($src)) {
+                        $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION) ?: 'jpg');
+                        if (!in_array($ext, ['jpg','jpeg','png','webp','gif'], true)) $ext = 'jpg';
+                        $name = uniqid('pack_', true) . '.' . $ext;
+                        $dest = $shotDir . '/' . $name;
+                        if (@copy($src, $dest)) {
+                            $finalUrl = 'uploads/games/shots/' . $name;
+                        }
+                    }
+                    try {
+                        $pdo->prepare("INSERT INTO game_media (game_id, kind, url, sort_order) VALUES (?,?,?,?)")
+                            ->execute([$gameId, 'screenshot', $finalUrl, $order]);
+                    } catch (Throwable $e) {}
+                    try {
+                        $pdo->prepare("INSERT INTO game_screenshots (game_id, image_url, sort) VALUES (?,?,?)")
+                            ->execute([$gameId, $finalUrl, $order]);
+                    } catch (Throwable $e2) {}
+                    $order++;
+                    if ($order >= 12) break;
+                }
+            }
             // screenshots[]
             if (!empty($_FILES['screenshots'])) {
                 $files = $_FILES['screenshots'];

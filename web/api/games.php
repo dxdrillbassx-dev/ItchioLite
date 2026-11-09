@@ -474,7 +474,7 @@ try {
             $ms = $pdo->prepare("SELECT kind, url, thumb_url, title, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order, id");
             $ms->execute([$id]);
             foreach ($ms->fetchAll() as $row) {
-                if (($row['kind'] ?? '') === 'video') {
+                if (in_array(($row['kind'] ?? ''), ['video','trailer','movie','movies'], true)) {
                     $videos[] = [
                         'url' => $row['url'],
                         'thumbnail' => !empty($row['thumb_url']) ? $row['thumb_url'] : (!empty($game['cover_url']) ? $game['cover_url'] : null),
@@ -489,7 +489,7 @@ try {
                 $ms = $pdo->prepare("SELECT kind, url FROM game_media WHERE game_id = ? ORDER BY sort_order, id");
                 $ms->execute([$id]);
                 foreach ($ms->fetchAll() as $row) {
-                    if (($row['kind'] ?? '') === 'video') {
+                    if (in_array(($row['kind'] ?? ''), ['video','trailer','movie','movies'], true)) {
                         $videos[] = [
                             'url' => $row['url'],
                             'thumbnail' => !empty($game['cover_url']) ? $game['cover_url'] : null,
@@ -501,23 +501,44 @@ try {
                 }
             } catch (Throwable $e2) {}
         }
-        // fallback: games.video_url — но мёртвые movie_max.mp4 / movie480.mp4 игнорим
-        if (!$videos && !empty($game['video_url'])) {
-            $vu = $game['video_url'];
-            if (stripos($vu, 'http://') === 0) {
-                $vu = 'https://' . substr($vu, 7);
+                // games.video_url: одна ссылка, несколько через \n или JSON-массив
+        if (!empty($game['video_url'])) {
+            $rawVu = trim((string)$game['video_url']);
+            $list = [];
+            if ($rawVu !== '' && $rawVu[0] === '[') {
+                $j = json_decode($rawVu, true);
+                if (is_array($j)) {
+                    foreach ($j as $item) {
+                        if (is_string($item)) $list[] = $item;
+                        elseif (is_array($item)) $list[] = (string)($item['url'] ?? $item['src'] ?? $item['mp4'] ?? '');
+                    }
+                }
+            } else {
+                $list = preg_split('/\r\n|\r|\n+/', $rawVu) ?: [];
             }
-            $dead = (bool)preg_match('~steam/apps/\d+/(movie_max|movie480)\.(mp4|webm)~i', $vu);
-            if (!$dead) {
+            $have = [];
+            foreach ($videos as $vv) { $have[strtolower((string)($vv['url'] ?? ''))] = true; }
+            $n = 0;
+            foreach ($list as $vu) {
+                $vu = trim((string)$vu);
+                if ($vu === '') continue;
+                if (stripos($vu, 'http://') === 0) $vu = 'https://' . substr($vu, 7);
+                $dead = (bool)preg_match('~steam/apps/\d+/(movie_max|movie480)\.(mp4|webm)~i', $vu);
+                if ($dead) continue;
+                $key = strtolower($vu);
+                if (isset($have[$key])) continue;
+                $have[$key] = true;
                 $fmt = 'mp4';
                 if (stripos($vu, '.m3u8') !== false) $fmt = 'hls';
                 elseif (stripos($vu, '.mpd') !== false) $fmt = 'dash';
+                elseif (preg_match('/youtube\.com|youtu\.be/i', $vu)) $fmt = 'youtube';
                 $videos[] = [
                     'url' => $vu,
-                    'thumbnail' => !empty($game['cover_url']) ? $game['cover_url'] : (!empty($game['banner_url']) ? $game['banner_url'] : null),
-                    'name' => 'Трейлер',
+                    'thumbnail' => !empty($game['cover_url']) ? $game['cover_url'] : null,
+                    'name' => 'Трейлер' . ($n ? ' ' . ($n + 1) : ''),
                     'format' => $fmt,
                 ];
+                $n++;
             }
         }
         // живые трейлеры Steam (HLS) по appid из slug (...-s1091500)

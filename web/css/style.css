@@ -13975,3 +13975,71 @@ body.client .content > .main > #view-home.active {
 .hp-friend-row .hp-friend-avatar {
   flex-shrink: 0;
 }
+
+
+/* admin polish — колонка вкладок слева + контент справа */
+#view-admin .admin-settings-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+#view-admin .settings-nav#admin-nav,
+#view-admin aside.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  max-width: 220px;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+#view-admin .settings-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  border: none !important;
+  background: transparent !important;
+}
+#view-admin .settings-nav-btn.active {
+  background: rgba(239,91,44,0.14) !important;
+  color: #ffb08a !important;
+}
+#view-admin .settings-main {
+  flex: 1;
+  min-width: 0;
+}
+#view-admin .admin-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 14px;
+}
+#view-admin .admin-list-panel,
+#view-admin .admin-edit-panel {
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(0,0,0,0.18);
+  padding: 12px;
+}
+#view-admin .admin-pending-item {
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+#view-admin .admin-pending-item:hover,
+#view-admin .admin-pending-item.active {
+  background: rgba(255,255,255,0.05);
+}
+@media (max-width: 900px) {
+  #view-admin .admin-settings-layout { flex-direction: column; }
+  #view-admin .settings-nav#admin-nav { max-width: none; width: 100%; flex-direction: row; flex-wrap: wrap; }
+  #view-admin .admin-layout { grid-template-columns: 1fr; }
+}
+

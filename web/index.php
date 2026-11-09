@@ -2027,7 +2027,7 @@ function socialAuth(provider) {
               <div class="pub-file-card" data-for="sg-cover">
                 <div class="pub-file-preview" id="sg-cover-preview"><span>Обложка *</span></div>
                 <label class="pub-file-btn" for="sg-cover">Выбрать файл</label>
-                <input type="file" name="cover" id="sg-cover" class="pub-file-input" accept="image/*" required />
+                <input type="file" name="cover" id="sg-cover" class="pub-file-input" accept="image/*" />
                 <div class="pub-file-name" id="sg-cover-name">PNG / JPG, 600×900</div>
               </div>
               <div class="pub-file-card" data-for="sg-banner">
@@ -2057,8 +2057,11 @@ function socialAuth(provider) {
                 <div class="pub-shots-preview" id="sg-shots-preview"></div>
               </div>
             </div>
-            <label class="settings-label full" style="margin-top:10px"><span>Трейлер (YouTube URL)</span><input class="auth-input" name="video_url" id="sg-video" placeholder="https://youtube.com/..." /></label>
+            <div class="settings-label full" id="sg-trailers-wrap" style="margin-top:10px"></div>
             <input type="hidden" name="cover_url" id="sg-cover-url" />
+              <input type="hidden" name="screenshot_urls" id="sg-screenshots-urls" />
+              <input type="hidden" name="icon_url" id="sg-icon-url" />
+              <input type="hidden" name="logo_url" id="sg-logo-url" />
             <input type="hidden" name="banner_url" id="sg-banner-url" />
           </section>
 
@@ -2137,9 +2140,15 @@ function socialAuth(provider) {
 
         </form>
       </div>
-      <div class="submit-modal-foot">
-        <button type="button" class="hp-btn-edit" data-close="form">Отмена</button>
-        <button type="button" class="hp-btn-edit" id="submit-game-send">Отправить на модерацию</button>
+            <div class="submit-modal-foot" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="file" id="sg-import-pack" accept=".zip,application/zip" hidden />
+          <button type="button" class="hp-btn-edit" id="sg-import-pack-btn" title="Импорт ZIP-пакета игры">Импорт</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+          <button type="button" class="hp-btn-edit" data-close="form">Отмена</button>
+          <button type="button" class="hp-btn-edit" id="submit-game-send">Отправить на модерацию</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2393,7 +2402,7 @@ function socialAuth(provider) {
             </div>
           </div>
           <p class="sgdb-warn">⚠ Ваши пользовательские изображения не будут синхронизированы с вашей учётной записью.</p>
-          <div class="sgdb-source-label">SteamGridDB</div>
+          <div class="sgdb-source-label">CATioGridDB</div>
           <div class="sgdb-asset-scroll">
             <div id="sgdb-asset-grid" class="sgdb-asset-grid">
               <div class="settings-hint">Загрузка…</div>

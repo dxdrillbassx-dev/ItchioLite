@@ -144,6 +144,7 @@ function formatSize(bytes) {
   return (b / 1024 / 1024 / 1024).toFixed(2) + ' ГБ';
 }
 
+
 // ---------- Accordion (профиль / фильтры / страница игры) ----------
 const HP_SIDE_ARROW = `<span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>`;
 
@@ -428,6 +429,7 @@ async function syncCartPrices() {
   return items;
 }
 
+
 function updateCartBadge() {
   const badge = document.getElementById('cart-badge');
   const btn = document.getElementById('btn-cart');
@@ -590,6 +592,9 @@ function showAddToCartModal(game) {
     if (typeof showView === 'function') showView('cart');
   });
 }
+
+
+
 
 function iconSvg(name, size=16) {
   const s = size;
@@ -869,6 +874,7 @@ function showAdultGate(title, gameId) {
   });
 }
 
+
 // ============================================================
 //  ГЛАВНАЯ (как в Hydra): hero-баннер, подборки, «Удиви меня»
 // ============================================================
@@ -1015,6 +1021,7 @@ function renderHomeGrid() {
   });
 }
 
+
 function initHomeControls() {
   $$('#home-pills .home-pill[data-hsort]').forEach(pill => {
     pill.addEventListener('click', () => {
@@ -1141,6 +1148,7 @@ function sideLibRemoveOptimistic(gameId) {
   // фоновая синхронизация
   try { loadSideLibrary(); } catch (e) {}
 }
+
 
 let steamAchSyncing = false;
 async function syncSteamAchievementsLazy(games) {
@@ -2114,6 +2122,8 @@ async function loadGamePage(id) {
   }
 }
 
+
+
 const achCache = {};
 
 function renderAchSidebar(gameId, gameTitle, data) {
@@ -2256,6 +2266,7 @@ async function openGameAchievementsPage(gameId, gameTitle) {
     wrap.innerHTML = `<div class="hp-empty">${escapeHtml(err.message || 'Ошибка')}</div>`;
   }
 }
+
 
 function renderGamePage(wrap, data) {
   const g = data.game;
@@ -2711,12 +2722,10 @@ function renderGamePage(wrap, data) {
   }
     $('#gp-cloud-saves')?.addEventListener('click', () => toast('Облачные сохранения скоро'));
   $('#gp-settings')?.addEventListener('click', () => {
-    const isAdmin = !!(window.AUTH_STATE && window.AUTH_STATE.user &&
-      (window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin));
-    if (isAdmin && wrap._gameData) {
+    if (wrap._gameData) {
       openGameAssetsModal(wrap._gameData);
     } else {
-      toast('Настройки запуска скоро');
+      toast('Данные игры ещё не загружены');
     }
   });
   $$('.gp-comm-shot', wrap).forEach(btn => {
@@ -2771,6 +2780,7 @@ function renderControllerSupport(raw) {
     <div class="gp-ctrl-badge ${full ? 'full' : 'partial'}">${full ? 'ПОЛНАЯ ПОДДЕРЖКА' : 'ЧАСТИЧНАЯ ПОДДЕРЖКА'}</div>
     <p class="gp-ctrl-note">${full ? 'Отлично работает с контроллерами Xbox и PlayStation.' : (escapeHtml(raw) || 'Поддержка контроллера заявлена.')}</p>`;
 }
+
 
 function renderCommentsThreaded(comments, viewer, gameId) {
   const box = $('#comments-list');
@@ -3028,6 +3038,7 @@ async function loadSimilarGames(game) {
   }
 }
 
+
 // ---------- Кнопка покупки ----------
 function refreshBuyButton(g) {
   const btn = $('#btn-buy-game');
@@ -3242,266 +3253,217 @@ function createCommentEl(c, viewer) {
   return el;
 }
 
-function openAdminGameEditModal(g) {
-  let modal = document.getElementById('admin-game-edit-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'admin-game-edit-modal';
-    modal.className = 'submit-modal hidden';
-    modal.innerHTML = `
-      <div class="submit-modal-backdrop" id="age-backdrop"></div>
-      <div class="submit-modal-box submit-modal-wide pub-modal-box" role="dialog" aria-modal="true">
-        <div class="submit-modal-head pub-modal-head">
-          <div>
-            <h2>Редактирование карточки</h2>
-            <p class="pub-modal-sub">Те же поля, что при публикации — изменения сразу видны всем</p>
-          </div>
-          <button type="button" class="pub-modal-close" id="admin-edit-close" aria-label="Закрыть">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div class="submit-modal-body pub-modal-body">
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
-              <h3>Основное</h3>
-            </div>
-            <div class="submit-grid">
-              <label class="settings-label"><span>Название</span><input class="auth-input" id="age-title" maxlength="120" /></label>
-              <label class="settings-label"><span>Жанр</span>
-                <select class="settings-select" id="age-genre">
-                  <option value="">Выберите</option>
-                  <option>Экшен</option><option>Приключения</option><option>RPG</option>
-                  <option>Стратегия</option><option>Симулятор</option><option>Инди</option>
-                  <option>Хоррор</option><option>Гонки</option><option>Спорт</option><option>Другое</option>
-                </select>
-              </label>
-              <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" id="age-price" type="number" min="0" step="1" /></label>
-              <label class="settings-label"><span>Скидка (%)</span><input class="auth-input" id="age-discount" type="number" min="0" max="100" step="1" placeholder="0" /></label>
-              <label class="settings-label"><span>Разработчик</span><input class="auth-input" id="age-developer" maxlength="120" /></label>
-              <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" id="age-short" maxlength="200" /></label>
-              <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="age-desc" rows="5"></textarea></label>
-            </div>
-          </section>
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
-              <h3>Медиа</h3>
-            </div>
-            <div class="submit-grid">
-              <label class="settings-label"><span>Новая обложка</span><input type="file" id="age-cover" accept="image/*" /></label>
-              <label class="settings-label"><span>Новый баннер</span><input type="file" id="age-banner" accept="image/*" /></label>
-              <label class="settings-label full"><span>Видео URL</span><input class="auth-input" id="age-video" placeholder="https://youtube.com/..." /></label>
-            </div>
-          </section>
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
-              <h3>Системные требования</h3>
-            </div>
-            <div class="submit-grid">
-              <div class="settings-label full" id="age-sys-min-fields">
-                <span>Минимальные</span>
-                <div class="sysreq-edit-grid" data-sys="min"></div>
-              </div>
-              <div class="settings-label full" id="age-sys-rec-fields">
-                <span>Рекомендованные</span>
-                <div class="sysreq-edit-grid" data-sys="rec"></div>
-              </div>
-            </div>
-          </section>
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
-              <h3>Языки и управление</h3>
-            </div>
-            <div class="settings-label full">
-              <span>Поддержка контроллеров</span>
-              <div class="submit-checks">
-                <label class="settings-check"><input type="checkbox" value="xbox" class="age-ctrl" /> Xbox</label>
-                <label class="settings-check"><input type="checkbox" value="playstation" class="age-ctrl" /> PlayStation</label>
-                <label class="settings-check"><input type="checkbox" value="switch" class="age-ctrl" /> Switch</label>
-                <label class="settings-check"><input type="checkbox" value="keyboard" class="age-ctrl" /> Клавиатура</label>
-              </div>
-            </div>
-            <div class="settings-label full">
-              <span>Языки</span>
-              <div class="lang-table" id="age-lang-table">
-                <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
-              </div>
-            </div>
-          </section>
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-              <h3>Контент</h3>
-            </div>
-            <label class="settings-check"><input type="checkbox" id="age-adult" /> 18+ / для взрослых</label>
-            <label class="settings-label full" style="margin-top:10px"><span>Заметка модератора</span><input class="auth-input" id="age-note" /></label>
-          </section>
-          <div id="age-error" class="gp-comment-error hidden" style="margin-top:12px"></div>
-        </div>
-        <div class="submit-modal-foot admin-edit-foot">
-          <button type="button" class="btn-danger" id="age-delete">Удалить карточку</button>
-          <div class="admin-edit-foot-right">
-            <button type="button" class="hp-btn-edit" id="age-cancel">Отмена</button>
-            <button type="button" class="hp-btn-edit" id="age-save">Сохранить</button>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
 
-    const close = () => modal.classList.add('hidden');
-    modal.querySelector('#age-backdrop')?.addEventListener('click', close);
-    modal.querySelector('#admin-edit-close')?.addEventListener('click', close);
-    modal.querySelector('#age-cancel')?.addEventListener('click', close);
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) close();
-    });
+
+
+function resetPublishFormMode() {
+  window.__adminModeratingId = null;
+  window.__adminPublishMode = false;
+  window.__publishFormMode = 'submit';
+  const formModal = document.getElementById('submit-form-modal');
+  if (!formModal) return;
+  const head = formModal.querySelector('.submit-modal-head h2') || formModal.querySelector('h2');
+  if (head) head.textContent = 'Публикация игры';
+  const sendBtn = document.getElementById('submit-game-send');
+  if (sendBtn) {
+    sendBtn.textContent = 'Отправить на модерацию';
+    delete sendBtn.dataset.adminPublish;
+    delete sendBtn.dataset.adminSave;
   }
+  const extra = document.getElementById('sg-admin-extra-actions');
+  if (extra) extra.remove();
+}
 
-  const ensureSysFields = (containerId) => {
-    const box = document.querySelector(containerId);
-    if (!box) return;
-    // если уже есть input[data-k] — не трогаем
-    if (box.querySelector('input[data-k]')) return;
-    const keys = [
-      ['os', 'ОС'], ['processor', 'Процессор'], ['memory', 'Оперативная память'],
-      ['gpu', 'Видеокарта'], ['directx', 'DirectX'], ['storage', 'Место на диске'],
-      ['sound', 'Звуковая карта'], ['other', 'Дополнительно'],
-    ];
-    const grid = box.querySelector('.sysreq-edit-grid') || box;
-    grid.innerHTML = keys.map(([k, label]) =>
-      `<input class="auth-input" data-k="${k}" placeholder="${label}" />`
-    ).join('');
-  };
-  ensureSysFields('#age-sys-min-fields');
-  ensureSysFields('#age-sys-rec-fields');
-
-  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
-  setVal('age-title', g.title || '');
-  setVal('age-price', g.price ?? 0);
-  setVal('age-discount', g.discount_percent ?? 0);
-  setVal('age-developer', g.developer_name || g.developer || '');
-  setVal('age-short', g.short_description || '');
-  setVal('age-desc', g.description || '');
-  setVal('age-video', g.video_url || '');
-  setVal('age-note', g.review_note || '');
-
-  const genreSel = document.getElementById('age-genre');
-  if (genreSel) {
-    const gv = (g.genre || '').trim();
-    let found = false;
-    [...genreSel.options].forEach(o => {
-      if (o.value === gv || o.textContent === gv) { o.selected = true; found = true; }
-    });
-    if (gv && !found) {
-      const opt = document.createElement('option');
-      opt.value = gv; opt.textContent = gv; opt.selected = true;
-      genreSel.appendChild(opt);
-    }
-    try { initCatioSelects(modal); } catch (e) {}
+function ensurePublishAdminFooter(formModal, opts, g) {
+  let extra = document.getElementById('sg-admin-extra-actions');
+  if (extra) extra.remove();
+  if (!opts || !(opts.adminEdit || opts.moderate)) return;
+  const foot = formModal.querySelector('.submit-modal-foot');
+  if (!foot) return;
+  extra = document.createElement('div');
+  extra.id = 'sg-admin-extra-actions';
+  extra.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;margin-bottom:8px';
+  const gid = g && g.id;
+  let html = '';
+  if (opts.adminEdit || opts.moderate) {
+    html += '<button type="button" class="btn-danger" id="sg-admin-delete">Удалить карточку</button>';
   }
+  if (opts.moderate) {
+    html += '<button type="button" class="hp-btn-edit" id="sg-admin-reject">Отклонить</button>';
+  }
+  html += '<span style="flex:1"></span>';
+  extra.innerHTML = html;
+  foot.insertBefore(extra, foot.firstChild);
 
-  try { fillSysReq('#age-sys-min-fields', g.sys_req_min); } catch (e) {}
-  try { fillSysReq('#age-sys-rec-fields', g.sys_req_rec); } catch (e) {}
-  try { renderLangTable('#age-lang-table', g.languages); } catch (e) {}
-
-  const ctrls = String(g.controllers || '').toLowerCase().split(/[,;|\s]+/).filter(Boolean);
-  modal.querySelectorAll('.age-ctrl').forEach(cb => {
-    cb.checked = ctrls.includes(cb.value) || ctrls.some(c => c.includes(cb.value));
-  });
-  const adult = document.getElementById('age-adult');
-  if (adult) adult.checked = !!(+g.is_adult);
-
-  const coverInput = document.getElementById('age-cover');
-  const bannerInput = document.getElementById('age-banner');
-  if (coverInput) coverInput.value = '';
-  if (bannerInput) bannerInput.value = '';
-
-  const err = document.getElementById('age-error');
-  if (err) { err.classList.add('hidden'); err.textContent = ''; }
-
-  modal.dataset.gameId = String(g.id);
-  modal.classList.remove('hidden');
-
-  const saveBtn = document.getElementById('age-save');
-  const delBtn = document.getElementById('age-delete');
-
-  if (saveBtn) {
-    saveBtn.onclick = async () => {
-      const id = modal.dataset.gameId;
-      const fd = new FormData();
-      fd.append('csrf_token', window.CSRF_TOKEN || '');
-      fd.append('id', id);
-      fd.append('title', document.getElementById('age-title')?.value || '');
-      fd.append('genre', document.getElementById('age-genre')?.value || '');
-      fd.append('price', document.getElementById('age-price')?.value || '0');
-      fd.append('discount_percent', document.getElementById('age-discount')?.value || '0');
-      fd.append('developer', document.getElementById('age-developer')?.value || '');
-      fd.append('short_description', document.getElementById('age-short')?.value || '');
-      fd.append('description', document.getElementById('age-desc')?.value || '');
-      fd.append('video_url', document.getElementById('age-video')?.value || '');
-      fd.append('sys_req_min', JSON.stringify(collectSysReq('#age-sys-min-fields')));
-      fd.append('sys_req_rec', JSON.stringify(collectSysReq('#age-sys-rec-fields')));
-      fd.append('controllers', [...modal.querySelectorAll('.age-ctrl:checked')].map(c => c.value).join(','));
-      fd.append('languages', JSON.stringify(collectLanguages('#age-lang-table')));
-      fd.append('review_note', document.getElementById('age-note')?.value || '');
-      fd.append('is_adult', document.getElementById('age-adult')?.checked ? '1' : '');
-      fd.append('delete_media', '');
-      const cover = document.getElementById('age-cover')?.files?.[0];
-      if (cover) fd.append('cover', cover);
-      const banner = document.getElementById('age-banner')?.files?.[0];
-      if (banner) fd.append('banner', banner);
-      saveBtn.disabled = true;
+  const del = document.getElementById('sg-admin-delete');
+  if (del) {
+    del.onclick = async () => {
+      if (!gid) return;
+      if (!confirm('Удалить карточку игры полностью?')) return;
+      if (!confirm('Точно удалить? Это нельзя отменить.')) return;
+      del.disabled = true;
       try {
-        const res = await fetch(`${SUBMIT_API}?action=admin_save`, { method: 'POST', body: fd });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'Ошибка сохранения');
-        toast('Сохранено для всех');
-        try { if (typeof refreshBadge === 'function') refreshBadge(); } catch (e) {}
-        modal.classList.add('hidden');
-        homeCache = null;
-        storeCache = [];
-        window.__mediaBust = Date.now();
-        window.__iconBust = window.__mediaBust;
-        await loadGamePage(+id);
-        refreshGameImagesEverywhere(+id);
-      } catch (e) {
-        if (err) { err.textContent = e.message || 'Ошибка'; err.classList.remove('hidden'); }
-        toast(e.message || 'Ошибка');
-      } finally {
-        saveBtn.disabled = false;
-      }
-    };
-  }
-
-  if (delBtn) {
-    delBtn.onclick = async () => {
-      if (!confirm('Удалить карточку игры полностью? Это нельзя отменить.')) return;
-      if (!confirm('Точно удалить? Комментарии, медиа и запись в каталоге будут стерты.')) return;
-      delBtn.disabled = true;
-      try {
-        const data = await postJSON(`${SUBMIT_API}?action=delete_game`, { id: +modal.dataset.gameId });
+        const data = await postJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=delete_game', { id: +gid });
         if (!data.ok) throw new Error(data.error || 'Не удалось удалить');
         toast('Игра удалена');
-        modal.classList.add('hidden');
-        homeCache = null;
-        storeCache = [];
-        try {
-          const gid = +modal.dataset.gameId;
-          if (typeof sideLibRemoveOptimistic === 'function') sideLibRemoveOptimistic(gid);
-          else if (typeof loadSideLibrary === 'function') loadSideLibrary();
-        } catch (e) {}
-        if (typeof gotoView === 'function') gotoView('home');
-        else if (typeof showView === 'function') showView('home');
+        formModal.classList.add('hidden');
+        resetPublishFormMode();
+        try { if (typeof loadAdminPending === 'function') loadAdminPending(); } catch (e) {}
+        try { if (typeof gotoView === 'function') gotoView('home'); } catch (e) {}
       } catch (e) {
         toast(e.message || 'Ошибка удаления');
       } finally {
-        delBtn.disabled = false;
+        del.disabled = false;
       }
     };
   }
+  const rej = document.getElementById('sg-admin-reject');
+  if (rej) {
+    rej.onclick = async () => {
+      if (!gid) return;
+      const note = prompt('Причина отклонения (необязательно):') || '';
+      rej.disabled = true;
+      try {
+        const data = await postJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=reject', { id: +gid, note });
+        if (!data.ok) throw new Error(data.error || 'Не удалось отклонить');
+        toast('Заявка отклонена');
+        formModal.classList.add('hidden');
+        resetPublishFormMode();
+        try { if (typeof loadAdminPending === 'function') loadAdminPending(); } catch (e) {}
+      } catch (e) {
+        toast(e.message || 'Ошибка');
+      } finally {
+        rej.disabled = false;
+      }
+    };
+  }
+}
+
+async function openPublishFormForGame(g, opts) {
+  opts = opts || {};
+  const formModal = document.getElementById('submit-form-modal');
+  if (!formModal) {
+    toast('Модалка публикации не найдена');
+    return;
+  }
+  const isAdminMode = !!(opts.adminEdit || opts.moderate);
+  window.__adminModeratingId = isAdminMode ? g.id : null;
+  window.__adminPublishMode = isAdminMode;
+  window.__publishFormMode = opts.moderate ? 'moderate' : (opts.adminEdit ? 'adminEdit' : 'submit');
+
+  // заголовок ТОЛЬКО в этой модалке
+  const head = formModal.querySelector('.submit-modal-head h2') || formModal.querySelector('h2');
+  if (head) {
+    head.textContent = opts.moderate ? 'Модерация заявки' : (opts.adminEdit ? 'Редактирование карточки' : 'Публикация игры');
+  }
+  const sendBtn = document.getElementById('submit-game-send');
+  if (sendBtn) {
+    if (opts.moderate) {
+      sendBtn.textContent = 'Опубликовать';
+      sendBtn.dataset.adminPublish = '1';
+      delete sendBtn.dataset.adminSave;
+    } else if (opts.adminEdit) {
+      sendBtn.textContent = 'Сохранить';
+      sendBtn.dataset.adminSave = '1';
+      delete sendBtn.dataset.adminPublish;
+    } else {
+      sendBtn.textContent = 'Отправить на модерацию';
+      delete sendBtn.dataset.adminPublish;
+      delete sendBtn.dataset.adminSave;
+    }
+  }
+  // доп. кнопки админа в футере модалки
+  ensurePublishAdminFooter(formModal, opts, g);
+
+  try { ensureTrailersEditorUi(); } catch (e) {}
+  try { initPublishFilePreviews(formModal); initPublishPriceInput(); initPublishRte(); ensureTrailersEditorUi(); renderTrailersEditor(['']); } catch (e) {}
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  set('sg-title', g.title || '');
+  set('sg-developer', g.developer_name || g.developer || '');
+  set('sg-short', g.short_description || '');
+  set('sg-tags', g.tags || '');
+  set('sg-price', g.price != null ? String(parseInt(g.price, 10) || 0) : '0');
+
+  const genres = String(g.genre || '').split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+  document.querySelectorAll('.sg-genre').forEach(c => { c.checked = genres.some(x => x.toLowerCase() === String(c.value).toLowerCase()); });
+  try { syncPublishGenres(); } catch (e) {}
+
+  const ed = document.getElementById('sg-desc-editor');
+  if (ed) ed.innerHTML = g.description || '';
+  set('sg-desc', g.description || '');
+  try { syncPublishDescription(); } catch (e) {}
+
+  try { fillSysReq('#sg-sys-min-fields', g.sys_req_min); } catch (e) {}
+  try { fillSysReq('#sg-sys-rec-fields', g.sys_req_rec); } catch (e) {}
+  try {
+    let langs = g.languages;
+    if (typeof langs === 'string') { try { langs = JSON.parse(langs); } catch (e) { langs = []; } }
+    if (Array.isArray(langs) && langs.length && typeof langs[0] === 'string') {
+      langs = langs.map(name => ({ name, subtitles: true, audio: true }));
+    }
+    renderLangTable('#sg-lang-table', langs || []);
+  } catch (e) {}
+
+  // controllers
+  let ctrls = String(g.controllers || '').toLowerCase().split(/[,;|]+/).map(s => s.trim()).filter(Boolean);
+  document.querySelectorAll('.sg-ctrl').forEach(cb => {
+    const v = String(cb.value).toLowerCase();
+    cb.checked = ctrls.some(c => c === v || c.includes(v) || v.includes(c) || ['full','supported','partial'].includes(c));
+  });
+
+  // media previews
+  const cover = g.cover_url || g.cover_src || '';
+  const banner = g.banner_url || '';
+  if (cover) {
+    set('sg-cover-url', cover);
+    const prev = document.getElementById('sg-cover-preview');
+    if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(cover) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
+  }
+  if (banner) {
+    set('sg-banner-url', banner);
+    const prev = document.getElementById('sg-banner-preview');
+    if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(banner) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
+  }
+  if (g.logo_url) {
+    set('sg-logo-url', g.logo_url);
+    const prev = document.getElementById('sg-logo-preview');
+    if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(g.logo_url) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
+  }
+  if (g.icon_url) {
+    set('sg-icon-url', g.icon_url);
+    const prev = document.getElementById('sg-icon-preview');
+    if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(g.icon_url) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
+  }
+
+  // trailers multi
+  const trailers = parseTrailerList(g.video_url);
+  // also from g.videos / media
+  if (Array.isArray(g.videos)) {
+    g.videos.forEach(v => {
+      const u = v && (v.url || v.src);
+      if (u && !trailers.includes(u)) trailers.push(u);
+    });
+  }
+  renderTrailersEditor(trailers.length ? trailers : ['']);
+
+  // publishers
+  try {
+    window.__myPublishersCache = { list: null, ts: 0 };
+    await fillPublishPublisherSelect(null);
+    if (g.publisher_id) {
+      const sel = document.getElementById('sg-publisher-id');
+      if (sel) sel.value = String(g.publisher_id);
+    }
+  } catch (e) {}
+
+  formModal.classList.remove('hidden');
+}
+
+function openAdminGameEditModal(g) {
+  if (!g) return;
+  // Полностью та же модалка, что «Публикация игры»
+  openPublishFormForGame(g, { adminEdit: true });
 }
 
 function bindAdminGameEdit(g, viewer) {
@@ -3509,6 +3471,79 @@ function bindAdminGameEdit(g, viewer) {
   if (btn && viewer?.is_admin) {
     btn.addEventListener('click', () => openAdminGameEditModal(g));
   }
+}
+
+async function loadSgdbAssetsForName(name) {
+  const q = String(name || '').trim();
+  if (q.length < 2) return;
+  const grid = document.getElementById('sgdb-grid') || document.querySelector('.sgdb-grid');
+  if (grid) grid.innerHTML = '<div class="loading">Поиск в CATioGridDB…</div>';
+  try {
+    const data = await fetchJSON('api/game_pack.php?action=sgdb_by_name&q=' + encodeURIComponent(q));
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    const first = (data.results || [])[0];
+    if (!first) {
+      if (grid) grid.innerHTML = '<div class="loading">Ничего не найдено в CATioGridDB</div>';
+      return;
+    }
+    window.__sgdbGameId = first.id;
+    const assets = await fetchJSON('api/game_pack.php?action=sgdb_by_name&q=' + encodeURIComponent(q) + '&sgdb_id=' + first.id);
+    if (!assets.ok) throw new Error(assets.error || 'Ошибка ассетов');
+    window.__sgdbAssetsByName = assets.assets || {};
+    // показать covers по умолчанию
+    const list = (assets.assets && assets.assets.covers) || [];
+    if (grid) {
+      if (!list.length) grid.innerHTML = '<div class="loading">Ассеты не найдены</div>';
+      else {
+        grid.innerHTML = list.map(a => {
+          const u = a.url || a.thumb;
+          const th = a.thumb || a.url;
+          return '<button type="button" class="sgdb-grid-item" data-url="' + escapeHtml(u) + '"><img src="' + escapeHtml(th) + '" alt="" loading="lazy" /></button>';
+        }).join('');
+      }
+    }
+    toast('CATioGridDB: ' + first.name);
+  } catch (e) {
+    if (grid) grid.innerHTML = '<div class="loading">' + escapeHtml(e.message || 'Ошибка') + '</div>';
+  }
+}
+
+
+function getLocalGameAssets(gameId) {
+  try {
+    const raw = localStorage.getItem('catio_local_assets_' + gameId);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function setLocalGameAssets(gameId, assets) {
+  try {
+    localStorage.setItem('catio_local_assets_' + gameId, JSON.stringify(assets || {}));
+  } catch (e) {}
+}
+async function saveGameAssetsSelection(payload) {
+  const gameId = payload.game_id || window.__steamEditGameId;
+  if (window.__assetsLocalOnly) {
+    const cur = getLocalGameAssets(gameId) || {};
+    const next = { ...cur, ...payload, updated_at: Date.now() };
+    setLocalGameAssets(gameId, next);
+    // применить локально к текущей странице
+    try {
+      if (payload.cover_url) {
+        document.querySelectorAll('img[data-game-cover="' + gameId + '"], .gp-cover img, #gallery-main-img').forEach(img => {
+          if (payload.cover_url) img.src = payload.cover_url;
+        });
+      }
+      if (payload.banner_url) {
+        const hero = document.querySelector('.gp-hero-bg, .gp-hero img, .game-hero-bg');
+        if (hero) {
+          if (hero.tagName === 'IMG') hero.src = payload.banner_url;
+          else hero.style.backgroundImage = 'url(' + JSON.stringify(payload.banner_url) + ')';
+        }
+      }
+    } catch (e) {}
+    return { ok: true, local: true };
+  }
+  return postJSON((typeof STEAM_API !== 'undefined' ? STEAM_API : 'api/steam_import.php') + '?action=update_assets', payload, typeof FETCH_TIMEOUT_LONG !== 'undefined' ? FETCH_TIMEOUT_LONG : 60000);
 }
 
 /** Открыть модалку оформления (как Hydra) для конкретной игры */
@@ -3524,7 +3559,27 @@ function openGameAssetsModal(g) {
     if (m) appId = parseInt(m[1], 10);
   }
   if (!appId) {
-    toast('У игры нет Steam AppID — SteamGridDB недоступен');
+    // non-steam: откроем модалку и поищем в CATioGridDB по названию
+    window.__steamEditMode = true;
+    window.__steamEditGameId = Number(g.id);
+    window.__steamAppId = 0;
+    window.__sgdbNameQuery = g.title || '';
+    const modal2 = document.getElementById('steam-import-modal');
+    if (!modal2) { toast('Модалка не найдена'); return; }
+    const title = document.getElementById('sgdb-modal-title');
+    if (title) title.textContent = g.title || 'Игра';
+    const it = document.getElementById('sgdb-info-title');
+    if (it) it.textContent = g.title || '—';
+    const ia = document.getElementById('sgdb-info-appid');
+    if (ia) ia.textContent = 'non-steam';
+    const iid = document.getElementById('sgdb-info-id');
+    if (iid) iid.textContent = String(g.id);
+    modal2.classList.remove('hidden');
+    // подгрузить ассеты по имени
+    try {
+      if (typeof loadSgdbAssetsForName === 'function') loadSgdbAssetsForName(g.title || '');
+      else toast('Открыто без AppID — поиск по названию в CATioGridDB');
+    } catch (e) { console.warn(e); }
     return;
   }
 
@@ -3572,15 +3627,20 @@ function openGameAssetsModal(g) {
     b.classList.toggle('active', b.dataset.assetType === 'icons');
   });
 
-  // Предупреждение только обычным пользователям; админ меняет глобально для всех
+  // Админ = глобально для всех; обычный = только локально у себя
+  const auth = window.AUTH_STATE || {};
+  const u = auth.user || auth || {};
+  const isAdmin = !!(u.role === 'admin' || u.is_admin === true || u.is_admin === 1 || u.is_admin === '1' || auth.role === 'admin');
+  window.__assetsLocalOnly = !isAdmin;
   const warn = modal.querySelector('.sgdb-warn');
   if (warn) {
-    const auth = window.AUTH_STATE || {};
-    const u = auth.user || auth || {};
-    const isAdmin = u.role === 'admin' || u.is_admin === true || u.is_admin === 1 || u.is_admin === '1'
-      || auth.role === 'admin';
     warn.style.display = isAdmin ? 'none' : '';
+    warn.textContent = isAdmin
+      ? ''
+      : 'Изменения применятся только у вас локально. Глобально для всех может менять только админ.';
   }
+  const srcLabel = modal.querySelector('.sgdb-source-label');
+  if (srcLabel) srcLabel.textContent = 'CATioGridDB';
 
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
@@ -3589,6 +3649,8 @@ function openGameAssetsModal(g) {
     else document.querySelector('.sgdb-asset-tab[data-asset-type="icons"]')?.click();
   }, 40);
 }
+
+
 
 function initCommentForm(g, viewer) {
   const form = $('#comment-form');
@@ -4167,103 +4229,6 @@ function publisherGameCardHtml(g) {
     </div>`;
 }
 
-// ===== Издательство в профиле =====
-window.__pubLineToken = 0;
-
-function bindPublisherLineClicks(el) {
-  if (!el) return;
-  el.querySelectorAll('.hp-publisher-link').forEach(b => {
-    if (b.dataset.bound === '1') return;
-    b.dataset.bound = '1';
-    b.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const id = +b.dataset.id;
-      if (id) openPublisherPage(id, b.dataset.slug || '');
-    });
-  });
-}
-
-/** Мгновенно рисует/прячет строку издательства (без сети). */
-function renderPublisherLine(el, pubs) {
-  // global-safe
-  if (!el) return;
-  if (!pubs || !pubs.length) {
-    el.innerHTML = '';
-    el.hidden = true;
-    el.setAttribute('hidden', '');
-    el.style.display = 'none';
-    return;
-  }
-  el.innerHTML = pubs.map(p =>
-    '<button type="button" class="hp-publisher-link" data-id="' + p.id + '" data-slug="' + escapeHtml(p.slug || '') + '">' +
-      escapeHtml(p.name) +
-    '</button>'
-  ).join('<span class="hp-publisher-sep">·</span>');
-  el.hidden = false;
-  el.removeAttribute('hidden');
-  el.style.display = 'flex';
-  el.style.visibility = 'visible';
-  el.style.opacity = '1';
-  bindPublisherLineClicks(el);
-}
-
-/**
- * Загружает издательство для userId.
- * При смене userId сразу очищает строку, чтобы не светилось чужое.
- */
-async function loadProfilePublishers(userId, lineEl) {
-  const el = lineEl || document.getElementById('hp-publisher-line');
-  if (!el || !userId) return;
-  const uid = +userId;
-  if (!uid) return;
-
-  const prev = +(el.dataset.forUser || 0);
-  el.dataset.forUser = String(uid);
-  // смена пользователя → сразу убираем чужое/моё, пока не пришёл ответ
-  if (prev && prev !== uid) {
-    renderPublisherLine(el, []);
-  }
-
-  const token = ++window.__pubLineToken;
-
-  try {
-    const data = await fetchJSON(PUB_API + '?action=for_user&user_id=' + uid + '&_t=' + Date.now());
-    if (token !== window.__pubLineToken) return;
-    if (+(el.dataset.forUser || 0) !== uid) return;
-
-    const all = (data && Array.isArray(data.publishers)) ? data.publishers : [];
-    let pref = data ? data.display_publisher_id : null;
-    if (pref === 'hide' || pref === false || pref === '0') pref = 0;
-    if (pref !== null && pref !== undefined && pref !== '') pref = Number(pref);
-
-    let show = [];
-    if (pref === 0) {
-      show = [];
-    } else if (pref > 0) {
-      const one = all.find(p => +p.id === +pref);
-      show = one ? [one] : [];
-    } else {
-      show = all.length ? [all[0]] : [];
-    }
-    renderPublisherLine(el, show);
-  } catch (e) {
-    console.warn('loadProfilePublishers', e);
-  }
-}
-
-/** Скрыть/показать боковую карточку целиком */
-function setSideCardVisible(bodyEl, visible) {
-  if (!bodyEl) return;
-  const card = bodyEl.closest ? bodyEl.closest('.hp-side-card') : null;
-  if (!card) return;
-  card.style.display = visible ? '' : 'none';
-}
-window.renderPublisherLine = renderPublisherLine;
-window.loadProfilePublishers = loadProfilePublishers;
-window.setSideCardVisible = setSideCardVisible;
-window.bindPublisherLineClicks = bindPublisherLineClicks;
-
 function gameCardHtml(g, { showPin = true } = {}) {
   const mins = parseInt(g.playtime_minutes, 10) || 0;
   const timeLabel = formatPlaytimeShort(mins);
@@ -4334,6 +4299,7 @@ function bindFriendCodeButtons(root) {
     });
   });
 }
+
 
 function renderProfileFriendCode(code) {
   const name = $('#hp-username');
@@ -4439,9 +4405,9 @@ async function loadProfile() {
       if (line) line.dataset.forUser = String(me2.id);
       // если в AUTH уже 0 — сразу прячем, потом сверим с API
       if (me2.display_publisher_id === 0 || me2.display_publisher_id === '0') {
-        (window.renderPublisherLine || renderPublisherLine)(line, []);
+        renderPublisherLine(line, []);
       }
-      await (window.loadProfilePublishers || loadProfilePublishers)(me2.id);
+      await loadProfilePublishers(me2.id);
     }
   } catch (e) {}
 }
@@ -5027,6 +4993,8 @@ function applyUserBanner(url, pos, zoom) {
   }
 }
 
+
+
 // ---------- Вкладка настроек ----------
 
 // ---------- Тема (тёмная / светлая) ----------
@@ -5048,6 +5016,7 @@ function applyTheme(theme) {
     btn.classList.toggle('active', btn.dataset.theme === t);
   });
 }
+
 
 // ---------- Custom select (красивые выпадающие списки) ----------
 
@@ -5098,6 +5067,7 @@ function selectOptionIcon(value, label) {
 }
 
 const CATIO_SELECT_CHEVRON = '<svg class="catio-select__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+
 
 function openAnimatedModal(modal) {
   if (!modal) return;
@@ -5291,6 +5261,7 @@ document.addEventListener('wheel', (e) => {
   }
 }, true);
 
+
 function moveSegIndicator(groupEl) {
   if (!groupEl) return;
   let ind = groupEl.querySelector('.seg-indicator');
@@ -5353,6 +5324,7 @@ function initThemePicker() {
     });
   });
 }
+
 
 function openProfileEditModal() {
   const modal = $('#hp-edit-modal');
@@ -5579,16 +5551,15 @@ function initSettingsView() {
         // оптимистично: сразу прячем или ставим выбранное
         if (me && me.id && line) {
           line.dataset.forUser = String(me.id);
-          const rpl = window.renderPublisherLine || renderPublisherLine;
           if (hide) {
-            rpl(line, []);
+            renderPublisherLine(line, []);
             if (window.AUTH_STATE.user) window.AUTH_STATE.user.display_publisher_id = 0;
           } else {
             const opt = sel?.selectedOptions && sel.selectedOptions[0];
             const name = (opt && opt.textContent) ? opt.textContent.trim() : '';
             const pid = Number(v) || 0;
             if (pid && name) {
-              rpl(line, [{ id: pid, name: name, slug: '' }]);
+              renderPublisherLine(line, [{ id: pid, name: name, slug: '' }]);
             }
             if (window.AUTH_STATE.user) window.AUTH_STATE.user.display_publisher_id = pid;
           }
@@ -5760,6 +5731,7 @@ function initClientNav() {
 
 // ---------- Init ----------
 
+
 // ============================================================
 //  ДРУЗЬЯ + ЧУЖИЕ ПРОФИЛИ
 // ============================================================
@@ -5778,6 +5750,7 @@ function friendAvatarText(u) {
   if (u.avatar) return escapeHtml(u.avatar);
   return escapeHtml((u.username || '?').slice(0, 1).toUpperCase());
 }
+
 
 async function loadProfileFriends(userId) {
   const box = $('#hp-friends-list');
@@ -6139,6 +6112,7 @@ function initFriendsUI() {
 // ---------- Просмотр чужого профиля ----------
 let viewingUserId = null;
 
+
 function renderForeignLibraryOnly(library) {
   profileLibraryCache = library || [];
   const pinned = profileLibraryCache.filter(g => +g.is_pinned);
@@ -6273,10 +6247,9 @@ async function openUserProfile(username, id) {
       }
     }, 50);
   } catch (err) {
+    setProfileLoadingShell(false);
     viewingUserId = null;
     toast(err.message || 'Не удалось открыть профиль');
-  } finally {
-    setProfileLoadingShell(false);
   }
 }
 
@@ -6462,6 +6435,8 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
   loadProfileReviews(p.id);
   renderForeignLibraryOnly(library);
 }
+
+
 
 // ============================================================
 //  ЛИЧНЫЕ СООБЩЕНИЯ
@@ -6659,6 +6634,8 @@ function renderChatMessages(messages) {
 }
 let silentRenderGuard = false;
 
+
+
 async function sendChatMessage() {
   const input = $('#chat-input');
   if (!input || !chatPeerId) return;
@@ -6710,6 +6687,7 @@ function initChatUI() {
     });
   }
 }
+
 
 // ============================================================
 //  УВЕДОМЛЕНИЯ + РАСШИРЕННЫЙ ЧАТ
@@ -7104,6 +7082,7 @@ async function openGamePicker() {
     list.innerHTML = `<div class="friends-empty">${escapeHtml(err.message)}</div>`;
   }
 }
+
 
 // ============================================================
 //  ЗАГРУЗКА ИГР + АДМИН-МОДЕРАЦИЯ
@@ -7751,9 +7730,427 @@ function initGameCollapsibles(wrap) {
   });
 }
 
+
 let adminDeleteMedia = [];
 
+
+const GAME_PACK_API = 'api/game_pack.php';
+
+async function importGamePackFile(file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('pack', file);
+  fd.append('action', 'import_pack');
+  const res = await fetch(GAME_PACK_API + '?action=import_pack', {
+    method: 'POST',
+    body: fd,
+    credentials: 'same-origin',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || 'Не удалось импортировать пакет');
+  return data;
+}
+
+function applyGamePackToSubmitForm(data) {
+  const game = data.game || {};
+  const files = data.files || {};
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (!el || v == null || v === '') return;
+    el.value = v;
+  };
+  const setPreview = (previewId, url, nameId, label) => {
+    if (!url) return;
+    const prev = document.getElementById(previewId);
+    if (prev) {
+      prev.style.backgroundImage = 'url(' + JSON.stringify(url) + ')';
+      prev.style.backgroundSize = 'cover';
+      prev.style.backgroundPosition = 'center';
+      prev.classList.add('has-img');
+      prev.innerHTML = '';
+    }
+    if (nameId) {
+      const n = document.getElementById(nameId);
+      if (n) n.textContent = label || url.split('/').pop() || 'из пакета';
+    }
+  };
+
+  set('sg-title', game.title || '');
+  set('sg-developer', game.developer || '');
+  set('sg-short', game.short_description || '');
+  set('sg-tags', game.tags || '');
+  set('sg-price', game.price != null ? String(game.price) : '');
+  set('sg-release', game.release_date || '');
+  set('sg-video', game.video_url || '');
+
+  // описание: contenteditable #sg-desc-editor + textarea #sg-desc
+  const desc = game.description || '';
+  if (desc) {
+    const ed = document.getElementById('sg-desc-editor');
+    const ta = document.getElementById('sg-desc');
+    if (ed) {
+      ed.innerHTML = desc;
+      ed.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (ta) ta.value = desc;
+    try { if (typeof syncPublishDescription === 'function') syncPublishDescription(); } catch (e) {}
+  }
+
+  // жанры
+  const genreStr = String(game.genre || '');
+  const parts = genreStr.split(/[,;/|]+/).map(s => s.trim()).filter(Boolean);
+  document.querySelectorAll('.sg-genre').forEach(cb => {
+    cb.checked = parts.some(p => p.toLowerCase() === String(cb.value).toLowerCase());
+  });
+  try { if (typeof syncPublishGenres === 'function') syncPublishGenres(); } catch (e) {}
+
+  // платформы
+  let plats = game.platforms;
+  if (typeof plats === 'string') {
+    try { plats = JSON.parse(plats); } catch (e) { plats = String(plats).split(/[,;]+/); }
+  }
+  if (Array.isArray(plats)) {
+    const setP = new Set(plats.map(p => String(p).toLowerCase().trim()));
+    document.querySelectorAll('.sg-platform').forEach(cb => {
+      const v = String(cb.value).toLowerCase();
+      cb.checked = setP.has(v) || [...setP].some(x => x.includes(v) || v.includes(x));
+    });
+  }
+
+  // управление
+  let ctrls = game.controllers;
+  if (typeof ctrls === 'string') {
+    ctrls = ctrls.split(/[,;|]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+  }
+  if (Array.isArray(ctrls) && ctrls.length) {
+    const expanded = new Set();
+    ctrls.forEach(c => {
+      const x = String(c).toLowerCase();
+      if (x === 'full' || x === 'partial' || x === 'supported' || x === 'controller' || x === 'gamepad') {
+        expanded.add('xbox'); expanded.add('playstation'); expanded.add('keyboard');
+      } else expanded.add(x);
+    });
+    document.querySelectorAll('.sg-ctrl').forEach(cb => {
+      const v = String(cb.value).toLowerCase();
+      cb.checked = expanded.has(v) || [...expanded].some(c => c.includes(v) || v.includes(c));
+    });
+  }
+
+  // системные требования (объект или notes/HTML)
+  const normSys = (raw) => {
+    if (raw == null || raw === '') return null;
+    let obj = raw;
+    if (typeof raw === 'string') {
+      try { obj = JSON.parse(raw); } catch (e) { return { other: raw }; }
+    }
+    if (obj && typeof obj === 'object') {
+      if (obj.os || obj.processor || obj.memory || obj.gpu || obj.storage) return obj;
+      if (obj.notes) return { other: String(obj.notes) };
+    }
+    return obj;
+  };
+  try {
+    const mn = normSys(game.sys_req_min);
+    const rc = normSys(game.sys_req_rec);
+    if (mn) fillSysReq('#sg-sys-min-fields', mn);
+    if (rc) fillSysReq('#sg-sys-rec-fields', rc);
+  } catch (e) { console.warn('sysreq', e); }
+
+  // языки: ["English"] или [{name,subtitles,audio}]
+  try {
+    let langs = game.languages;
+    if (typeof langs === 'string') {
+      try { langs = JSON.parse(langs); } catch (e) { langs = langs.split(/[,;]+/).map(s => s.trim()).filter(Boolean); }
+    }
+    if (Array.isArray(langs) && langs.length) {
+      if (typeof langs[0] === 'string') {
+        langs = langs.map(name => ({ name, subtitles: true, audio: true }));
+      }
+      renderLangTable('#sg-lang-table', langs);
+    }
+  } catch (e) { console.warn('lang', e); }
+
+  // медиа
+  if (files.cover) {
+    set('sg-cover-url', files.cover);
+    setPreview('sg-cover-preview', files.cover, 'sg-cover-name', 'обложка из пакета');
+  }
+  if (files.banner) {
+    set('sg-banner-url', files.banner);
+    setPreview('sg-banner-preview', files.banner, 'sg-banner-name', 'баннер из пакета');
+  }
+  if (files.logo) {
+    set('sg-logo-url', files.logo);
+    setPreview('sg-logo-preview', files.logo, 'sg-logo-name', 'логотип из пакета');
+  }
+  if (files.icon) {
+    set('sg-icon-url', files.icon);
+    setPreview('sg-icon-preview', files.icon, 'sg-icon-name', 'иконка из пакета');
+  }
+
+  // скриншоты
+  window.__importedGamePack = data;
+  let shotUrls = [];
+  if (files.screenshots && files.screenshots.length) shotUrls = files.screenshots.slice();
+  else if (data.manifest && Array.isArray(data.manifest.screenshots)) shotUrls = data.manifest.screenshots.slice();
+  // только реальные URL/пути
+  shotUrls = shotUrls.filter(u => !!u && String(u).length > 3);
+  if (shotUrls.length) {
+    let box = document.getElementById('sg-screenshots-urls');
+    if (!box) {
+      box = document.createElement('input');
+      box.type = 'hidden';
+      box.id = 'sg-screenshots-urls';
+      box.name = 'screenshot_urls';
+      (document.getElementById('submit-game-form') || document.body).appendChild(box);
+    }
+    // нормализуем пути (без ведущего /)
+    shotUrls = shotUrls.map(u => String(u).replace(/^\//, ''));
+    box.value = shotUrls.join('\n');
+    const prevBox = document.getElementById('sg-shots-preview');
+    if (prevBox) {
+      prevBox.style.display = 'flex';
+      prevBox.style.flexWrap = 'wrap';
+      prevBox.style.gap = '6px';
+      prevBox.innerHTML = shotUrls.slice(0, 12).map(u => {
+        const src = (u.startsWith('http') || u.startsWith('uploads/') || u.startsWith('/')) ? u : u;
+        return '<div class="pub-shot-item" title="' + escapeHtml(src) + '" style="background-image:url(\'' + String(src).replace(/'/g, '%27') + '\');background-size:cover;background-position:center;width:72px;height:48px;border-radius:6px;display:inline-block;border:1px solid rgba(255,255,255,0.12)"></div>';
+      }).join('');
+    }
+    console.log('[import] screenshots', shotUrls.length, shotUrls);
+  } else {
+    console.warn('[import] no screenshots in pack', data.files, data.manifest && data.manifest.files);
+  }
+
+  // трейлеры: video_url или первый movie
+  const movies = data.movies || (data.manifest && data.manifest.movies) || [];
+  let videoSet = game.video_url || '';
+  if (!videoSet && movies.length) {
+    const first = movies[0];
+    videoSet = first.url || first.source_url || first.mp4 || first.file || '';
+  }
+  try { ensureTrailersEditorUi(); } catch (e) {}
+  const allTrailers = [];
+  if (videoSet) allTrailers.push(videoSet);
+  movies.forEach(m => {
+    const u = m.url || m.source_url || m.mp4 || m.file || '';
+    if (u && !allTrailers.includes(u)) allTrailers.push(u);
+  });
+  renderTrailersEditor(allTrailers.length ? allTrailers : ['']);
+  if (allTrailers.length) set('sg-video', serializeTrailerList(allTrailers));
+  // локальные mp4 трейлеры — сохраняем список для submit
+  const localTrailers = (files.trailers || []).concat(
+    movies.map(m => m.file || m.url).filter(u => u && String(u).startsWith('uploads/'))
+  );
+  if (localTrailers.length) {
+    let hid = document.getElementById('sg-trailer-urls');
+    if (!hid) {
+      hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.id = 'sg-trailer-urls';
+      hid.name = 'trailer_urls';
+      const form = document.getElementById('submit-game-form') || document.getElementById('submit-form-modal');
+      if (form) form.appendChild(hid);
+    }
+    hid.value = [...new Set(localTrailers)].join('\n');
+  }
+
+  const nShots = shotUrls ? shotUrls.length : 0;
+  const hasSys = !!(game.sys_req_min && (game.sys_req_min.os || game.sys_req_min.other || game.sys_req_min.notes));
+  const nLang = Array.isArray(game.languages) ? game.languages.length : 0;
+  toast('Импорт: скринов ' + nShots + ', языков ' + nLang + (videoSet ? ', трейлер ✓' : ', без трейлера'));
+}
+
+
+function ensureImportPackInput() {
+  let input = document.getElementById('sg-import-pack');
+  if (input) return input;
+  input = document.createElement('input');
+  input.type = 'file';
+  input.id = 'sg-import-pack';
+  input.accept = '.zip,application/zip';
+  input.hidden = true;
+  document.body.appendChild(input);
+  return input;
+}
+
+async function handleImportPackFile(file, btn) {
+  if (!file) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Импорт…'; }
+  try {
+    toast('Импорт пакета…');
+    const data = await importGamePackFile(file);
+    applyGamePackToSubmitForm(data);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'Ошибка импорта');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Импорт'; }
+  }
+}
+
+function bindSubmitPackImport() {
+  if (window.__importPackDelegated) return;
+  window.__importPackDelegated = true;
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('#sg-import-pack-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const input = ensureImportPackInput();
+    // защита от ghost-click на backdrop модалки
+    window.__pubFileDialogOpen = true;
+    window.__pubFileDialogTs = Date.now();
+    setTimeout(() => { window.__pubFileDialogOpen = false; }, 1200);
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      await handleImportPackFile(file, btn);
+    };
+    input.click();
+  }, true);
+}
+
+// ===== Модалка прогресса экспорта =====
+function ensureExportProgressModal() {
+  let modal = document.getElementById('export-progress-modal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'export-progress-modal';
+  modal.className = 'submit-modal hidden';
+  modal.innerHTML = `
+    <div class="submit-modal-backdrop" id="export-progress-backdrop"></div>
+    <div class="submit-modal-box" style="max-width:520px">
+      <div class="submit-modal-head">
+        <h2 style="margin:0;font-size:1.05rem">Экспорт пакета</h2>
+        <button type="button" class="modal-close" id="export-progress-close" aria-label="Закрыть">×</button>
+      </div>
+      <div style="padding:14px 16px 18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px">
+          <span id="export-progress-label" style="font-size:0.85rem;color:var(--text-muted)">Подготовка…</span>
+          <span id="export-progress-pct" style="font-weight:700;font-variant-numeric:tabular-nums">0%</span>
+        </div>
+        <div style="height:10px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden">
+          <div id="export-progress-bar" style="height:100%;width:0%;background:var(--accent,#ef5b2c);transition:width .2s ease"></div>
+        </div>
+        <div id="export-progress-console" style="margin-top:14px;height:220px;overflow:auto;background:#0d0c0b;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;color:#c8f5c0"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#export-progress-close')?.addEventListener('click', () => {
+    if (modal.dataset.busy === '1') return;
+    modal.classList.add('hidden');
+  });
+  modal.querySelector('#export-progress-backdrop')?.addEventListener('click', () => {
+    if (modal.dataset.busy === '1') return;
+    modal.classList.add('hidden');
+  });
+  return modal;
+}
+
+function exportProgressReset() {
+  const modal = ensureExportProgressModal();
+  const bar = document.getElementById('export-progress-bar');
+  const pct = document.getElementById('export-progress-pct');
+  const label = document.getElementById('export-progress-label');
+  const cons = document.getElementById('export-progress-console');
+  if (bar) bar.style.width = '0%';
+  if (pct) pct.textContent = '0%';
+  if (label) label.textContent = 'Подготовка…';
+  if (cons) cons.innerHTML = '';
+  modal.dataset.busy = '1';
+  modal.classList.remove('hidden');
+  return modal;
+}
+
+function exportProgressLog(msg, pct) {
+  const cons = document.getElementById('export-progress-console');
+  const bar = document.getElementById('export-progress-bar');
+  const pctEl = document.getElementById('export-progress-pct');
+  const label = document.getElementById('export-progress-label');
+  if (cons && msg != null && msg !== '') {
+    const line = document.createElement('div');
+    line.textContent = msg;
+    cons.appendChild(line);
+    cons.scrollTop = cons.scrollHeight;
+  }
+  if (typeof pct === 'number' && !Number.isNaN(pct)) {
+    const p = Math.max(0, Math.min(100, pct));
+    if (bar) bar.style.width = p + '%';
+    if (pctEl) pctEl.textContent = p + '%';
+  }
+  if (label && msg) {
+    const short = String(msg).replace(/^\s*→\s*/, '').slice(0, 64);
+    label.textContent = short;
+  }
+}
+
+async function runGamePackExport(gameId) {
+  const modal = exportProgressReset();
+  exportProgressLog('$ export game #' + gameId, 1);
+  try {
+    const url = 'api/game_pack.php?action=export&stream=1&game_id=' + encodeURIComponent(gameId) + '&_t=' + Date.now();
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok || !res.body) {
+      let msg = 'Ошибка экспорта (' + res.status + ')';
+      try { const j = await res.json(); if (j.error) msg = j.error; } catch (e) {}
+      throw new Error(msg);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buf = '';
+    let token = null;
+    let filename = 'game-pack-' + gameId + '.zip';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        const s = line.trim();
+        if (!s) continue;
+        let row;
+        try { row = JSON.parse(s); } catch (e) {
+          exportProgressLog(s);
+          continue;
+        }
+        if (row.error && row.ok === false) throw new Error(row.error);
+        if (row.msg) exportProgressLog(row.msg, typeof row.pct === 'number' ? row.pct : undefined);
+        else if (typeof row.pct === 'number') exportProgressLog(null, row.pct);
+        if (row.token) token = row.token;
+        if (row.filename) filename = row.filename;
+        if (row.phase === 'done' && row.ok) {
+          exportProgressLog('Скачивание ' + filename + '…', 100);
+        }
+      }
+    }
+    if (!token) throw new Error('Сервер не вернул token пакета');
+    exportProgressLog('Загрузка ZIP…', 100);
+    const dl = await fetch('api/game_pack.php?action=export_download&token=' + encodeURIComponent(token) + '&filename=' + encodeURIComponent(filename), { credentials: 'same-origin' });
+    if (!dl.ok) throw new Error('Не удалось скачать ZIP');
+    const blob = await dl.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    exportProgressLog('Готово ✓', 100);
+    toast('Пакет скачан');
+    modal.dataset.busy = '0';
+  } catch (err) {
+    exportProgressLog('ERROR: ' + (err.message || err), undefined);
+    toast(err.message || 'Не удалось экспортировать');
+    modal.dataset.busy = '0';
+  }
+}
+
 function initSubmitGame() {
+  try { bindSubmitPackImport(); } catch (e) { console.warn(e); }
   // Делегирование: работает даже если кнопку перерисуют и если другие init упали раньше
   if (!window.__submitGameDelegated) {
     window.__submitGameDelegated = true;
@@ -7777,6 +8174,7 @@ function initSubmitGame() {
       $('#submit-rules-modal')?.classList.add('hidden');
       const formModal = $('#submit-form-modal');
       if (formModal) {
+        try { resetPublishFormMode(); } catch (e) {}
         try { renderLangTable('#sg-lang-table', []); } catch (err) { console.warn(err); }
         formModal.classList.remove('hidden');
         const fillBtn = $('#sg-steam-fill');
@@ -7784,10 +8182,10 @@ function initSubmitGame() {
           fillBtn.dataset.bound = '1';
           fillBtn.addEventListener('click', fillSubmitFromSteam);
         }
-        try { initPublishFilePreviews(formModal); initPublishPriceInput(); initPublishRte(); } catch (e) {}
+        try { initPublishFilePreviews(formModal); initPublishPriceInput(); initPublishRte(); ensureTrailersEditorUi(); renderTrailersEditor(['']); } catch (e) {}
         try {
-          const pending = window.__pendingPublishPublishers;
-          fillPublishPublisherSelect(pending).then(() => {
+          window.__myPublishersCache = { list: null, ts: 0 };
+          fillPublishPublisherSelect(null).then(() => {
             try { initCatioSelects(formModal); } catch (e2) {}
           }).catch((err) => {
             console.warn(err);
@@ -7834,6 +8232,7 @@ function initSubmitGame() {
     send.addEventListener('click', submitGameForm);
   }
 }
+
 
 async function fillSubmitFromSteam() {
   const input = $('#sg-steam-url');
@@ -7907,6 +8306,7 @@ function resetPublishModalMode() {
   window.__adminModeratingId = null;
   const formModal = $('#submit-form-modal');
   const h2 = formModal && formModal.querySelector('.pub-modal-head h2, .submit-modal-head h2');
+  try { resetPublishFormMode(); } catch (e) {}
   if (h2) h2.textContent = 'Публикация игры';
   const sub = formModal && formModal.querySelector('.pub-modal-sub');
   if (sub) sub.textContent = 'Заполните карточку игры — жанры, медиа, требования и описание';
@@ -7922,9 +8322,13 @@ function resetPublishModalMode() {
 async function submitGameForm() {
   const btn = $('#submit-game-send');
   const isAdminPub = !!(btn && btn.dataset.adminPublish === '1' && window.__adminModeratingId);
-  if (btn) { btn.disabled = true; btn.textContent = isAdminPub ? 'Публикация...' : 'Отправка...'; }
+  const isAdminSave = !!(btn && btn.dataset.adminSave === '1' && window.__adminModeratingId);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = isAdminPub ? 'Публикация...' : (isAdminSave ? 'Сохранение...' : 'Отправка...');
+  }
   try {
-    if (isAdminPub) {
+    if (isAdminPub || isAdminSave) {
       const id = window.__adminModeratingId;
       const fd = new FormData();
       fd.append('csrf_token', window.CSRF_TOKEN || '');
@@ -7936,17 +8340,22 @@ async function submitGameForm() {
       fd.append('price', String(parseInt(String(($('#sg-price') && $('#sg-price').value) || '0').replace(/[^\d]/g, ''), 10) || 0));
       fd.append('short_description', ($('#sg-short') && $('#sg-short').value) || '');
       fd.append('description', ($('#sg-desc') && $('#sg-desc').value) || '');
-      fd.append('video_url', ($('#sg-video') && $('#sg-video').value) || '');
+      try { ensureTrailersEditorUi(); } catch (e) {}
+      const tr = (typeof collectTrailerInputs === 'function') ? collectTrailerInputs() : [];
+      fd.append('video_url', (typeof serializeTrailerList === 'function' ? serializeTrailerList(tr) : '') || ($('#sg-video') && $('#sg-video').value) || '');
       fd.append('developer', ($('#sg-developer') && $('#sg-developer').value) || '');
       fd.append('publisher', ($('#sg-publisher') && $('#sg-publisher').value) || '');
+      fd.append('publisher_id', ($('#sg-publisher-id') && $('#sg-publisher-id').value) || '');
       fd.append('sys_req_min', JSON.stringify(collectSysReq('#sg-sys-min-fields')));
       fd.append('sys_req_rec', JSON.stringify(collectSysReq('#sg-sys-rec-fields')));
       fd.append('languages', JSON.stringify(collectLanguages('#sg-lang-table')));
       fd.append('controllers', $$('.sg-ctrl').filter(function(c){return c.checked;}).map(function(c){return c.value;}).join(','));
       const aCover = $('#sg-cover') && $('#sg-cover').files && $('#sg-cover').files[0];
       if (aCover) fd.append('cover', aCover);
+      if ($('#sg-cover-url') && $('#sg-cover-url').value) fd.append('cover_url', $('#sg-cover-url').value);
       const aBanner = $('#sg-banner') && $('#sg-banner').files && $('#sg-banner').files[0];
       if (aBanner) fd.append('banner', aBanner);
+      if ($('#sg-banner-url') && $('#sg-banner-url').value) fd.append('banner_url', $('#sg-banner-url').value);
       const aLogo = $('#sg-logo') && $('#sg-logo').files && $('#sg-logo').files[0];
       if (aLogo) fd.append('logo', aLogo);
       const aIcon = $('#sg-icon') && $('#sg-icon').files && $('#sg-icon').files[0];
@@ -7956,12 +8365,18 @@ async function submitGameForm() {
       let res = await fetch(SUBMIT_API + '?action=admin_save', { method: 'POST', body: fd });
       let data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Не удалось сохранить');
-      res = await postJSON(SUBMIT_API + '?action=publish', { csrf_token: window.CSRF_TOKEN || '', id: id });
-      if (!res.ok) throw new Error(res.error || 'Не удалось опубликовать');
-      toast('Игра опубликована');
+      if (isAdminPub) {
+        res = await postJSON(SUBMIT_API + '?action=publish', { csrf_token: window.CSRF_TOKEN || '', id: id });
+        if (!res.ok) throw new Error(res.error || 'Не удалось опубликовать');
+        toast('Игра опубликована');
+        try { loadAdminPending(); } catch (e) {}
+      } else {
+        toast('Сохранено');
+        try { if (typeof loadGamePage === 'function') loadGamePage(+id); } catch (e) {}
+      }
       if ($('#submit-form-modal')) $('#submit-form-modal').classList.add('hidden');
-      resetPublishModalMode();
-      loadAdminPending();
+      try { resetPublishFormMode(); } catch (e) {}
+      try { resetPublishModalMode(); } catch (e) {}
       homeCache = null;
       storeCache = [];
       return;
@@ -7977,7 +8392,9 @@ async function submitGameForm() {
     fd.append('price', String(parseInt(String($('#sg-price')?.value || '0').replace(/[^\d]/g, ''), 10) || 0));
     fd.append('short_description', $('#sg-short')?.value || '');
     fd.append('description', $('#sg-desc')?.value || '');
-    fd.append('video_url', $('#sg-video')?.value || '');
+    try { ensureTrailersEditorUi(); } catch(e) {}
+    const _tr = collectTrailerInputs();
+    fd.append('video_url', serializeTrailerList(_tr) || ($('#sg-video')?.value || ''));
     fd.append('developer', $('#sg-developer')?.value || '');
     fd.append('publisher', $('#sg-publisher')?.value || '');
     fd.append('publisher_id', $('#sg-publisher-id')?.value || '');
@@ -7988,6 +8405,12 @@ async function submitGameForm() {
     fd.append('platforms', plats);
     if ($('#sg-cover-url')?.value) fd.append('cover_url', $('#sg-cover-url').value);
     if ($('#sg-banner-url')?.value) fd.append('banner_url', $('#sg-banner-url').value);
+    if ($('#sg-icon-url')?.value) fd.append('icon_url', $('#sg-icon-url').value);
+    if ($('#sg-logo-url')?.value) fd.append('logo_url', $('#sg-logo-url').value);
+    if ($('#sg-screenshots-urls')?.value) fd.append('screenshot_urls', $('#sg-screenshots-urls').value);
+    if ($('#sg-trailer-urls')?.value) fd.append('trailer_urls', $('#sg-trailer-urls').value);
+    if ($('#sg-logo-url')?.value) fd.append('logo_url', $('#sg-logo-url').value);
+    if ($('#sg-icon-url')?.value) fd.append('icon_url', $('#sg-icon-url').value);
     fd.append('sys_req_min', JSON.stringify(collectSysReq('#sg-sys-min-fields')));
     fd.append('sys_req_rec', JSON.stringify(collectSysReq('#sg-sys-rec-fields')));
     fd.append('languages', JSON.stringify(collectLanguages('#sg-lang-table')));
@@ -8025,6 +8448,7 @@ async function submitGameForm() {
   }
 }
 
+
 function initAdminUI() {
   const view = $('#view-admin');
   if (!view || view.dataset.boundAdmin === '1') return;
@@ -8061,6 +8485,7 @@ function initAdminUI() {
   window.loadSgdbAssetsGlobal = (t) => loadSgdbAssets(t || 'icons');
   window.openSteamModal = openSteamModal;
   window.closeSteamModal = closeSteamModal;
+
 
   function openSteamModal() {
     if (typeof resetSteamModalToImportMode === 'function') resetSteamModalToImportMode();
@@ -8238,7 +8663,7 @@ function initAdminUI() {
     else if (type === 'heroes' || type === 'banner') payload.banner_url = url;
     else if (type === 'grids' || type === 'cover') payload.cover_url = url;
     else return null;
-    const res = await postJSON(`${STEAM_API}?action=update_assets`, payload, FETCH_TIMEOUT_LONG);
+    const res = await saveGameAssetsSelection(payload);
     if (!res.ok) throw new Error(res.error || 'Не удалось сохранить ассет');
     return res;
   }
@@ -8265,7 +8690,7 @@ function initAdminUI() {
     const old = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Сохранение…'; }
     try {
-      const res = await postJSON(`${STEAM_API}?action=update_assets`, payload, FETCH_TIMEOUT_LONG);
+      const res = await saveGameAssetsSelection(payload);
       if (!res.ok) throw new Error(res.error || 'Ошибка сохранения');
       window.__mediaBust = Date.now();
       window.__iconBust = window.__mediaBust;
@@ -8311,7 +8736,7 @@ function initAdminUI() {
       renderSgdbGrid(sgdbCache[type], type);
       return;
     }
-    grid.innerHTML = '<div class="loading">Загрузка SteamGridDB...</div>';
+    grid.innerHTML = '<div class="loading">Загрузка CATioGridDB...</div>';
     try {
       const data = await fetchJSON(`${API_BASE}?action=sgdb_assets&appid=${steamAppId}&type=${encodeURIComponent(type)}`, { timeout: FETCH_TIMEOUT_LONG });
       if (!data.ok) {
@@ -8443,7 +8868,7 @@ function initAdminUI() {
     if (btn) { btn.disabled = true; btn.textContent = isEdit ? 'Сохранение...' : 'Импорт...'; }
     try {
       if (isEdit) {
-        const data = await postJSON(`${API_BASE}?action=update_assets`, {
+        const data = await saveGameAssetsSelection( {
           game_id: window.__steamEditGameId,
           icon_url: steamSelected.icon_url || $('#steam-sel-icon')?.value || '',
           cover_url: steamSelected.cover_url || $('#steam-sel-cover')?.value || '',
@@ -8529,6 +8954,9 @@ async function openAdminGame(id) {
     const data = await fetchJSON(`${SUBMIT_API}?action=get&id=${id}`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     const g = data.game;
+    // основная форма = публикация
+    await openPublishFormForGame(g, { moderate: true });
+    // ниже — синхронизация старой боковой панели (если есть)
     $('#admin-empty')?.classList.add('hidden');
     const form = $('#admin-game-form');
     form?.classList.remove('hidden');
@@ -8615,6 +9043,7 @@ async function openAdminGame(id) {
       }
     } catch (e) { console.warn(e); }
 
+
     // Сброс файлов и превью от предыдущей игры
     const coverInput = $('#admin-cover');
     const bannerInput = $('#admin-banner');
@@ -8658,6 +9087,7 @@ async function openAdminGame(id) {
     toast(err.message);
   }
 }
+
 
 async function loadAdminUsers() {
   const list = $('#admin-users-list');
@@ -8935,6 +9365,86 @@ function initAdminPanel() {
 }
 
 // ---------- Галерея: видео (трейлеры) + скриншоты ----------
+
+/** Несколько трейлеров: JSON-массив строк или через перевод строки */
+function parseTrailerList(raw) {
+  if (raw == null || raw === '') return [];
+  if (Array.isArray(raw)) return raw.map(String).map(s => s.trim()).filter(Boolean);
+  const s = String(raw).trim();
+  if (!s) return [];
+  if (s.startsWith('[')) {
+    try {
+      const j = JSON.parse(s);
+      if (Array.isArray(j)) {
+        return j.map(x => {
+          if (typeof x === 'string') return x.trim();
+          if (x && typeof x === 'object') return String(x.url || x.src || x.mp4 || x.source_url || '').trim();
+          return '';
+        }).filter(Boolean);
+      }
+    } catch (e) {}
+  }
+  return s.split(/\r?\n+/).map(x => x.trim()).filter(Boolean);
+}
+function serializeTrailerList(list) {
+  const arr = (list || []).map(s => String(s).trim()).filter(Boolean);
+  return arr.length ? JSON.stringify(arr) : '';
+}
+function collectTrailerInputs() {
+  const box = document.getElementById('sg-trailers-list');
+  if (!box) {
+    const single = document.getElementById('sg-video');
+    return single && single.value.trim() ? [single.value.trim()] : [];
+  }
+  return [...box.querySelectorAll('input.sg-trailer-url')]
+    .map(i => i.value.trim())
+    .filter(Boolean);
+}
+function renderTrailersEditor(urls) {
+  const box = document.getElementById('sg-trailers-list');
+  if (!box) return;
+  const list = (urls && urls.length) ? urls : [''];
+  box.innerHTML = list.map((u, i) => `
+    <div class="sg-trailer-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input class="auth-input sg-trailer-url" type="url" placeholder="https://… mp4 / m3u8 / youtube / steam" value="${escapeHtml(u)}" style="flex:1" />
+      <button type="button" class="hp-btn-edit sg-trailer-del" title="Удалить" ${list.length < 2 ? 'disabled' : ''}>×</button>
+    </div>`).join('');
+  box.querySelectorAll('.sg-trailer-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rows = [...box.querySelectorAll('.sg-trailer-row')];
+      if (rows.length <= 1) return;
+      btn.closest('.sg-trailer-row')?.remove();
+    });
+  });
+  // sync hidden
+  const hid = document.getElementById('sg-video');
+  if (hid) hid.value = serializeTrailerList(collectTrailerInputs());
+  box.querySelectorAll('input.sg-trailer-url').forEach(inp => {
+    inp.addEventListener('input', () => {
+      if (hid) hid.value = serializeTrailerList(collectTrailerInputs());
+    });
+  });
+}
+function ensureTrailersEditorUi() {
+  const host = document.getElementById('sg-trailers-wrap');
+  if (!host) return;
+  if (!document.getElementById('sg-trailers-list')) {
+    host.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <span style="font-size:0.85rem;opacity:0.85">Трейлеры (несколько ссылок)</span>
+        <button type="button" class="hp-btn-edit" id="sg-trailer-add" type="button">+ ссылка</button>
+      </div>
+      <div id="sg-trailers-list"></div>
+      <input type="hidden" name="video_url" id="sg-video" value="" />
+      <div class="settings-hint" style="margin-top:6px">mp4, webm, HLS (.m3u8), YouTube. Steam CDN часто отдаёт HLS — плеер подхватит через hls.js.</div>`;
+    document.getElementById('sg-trailer-add')?.addEventListener('click', () => {
+      const cur = collectTrailerInputs();
+      cur.push('');
+      renderTrailersEditor(cur);
+    });
+  }
+}
+
 function youtubeIdFromUrl(url) {
   if (!url) return null;
   const m = String(url).match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/i);
@@ -8955,6 +9465,17 @@ function loadHlsJs() {
   return _hlsScriptPromise;
 }
 
+function showTrailerFallback(box, src, thumb) {
+  const safe = escapeHtml(src || '');
+  const th = thumb ? `<img src="${escapeHtml(thumb)}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.55" />` : '';
+  box.innerHTML = `<div style="position:relative;width:100%;height:100%;background:#000;display:flex;align-items:center;justify-content:center">
+    ${th}
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;text-align:center">
+      <div style="color:#fff;font-weight:600">Трейлер</div>
+      <a class="hp-btn-edit" href="${safe}" target="_blank" rel="noopener" style="text-decoration:none">Открыть видео</a>
+    </div>
+  </div>`;
+}
 function setGalleryMain(wrap, type, src, thumb, fallbacks) {
   const box = $('#gallery-main', wrap) || $('.gp-gallery-main', wrap);
   if (!box) return;
@@ -8980,9 +9501,7 @@ function setGalleryMain(wrap, type, src, thumb, fallbacks) {
       let idx = 0;
       const tryPlay = async () => {
         if (idx >= queue.length) {
-          if (thumb) {
-            box.innerHTML = `<img id="gallery-main-img" src="${escapeHtml(thumb)}" alt="Трейлер недоступен" />`;
-          }
+          showTrailerFallback(box, src, thumb);
           return;
         }
         const safeSrc = queue[idx++];
@@ -9032,7 +9551,9 @@ function setGalleryMain(wrap, type, src, thumb, fallbacks) {
                 if (data && data.fatal) {
                   try { hls.destroy(); } catch (e) {}
                   wrap._hls = null;
-                  tryPlay();
+                  // CORS/Steam CDN — пробуем следующий URL, иначе кнопка «открыть»
+                  if (idx < queue.length) tryPlay();
+                  else showTrailerFallback(box, safeSrc, thumb);
                 }
               });
               return;
@@ -9779,8 +10300,107 @@ function initCartUI() {
   });
 }
 
+
+
+function bindPublisherLineClicks(el) {
+  if (!el) return;
+  el.querySelectorAll('.hp-publisher-link').forEach(b => {
+    if (b.dataset.bound === '1') return;
+    b.dataset.bound = '1';
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = +b.dataset.id;
+      if (id) openPublisherPage(id, b.dataset.slug || '');
+    });
+  });
+}
+
+/** Мгновенно рисует/прячет строку издательства (без сети). */
+function renderPublisherLine(el, pubs) {
+  if (!el) return;
+  if (!pubs || !pubs.length) {
+    el.innerHTML = '';
+    el.hidden = true;
+    el.setAttribute('hidden', '');
+    el.style.display = 'none';
+    return;
+  }
+  el.innerHTML = pubs.map(p =>
+    '<button type="button" class="hp-publisher-link" data-id="' + p.id + '" data-slug="' + escapeHtml(p.slug || '') + '">' +
+      escapeHtml(p.name) +
+    '</button>'
+  ).join('<span class="hp-publisher-sep">·</span>');
+  el.hidden = false;
+  el.removeAttribute('hidden');
+  el.style.display = 'flex';
+  el.style.visibility = 'visible';
+  el.style.opacity = '1';
+  bindPublisherLineClicks(el);
+}
+
+/**
+ * Загружает издательство для userId.
+ * При смене userId сразу очищает строку, чтобы не светилось чужое.
+ */
+async function loadProfilePublishers(userId, lineEl) {
+  const el = lineEl || document.getElementById('hp-publisher-line');
+  if (!el || !userId) return;
+  const uid = +userId;
+  if (!uid) return;
+
+  const prev = +(el.dataset.forUser || 0);
+  el.dataset.forUser = String(uid);
+  // смена пользователя → сразу убираем чужое/моё, пока не пришёл ответ
+  if (prev && prev !== uid) {
+    renderPublisherLine(el, []);
+  }
+
+  const token = ++window.__pubLineToken;
+
+  try {
+    const data = await fetchJSON(PUB_API + '?action=for_user&user_id=' + uid + '&_t=' + Date.now());
+    if (token !== window.__pubLineToken) return;
+    if (+(el.dataset.forUser || 0) !== uid) return;
+
+    const all = (data && Array.isArray(data.publishers)) ? data.publishers : [];
+    let pref = data ? data.display_publisher_id : null;
+    if (pref === 'hide' || pref === false || pref === '0') pref = 0;
+    if (pref !== null && pref !== undefined && pref !== '') pref = Number(pref);
+
+    let show = [];
+    if (pref === 0) {
+      show = [];
+    } else if (pref > 0) {
+      const one = all.find(p => +p.id === +pref);
+      show = one ? [one] : [];
+    } else {
+      show = all.length ? [all[0]] : [];
+    }
+    renderPublisherLine(el, show);
+  } catch (e) {
+    console.warn('loadProfilePublishers', e);
+  }
+}
+
+/** Скрыть/показать боковую карточку целиком */
+function setSideCardVisible(bodyEl, visible) {
+  if (!bodyEl) return;
+  const card = bodyEl.closest ? bodyEl.closest('.hp-side-card') : null;
+  if (!card) return;
+  card.style.display = visible ? '' : 'none';
+}
+
+
+window.renderPublisherLine = renderPublisherLine;
+window.loadProfilePublishers = loadProfilePublishers;
+window.setSideCardVisible = setSideCardVisible;
+if (typeof bindPublisherLineClicks === 'function') window.bindPublisherLineClicks = bindPublisherLineClicks;
+
+
 document.addEventListener('DOMContentLoaded', () => {
   // Сначала кнопка «+», чтобы сбой других init её не убил
+
 
 /* ===== Издательства / меню создания ===== */
 window.__pubMembersSelected = [];
@@ -10008,34 +10628,32 @@ window.__pendingPublishPublishers = null;
 
 async function fetchMyPublishers(force) {
   const now = Date.now();
-  if (!force && Array.isArray(window.__myPublishersCache.list) && (now - window.__myPublishersCache.ts) < 15000) {
+  if (!force && Array.isArray(window.__myPublishersCache.list) && window.__myPublishersCache.list.length && (now - window.__myPublishersCache.ts) < 15000) {
     return window.__myPublishersCache.list;
   }
   let pubs = [];
+  const api = (typeof PUB_API !== 'undefined' ? PUB_API : 'api/publishers.php');
   try {
-    const data = await fetchJSON(PUB_API + '?action=mine&_t=' + now);
-    if (data && data.ok === false) {
-      console.warn('mine error', data.error);
-    }
+    const data = await fetchJSON(api + '?action=mine&_t=' + now);
+    console.log('[publishers] mine', data);
+    if (data && data.ok === false) console.warn('mine error', data.error);
     pubs = (data && Array.isArray(data.publishers)) ? data.publishers : [];
   } catch (e) {
     console.warn('fetchMyPublishers mine', e);
   }
-  // fallback: for_user по текущему id (если mine пустой/упал, а membership есть)
   if (!pubs.length) {
     try {
       const me = window.AUTH_STATE && window.AUTH_STATE.user;
       if (me && me.id) {
-        const fu = await fetchJSON(PUB_API + '?action=for_user&user_id=' + me.id + '&_t=' + now);
+        const fu = await fetchJSON(api + '?action=for_user&user_id=' + me.id + '&_t=' + now);
+        console.log('[publishers] for_user', fu);
         pubs = (fu && Array.isArray(fu.publishers)) ? fu.publishers : [];
       }
     } catch (e2) {
       console.warn('fetchMyPublishers for_user', e2);
     }
   }
-  if (pubs.length) {
-    window.__myPublishersCache = { list: pubs, ts: now };
-  }
+  window.__myPublishersCache = { list: pubs, ts: now };
   return pubs;
 }
 
@@ -10080,29 +10698,70 @@ function applyPublisherOptionsToSelect(sel, pubs, prefer) {
 
 async function fillPublishPublisherSelect(preloaded) {
   const formModal = document.getElementById('submit-form-modal');
-  const sel = (formModal && formModal.querySelector('#sg-publisher-id'))
+  let sel = (formModal && formModal.querySelector('#sg-publisher-id'))
     || document.getElementById('sg-publisher-id')
     || document.querySelector('select[name="publisher_id"]');
   if (!sel) {
-    console.warn('fillPublishPublisherSelect: select not found');
+    console.warn('fillPublishPublisherSelect: #sg-publisher-id не найден');
     return;
   }
-  const cur = sel.value;
-  let pubs = Array.isArray(preloaded) ? preloaded : null;
-  if (!pubs || !pubs.length) {
-    if (Array.isArray(window.__pendingPublishPublishers) && window.__pendingPublishPublishers.length) {
-      pubs = window.__pendingPublishPublishers;
+  // native select only
+  try {
+    const wrap = sel.closest('.catio-select');
+    if (wrap && wrap.parentNode) {
+      wrap.parentNode.insertBefore(sel, wrap);
+      wrap.remove();
     }
+  } catch (e) {}
+  sel.style.display = '';
+  sel.classList.remove('select-native-hidden', 'hidden');
+  sel.removeAttribute('hidden');
+
+  const cur = sel.value;
+  let pubs = Array.isArray(preloaded) && preloaded.length ? preloaded.slice() : [];
+
+  // всегда свежий запрос к БД: publishers + publisher_members
+  try {
+    const api = (typeof PUB_API !== 'undefined' ? PUB_API : 'api/publishers.php');
+    const data = await fetchJSON(api + '?action=mine&_t=' + Date.now());
+    if (data && data.ok && Array.isArray(data.publishers)) {
+      pubs = data.publishers;
+    } else if (data && Array.isArray(data.publishers)) {
+      pubs = data.publishers;
+    }
+    if (!pubs.length) {
+      const me = window.AUTH_STATE && window.AUTH_STATE.user;
+      if (me && me.id) {
+        const fu = await fetchJSON(api + '?action=for_user&user_id=' + encodeURIComponent(me.id) + '&_t=' + Date.now());
+        if (fu && Array.isArray(fu.publishers)) pubs = fu.publishers;
+      }
+    }
+  } catch (e) {
+    console.warn('publishers load', e);
   }
-  if (!pubs || !pubs.length) {
-    pubs = await fetchMyPublishers(true);
-  }
+
   window.__pendingPublishPublishers = pubs;
-  applyPublisherOptionsToSelect(sel, pubs, cur);
-  if (!pubs.length) {
-    console.warn('fillPublishPublisherSelect: пустой список издательств');
-    try { toast('Не удалось загрузить ваши издательства — обновите страницу'); } catch (e) {}
+  window.__myPublishersCache = { list: pubs, ts: Date.now() };
+
+  let html = '<option value="">— без издательства —</option>';
+  pubs.forEach(p => {
+    html += '<option value="' + String(p.id) + '">' + escapeHtml(p.name || ('#' + p.id)) + '</option>';
+  });
+  sel.innerHTML = html;
+  if (cur && pubs.some(p => String(p.id) === String(cur))) sel.value = String(cur);
+  else if (pubs.length === 1) sel.value = String(pubs[0].id);
+  else sel.value = '';
+
+  const hid = document.getElementById('sg-publisher');
+  if (hid) {
+    const sync = () => {
+      const p = pubs.find(x => String(x.id) === String(sel.value));
+      hid.value = p ? (p.name || '') : '';
+    };
+    sync();
+    sel.onchange = sync;
   }
+  console.log('[publishers] options=', pubs.length, pubs.map(p => p.name));
 }
 
 async function openPublisherPage(id, slug) {
@@ -10316,6 +10975,11 @@ async function openPublisherPage(id, slug) {
   }
 }
 window.openPublisherPage = openPublisherPage;
+
+// ===== Издательство в профиле =====
+window.__pubLineToken = 0;
+
+
 
   try { initSubmitGame(); } catch (e) { console.error('initSubmitGame', e); }
   try { initCreateMenu(); } catch (e) { console.error('initCreateMenu', e); }

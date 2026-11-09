@@ -1,0 +1,412 @@
+{
+    "format": "itchiolite-game-pack",
+    "version": 1,
+    "exported_at": "2026-11-09T19:31:15+00:00",
+    "source_game_id": 9,
+    "steam_appid": 2406770,
+    "game": {
+        "title": "Bodycam",
+        "slug": "bodycam-s2406770",
+        "short_description": "Bodycam — это первый тактический многопользовательский шутер от первого лица с настоящим обзором с нательной камеры на движке Unreal Engine 5. Ближние бои кажутся резкими и громкими. Каждый ракурс, выноска и пуля имеют значение. Играйте в Deathmatch, Team Deathmatch и Wingman на фотореалистичных.",
+        "description": "<h1>Вышло обновление<\/h1><p><h2 class=\"bb_tag\" > Новая карта: Траншеи<\/h2><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/55919aaf429675d17fa814a333c5f492.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/55919aaf429675d17fa814a333c5f492.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/55919aaf429675d17fa814a333c5f492.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" > Скоро появится совершенно новая карта,<strong>Траншеи<\/strong><\/p><p class=\"bb_paragraph\" >Построенная вокруг сочетания интенсивных ближних боев внутри сети траншей и боёв на дальних дистанциях на открытых пространствах вокруг нее, Trenches представляет собой более крупное поле боя с резким контрастом между ограниченным, хаотичным боем и открытыми линиями обзора на большом расстоянии.<br> <\/p><\/p><br><h1>Об игре<\/h1><h2 class=\"bb_tag\" ><strong><u> <\/u><\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> ПОСМОТРИ БОЙ ЧЕРЕЗ ПРИЗМУ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Bodycam — первый ультрареалистичный многопользовательский шутер от первого лица, созданный для воссоздания интенсивности реального боя. Испытайте тактические перестрелки через объектив нательной камеры, где каждый угол, который вы держите, каждое ваше решение и каждая выпущенная вами пуля могут решить исход. Пропустите чек, и вы заплатите за него. <strong>Нет перекрестия. Нет счетчика патронов. Нет ХУДа.<\/strong> Бесчисленные часы были потрачены на изучение реальных кадров, оптики, движения камеры, сжатия, экспозиции, поведения звука и боевых ситуаций <strong>, чтобы максимально приблизить реализм.<\/strong><\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/bae5489f6a5e4e8dbc62bbb7172cd434.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/bae5489f6a5e4e8dbc62bbb7172cd434.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/bae5489f6a5e4e8dbc62bbb7172cd434.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> НАСТОЯЩЕЕ ЧУВСТВО ОТ ПЕРВОГО ЛИЦА<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><strong> В отличие от традиционных игр FPS<\/strong>, где камера управляет всем происходящим, а плавающие руки <strong>просто прикреплены к экрану<\/strong>, Bodycam использует совершенно другой подход.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Ваши руки, туловище, ноги и оружие <strong>физически связаны.<\/strong> Кроме того, мы разработали технологию <strong>True Body <\/strong>, благодаря которой каждое движение становится более плавным, инстинктивным и естественным. <strong>Поначалу адаптация занимает немного времени<\/strong>, <strong>, но как только он щелкнет, ваше оружие станет продолжением вашего тела, и линия между вами и оператором начнет исчезать.<\/strong><\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Если вы прошли такой бой,<strong>пути назад уже не будет.<\/strong><\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/8e182027f31f9ac3dd98d73ec9bf8dd4.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/8e182027f31f9ac3dd98d73ec9bf8dd4.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/8e182027f31f9ac3dd98d73ec9bf8dd4.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> ОРУЖИЕ, КОТОРОЕ НАСТОЯЩЕЕ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><strong> Каждая перезарядка управляется системой динамической анимации<\/strong> с отдельными состояниями покоя и стресса. <strong>Под давлением ваш персонаж может совершать реалистичные ошибки <\/strong>, торопиться и изо всех сил пытаться завершить перезарядку, как это сделал бы настоящий человек. Вместо того, чтобы каждый раз воспроизводить одну и ту же анимацию, мы создали десятки уникальных вариантов и ошибок перезарядки, благодаря чему каждая перезарядка ощущается по-разному.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/a0fd904062f7d1748a9cbb60d87bfafa.poster.avif?t=1794250615\" width=1170 height=656 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/a0fd904062f7d1748a9cbb60d87bfafa.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/a0fd904062f7d1748a9cbb60d87bfafa.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> РАСШИРЕННАЯ НАСТРОЙКА ОРУЖИЯ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Каждый оператор сражается по-своему. <strong>Ваше оружие тоже должно быть.<\/strong><br>Создайте свое огнестрельное оружие с нуля, используя сотни насадок и <strong>миллиарды возможных комбинаций<\/strong>. Независимо от того, отдаете ли вы предпочтение скорости, стабильности или точности, каждое навесное оборудование меняет ощущения и характеристики вашего оружия, позволяя вам создавать что угодно: от компактных винтовок CQB до высокоточных платформ дальнего действия. <strong>Вы определяете свое оружие.<\/strong><\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/34010516aab013547885db3b00e7a40f.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/34010516aab013547885db3b00e7a40f.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/34010516aab013547885db3b00e7a40f.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> СОВРЕМЕННЫЕ БОЕВЫЕ СРЕДСТВА - FPV ДРОН&amp;RC АВТОМОБИЛЬ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><strong> Современная война изменилась благодаря FPV-дронам.<\/strong> Bodycam точно воссоздает <strong>аутентичное пилотирование FPV<\/strong> с реалистичной физикой полета,<strong>стабилизированным и полностью ручным (Acro) режимами полета<\/strong> и расширенными возможностями настройки, включая скорость, кривые газа и профили полета. Используйте FPV-дроны и разведывательные радиоуправляемые машины, чтобы разведывать позиции противника, собирать разведданные, наносить удары по целям и поддерживать свой отряд.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/65666fd08d8fccf08e210d710e79e13d.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/65666fd08d8fccf08e210d710e79e13d.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/65666fd08d8fccf08e210d710e79e13d.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/bbb19ac72655982f86fa2af8ab00f052.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/bbb19ac72655982f86fa2af8ab00f052.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/bbb19ac72655982f86fa2af8ab00f052.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> ФИЗИЧЕСКИЙ БОЙ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Основанная на передовой процедурной физике, Bodycam оснащена системой <strong>Ragdoll Stumbling <\/strong>, которая позволяет операторам естественным образом терять равновесие, спотыкаться, восстанавливаться и реагировать на окружающую среду. Каждое движение физически обусловлено, что делает бой более динамичным, обоснованным и непредсказуемым.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/89bae5e232dd5540e953dae7396e5c7f.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/89bae5e232dd5540e953dae7396e5c7f.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/89bae5e232dd5540e953dae7396e5c7f.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> МИР БЕЗ МЕНЮ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><strong> Забудьте о полноэкранных меню. Ваш тактический планшет — это ваш командный центр.<\/strong> Мгновенно получайте доступ к своему снаряжению, гаджетам, инвентарю, настройкам и подбору игроков, перемещаясь по тиру Bodycam HUB. Настраивайте свое оружие, тестируйте новые сборки, тренируйтесь в стрельбе, летайте на FPV-дронах или просто проводите время с другими игроками — и все это в единой игровой среде.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/939109191ac9bd3658a39d142e57e7f8.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/939109191ac9bd3658a39d142e57e7f8.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/939109191ac9bd3658a39d142e57e7f8.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> СОЗДАНО ДЛЯ СОРЕВНОВАНИЙ — ПРИВЕДИТЕ СВОЕГО ВИНГМЕНА<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><strong> Wingman — это тактический режим «Поиск 2 на 2».&amp;Режим «Уничтожение» <\/strong>, где связь, позиционирование и точность решают каждый раунд. Здесь нет способностей героя, серий убийств и передвижений. Победа приходит благодаря командной работе, знанию карты и игре в одиночку.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/201de84c231c76ff383c58de6925e440.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/201de84c231c76ff383c58de6925e440.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/201de84c231c76ff383c58de6925e440.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> ОТ КОМАНДНОЙ РАБОТЫ ДО ПОЛНОГО ХАОСА – СЛУЧАЙНЫЕ РЕЖИМЫ ИГРЫ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Нравится ли вам <strong>соревновательный тактический игровой процесс или стремительные перестрелки<\/strong>, Bodycam предлагает разнообразные впечатления. Сражайтесь за каждый раунд в режиме 2 на 2<strong><u> Wingman<\/u><\/strong> и 5 на 5<strong><u> Body Bomb<\/u><\/strong> , прыгайте в хаос<strong><u> Team Deathmatch<\/u><\/strong> ,<strong><u> Deathmatch<\/u><\/strong> ,<strong><u> Hardpoint<\/u><\/strong> и<strong><u> Gun Game<\/u><\/strong> , или выживайте в безжалостных<strong><u> ордах зомби<\/u><\/strong> в кооперативе.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/81104f748a390ecbf8da1793ef54f750.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/81104f748a390ecbf8da1793ef54f750.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/81104f748a390ecbf8da1793ef54f750.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> ВЫЖИТЬ ЗОМБИ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Сражайтесь с безжалостными ордами зараженных в захватывающем <strong>раундовом кооперативном режиме «Зомби <\/strong>» на нескольких уникальных картах. Управляйте своими боеприпасами, исследуйте опасные места, открывайте новые области, восстанавливайте электроэнергию и переживайте <strong>все более смертоносные волны по мере распространения инфекции.<\/strong><\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/a422b20aa0011bd534df37b9f93766f8.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/a422b20aa0011bd534df37b9f93766f8.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/a422b20aa0011bd534df37b9f93766f8.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> ЗАЗЕМЛЕННЫЕ ФОТОРЕАЛИСТИЧЕСКИЕ КАРТЫ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Сражайтесь в высокодетализированной среде <strong>, вдохновленной или воспроизведенной из реальных мест<\/strong>, от зданий CQB и лесов до заброшенных больниц и траншейных сетей.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/fd707d1e8ea72da3e2ef583aba3cf638.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/fd707d1e8ea72da3e2ef583aba3cf638.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/fd707d1e8ea72da3e2ef583aba3cf638.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> АУДИО НОВОГО ПОКОЛЕНИЯ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Усовершенствованная аудиосистема, созданная на основе реализма и погружения. Распространение звука в реальном времени, реалистичная реверберация, окклюзия и пространственный звук позволяют вам услышать поле боя так, как оно действительно разворачивается, превращая каждый звук в тактическое преимущество.<\/p><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><video class=\"bb_img\" autoplay muted loop playsinline poster=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/b0c5b0c7dfce170ef4b88de73dd46bd0.poster.avif?t=1794250615\" width=1170 height=658 ><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/b0c5b0c7dfce170ef4b88de73dd46bd0.webm?t=1794250615\" type=\"video\/webm; codecs=vp9\"><source src=\"https:\/\/shared.akamai.steamstatic.com\/store_item_assets\/steam\/apps\/2406770\/extras\/b0c5b0c7dfce170ef4b88de73dd46bd0.mp4?t=1794250615\" type=\"video\/mp4\"><\/video><\/span><\/p><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" >─────────────────────────────────────────────────────────────────────────<\/h2><p class=\"bb_paragraph\" ><\/p><h2 class=\"bb_tag\" ><strong> РАННИЙ ДОСТУП, ПОСТОЯННО РАЗВИВАЮЩИЙСЯ<\/strong><\/h2><p class=\"bb_paragraph\" ><\/p><p class=\"bb_paragraph\" >Основные обновления продолжают расширять Bodycam новыми технологиями, картами, оружием, системами и улучшениями игрового процесса, созданными на основе отзывов сообщества. <\/p>",
+        "developer": "Reissad",
+        "publisher_name": "",
+        "price": "0.00",
+        "discount_percent": 0,
+        "genre": "Экшены, Инди, Многопользовательские игры, Симуляторы, Стратегии, Ранний доступ",
+        "tags": "",
+        "category": "game",
+        "release_date": null,
+        "platforms": null,
+        "controllers": "xbox,playstation,keyboard",
+        "is_adult": 0,
+        "video_url": null,
+        "sys_req_min": {
+            "os": "Windows 10\/11",
+            "processor": "AMD Ryzen 7 3700X, Intel Core i7-9700K",
+            "memory": "8 GB ОЗУ",
+            "gpu": "AMD Radeon RX 5700 (8 GB), NVIDIA GeForce RTX 2070 (8 GB)",
+            "directx": "",
+            "storage": "50 GB",
+            "sound": "",
+            "other": "Минимальные:\n64-разрядные процессор и операционная система\nСеть: Широкополосное подключение к интернету\nДополнительно: Рекомендуется твердотельный накопитель"
+        },
+        "sys_req_rec": {
+            "os": "Windows 10\/11",
+            "processor": "AMD Ryzen 7 3800X, Intel Core i7-10700K",
+            "memory": "16 GB ОЗУ",
+            "gpu": "AMD Radeon RX 6600 XT (8 GB), NVIDIA GeForce RTX 3060 (12 GB)",
+            "directx": "",
+            "storage": "50 GB",
+            "sound": "",
+            "other": "Рекомендованные:\n64-разрядные процессор и операционная система\nСеть: Широкополосное подключение к интернету\nДополнительно: SSD Recommended"
+        },
+        "languages": [
+            {
+                "name": "английский",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "французский",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "итальянский",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "немецкий",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "испанский — Испания",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "арабский",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "японский",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "корейский",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "русский",
+                "subtitles": true,
+                "audio": true
+            },
+            {
+                "name": "китайский (упр.)",
+                "subtitles": true,
+                "audio": true
+            }
+        ],
+        "cover_url": "uploads\/games\/covers\/g9_cover_2792c328.png",
+        "banner_url": "uploads\/games\/banners\/g9_banner_0ec0a09e.jpg",
+        "icon_url": "uploads\/games\/icons\/g9_icon_c52c08ee.jpg",
+        "logo_url": "uploads\/games\/logos\/g9_logo_da2df49c.png"
+    },
+    "screenshots": [
+        "uploads\/games\/shots\/steam2406770_shot0_02f25878.jpg",
+        "uploads\/games\/shots\/steam2406770_shot1_3317a0a9.jpg",
+        "uploads\/games\/shots\/steam2406770_shot2_4ca41e01.jpg",
+        "uploads\/games\/shots\/steam2406770_shot3_0d13ef44.jpg",
+        "uploads\/games\/shots\/steam2406770_shot4_e18b1580.jpg",
+        "uploads\/games\/shots\/steam2406770_shot5_ac567830.jpg",
+        "uploads\/games\/shots\/steam2406770_shot6_b3cebda1.jpg",
+        "uploads\/games\/shots\/steam2406770_shot7_ead701b7.jpg"
+    ],
+    "movies": [],
+    "files": {
+        "cover": "media\/cover.png",
+        "banner": "media\/banner.jpg",
+        "icon": "media\/icon.jpg",
+        "logo": "media\/logo.png",
+        "screenshots": [
+            "media\/screenshots\/01.jpg",
+            "media\/screenshots\/02.jpg",
+            "media\/screenshots\/03.jpg",
+            "media\/screenshots\/04.jpg",
+            "media\/screenshots\/05.jpg",
+            "media\/screenshots\/06.jpg",
+            "media\/screenshots\/07.jpg",
+            "media\/screenshots\/08.jpg"
+        ],
+        "sgdb": {
+            "icons": [
+                {
+                    "file": "sgdb\/icons\/01.ico",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/icon\/bc6d7e4cd2c1f2bba38d19773d2bc1fc.ico",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/icon\/bc6d7e4cd2c1f2bba38d19773d2bc1fc\/32\/512x512.png",
+                    "width": 0,
+                    "height": 0,
+                    "style": "custom"
+                },
+                {
+                    "file": "sgdb\/icons\/02.ico",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/icon\/fec2b2a5d6584ece13b14256dc3950fb.ico",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/icon\/fec2b2a5d6584ece13b14256dc3950fb\/32\/256x256.png",
+                    "width": 0,
+                    "height": 0,
+                    "style": "custom"
+                },
+                {
+                    "file": "sgdb\/icons\/03.ico",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/icon\/870cbd6f4085f66a30e76996950e3e5c.ico",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/icon\/870cbd6f4085f66a30e76996950e3e5c\/32\/32x32.png",
+                    "width": 0,
+                    "height": 0,
+                    "style": "official"
+                },
+                {
+                    "file": "sgdb\/icons\/04.ico",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/icon\/1e49786b37b063b6b4f486b06219740c.ico",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/icon\/1e49786b37b063b6b4f486b06219740c\/32\/512x512.png",
+                    "width": 0,
+                    "height": 0,
+                    "style": "custom"
+                },
+                {
+                    "file": "sgdb\/icons\/05.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/icon\/95e756438084c8db96d4a9794fba77bd.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/icon_thumb\/95e756438084c8db96d4a9794fba77bd.png",
+                    "width": 256,
+                    "height": 256,
+                    "style": "official"
+                },
+                {
+                    "file": "sgdb\/icons\/06.ico",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/icon\/9e0c2d8064cdede08df533dd8f192b1a.ico",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/icon\/9e0c2d8064cdede08df533dd8f192b1a\/32\/256x256.png",
+                    "width": 0,
+                    "height": 0,
+                    "style": "official"
+                },
+                {
+                    "file": "sgdb\/icons\/07.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/icon\/44b0eb515819340fe8aa8f9d65eaf0cd.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/icon_thumb\/44b0eb515819340fe8aa8f9d65eaf0cd.png",
+                    "width": 512,
+                    "height": 512,
+                    "style": "custom"
+                }
+            ],
+            "covers": [
+                {
+                    "file": "sgdb\/covers\/01.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/d41232431e9df6e12ac56a25ba833da8.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/d41232431e9df6e12ac56a25ba833da8.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/covers\/02.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/e99ac0a6a4289f7c7a4155f21267eb84.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/e99ac0a6a4289f7c7a4155f21267eb84.png",
+                    "width": 600,
+                    "height": 900,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/covers\/03.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/19e89cc39b64bcd046c5268b65fd8264.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/19e89cc39b64bcd046c5268b65fd8264.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "white_logo"
+                },
+                {
+                    "file": "sgdb\/covers\/04.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/f07a5ea1f58a728e179c6975a5137c8c.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/f07a5ea1f58a728e179c6975a5137c8c.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "white_logo"
+                },
+                {
+                    "file": "sgdb\/covers\/05.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/66613d07f26ee86c04e0cc3f47141edc.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/66613d07f26ee86c04e0cc3f47141edc.jpg",
+                    "width": 1024,
+                    "height": 1024,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/covers\/06.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/25ed120b6c91e5450a8578f618b411a6.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/25ed120b6c91e5450a8578f618b411a6.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/covers\/07.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/23b1478977fb0904ac0d497beac682dc.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/23b1478977fb0904ac0d497beac682dc.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "white_logo"
+                },
+                {
+                    "file": "sgdb\/covers\/08.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/0414c9dd4607dd1f8f9231a5e34f1929.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/0414c9dd4607dd1f8f9231a5e34f1929.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/covers\/09.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/e9e4ee35b07098537f9283cd33451d96.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/e9e4ee35b07098537f9283cd33451d96.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "no_logo"
+                },
+                {
+                    "file": "sgdb\/covers\/10.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/82b72bd08d5f8ae27a29656a85802dee.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/82b72bd08d5f8ae27a29656a85802dee.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/covers\/11.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/6acdda39017a67d21bdb38014e91332f.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/6acdda39017a67d21bdb38014e91332f.png",
+                    "width": 920,
+                    "height": 430,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/covers\/12.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/grid\/a66df8baa6eff0ede205839aa416bfa7.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/thumb\/a66df8baa6eff0ede205839aa416bfa7.jpg",
+                    "width": 600,
+                    "height": 900,
+                    "style": "alternate"
+                }
+            ],
+            "heroes": [
+                {
+                    "file": "sgdb\/heroes\/01.jpg",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/66b1bf560fb79df8a3e7d2d8a1b7e55a.jpg",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/66b1bf560fb79df8a3e7d2d8a1b7e55a.jpg",
+                    "width": 1920,
+                    "height": 620,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/heroes\/02.jpg",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/952d418cbb6e096e1c6eb2b075d097ac.jpg",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/952d418cbb6e096e1c6eb2b075d097ac.jpg",
+                    "width": 3840,
+                    "height": 1240,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/heroes\/03.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/b4a31eef2a931ffa97b90ecbd5ef334c.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/b4a31eef2a931ffa97b90ecbd5ef334c.jpg",
+                    "width": 1920,
+                    "height": 620,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/heroes\/04.jpg",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/693279ac1b174029f3a887a93a1708c0.jpg",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/693279ac1b174029f3a887a93a1708c0.jpg",
+                    "width": 3840,
+                    "height": 1240,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/heroes\/05.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/1ae43fda4919e9e2836c7bdb1ffa6dca.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/1ae43fda4919e9e2836c7bdb1ffa6dca.jpg",
+                    "width": 3840,
+                    "height": 1240,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/heroes\/06.jpg",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/643a75d6c995a63fe0d9e71aed021cb7.jpg",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/643a75d6c995a63fe0d9e71aed021cb7.jpg",
+                    "width": 1920,
+                    "height": 620,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/heroes\/07.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/39f9568ecb679a81bc7a227682a1f2ad.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/39f9568ecb679a81bc7a227682a1f2ad.jpg",
+                    "width": 3840,
+                    "height": 1240,
+                    "style": "blurred"
+                },
+                {
+                    "file": "sgdb\/heroes\/08.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/d92dbb8167d362a9f3707c0626880c06.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/d92dbb8167d362a9f3707c0626880c06.jpg",
+                    "width": 3840,
+                    "height": 1240,
+                    "style": "alternate"
+                },
+                {
+                    "file": "sgdb\/heroes\/09.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/hero\/cf0c7d69cb2d40603899f67bde95b834.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/hero_thumb\/cf0c7d69cb2d40603899f67bde95b834.jpg",
+                    "width": 3840,
+                    "height": 1240,
+                    "style": "blurred"
+                }
+            ],
+            "logos": [
+                {
+                    "file": "sgdb\/logos\/01.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/logo\/72424d6a9bd473f2f265c35df9751aaa.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/logo_thumb\/72424d6a9bd473f2f265c35df9751aaa.png",
+                    "width": 1265,
+                    "height": 485,
+                    "style": "official"
+                },
+                {
+                    "file": "sgdb\/logos\/02.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/logo\/b96d145f6c31e35755f4a6841574ba37.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/logo_thumb\/b96d145f6c31e35755f4a6841574ba37.png",
+                    "width": 574,
+                    "height": 324,
+                    "style": "official"
+                },
+                {
+                    "file": "sgdb\/logos\/03.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/logo\/af15ce7cbd279b1a769d85d1540a5073.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/logo_thumb\/af15ce7cbd279b1a769d85d1540a5073.png",
+                    "width": 1138,
+                    "height": 637,
+                    "style": "official"
+                },
+                {
+                    "file": "sgdb\/logos\/04.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/logo\/e5ca1d555ba0ab347013b074147ed8fc.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/logo_thumb\/e5ca1d555ba0ab347013b074147ed8fc.png",
+                    "width": 1265,
+                    "height": 485,
+                    "style": "white"
+                },
+                {
+                    "file": "sgdb\/logos\/05.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/logo\/f0d5d063dd37a8b7e921fe19446cd42e.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/logo_thumb\/f0d5d063dd37a8b7e921fe19446cd42e.png",
+                    "width": 1464,
+                    "height": 745,
+                    "style": "official"
+                },
+                {
+                    "file": "sgdb\/logos\/06.png",
+                    "url": "https:\/\/cdn2.steamgriddb.com\/logo\/8af8c10744c0f53f01d474777721cd65.png",
+                    "thumb": "https:\/\/cdn2.steamgriddb.com\/logo_thumb\/8af8c10744c0f53f01d474777721cd65.png",
+                    "width": 700,
+                    "height": 283,
+                    "style": "official"
+                }
+            ]
+        },
+        "trailers": []
+    },
+    "sgdb_game_id": 5397442
+}

@@ -184,6 +184,15 @@ function mapSteamToPreview(array $d, int $appId): array {
         if ($mp4 === '' && is_array($m['webm'] ?? null)) {
             $mp4 = (string)($m['webm']['max'] ?? $m['webm']['480'] ?? '');
         }
+        // новый формат Steam: HLS/DASH без mp4
+        if ($mp4 === '') {
+            foreach (['hls_h264','dash_h264','dash_av1'] as $k) {
+                $cand = $m[$k] ?? '';
+                if (is_array($cand)) $cand = $cand['src'] ?? $cand['url'] ?? '';
+                $cand = trim((string)$cand);
+                if ($cand !== '') { $mp4 = $cand; break; }
+            }
+        }
         if (stripos($mp4, 'http://') === 0) $mp4 = 'https://' . substr($mp4, 7);
         if ($mp4 === '') continue;
         $movies[] = [
@@ -392,11 +401,8 @@ try {
     // ---- SteamGridDB: список ассетов ----
     if ($action === 'sgdb_assets') {
         $appId = parseSteamAppId((string)($_GET['url'] ?? $_GET['appid'] ?? ''));
-        if (!$appId) {
-            http_response_code(400);
-            echo json_encode(['ok' => false, 'error' => 'AppID'], JSON_UNESCAPED_UNICODE);
-            exit;
-        }
+        $sgdbGameId = (int)($_GET['sgdb_id'] ?? 0);
+        $nameQ = trim((string)($_GET['name'] ?? ''));
         if (sgdbApiKey() === '') {
             echo json_encode([
                 'ok' => false,
@@ -406,6 +412,46 @@ try {
             exit;
         }
         $type = strtolower(trim((string)($_GET['type'] ?? 'icons')));
+        // non-steam: by sgdb game id or search by name
+        if (!$appId) {
+            if ($sgdbGameId <= 0 && $nameQ !== '') {
+                $search = sgdbRequest('search/autocomplete/' . rawurlencode($nameQ));
+                $data = $search['data'] ?? [];
+                if (is_array($data) && $data) $sgdbGameId = (int)($data[0]['id'] ?? 0);
+            }
+            if ($sgdbGameId <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Нужен AppID, sgdb_id или name'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $map = [
+                'icons' => 'icons', 'icon' => 'icons',
+                'grids' => 'grids', 'cover' => 'grids', 'covers' => 'grids',
+                'heroes' => 'heroes', 'banner' => 'heroes', 'banners' => 'heroes',
+                'logos' => 'logos', 'logo' => 'logos',
+            ];
+            $endpoint = $map[$type] ?? $type;
+            $json = sgdbRequest($endpoint . '/game/' . $sgdbGameId);
+            $rows = $json['data'] ?? [];
+            $list = [];
+            if (is_array($rows)) {
+                foreach ($rows as $r) {
+                    $url = $r['url'] ?? '';
+                    if ($url === '') continue;
+                    $list[] = [
+                        'url' => $url,
+                        'thumb' => $r['thumb'] ?? $url,
+                        'style' => (string)($r['style'] ?? ''),
+                        'score' => (int)($r['score'] ?? 0),
+                        'width' => (int)($r['width'] ?? 0),
+                        'height' => (int)($r['height'] ?? 0),
+                    ];
+                    if (count($list) >= 40) break;
+                }
+            }
+            echo json_encode(['ok' => true, 'assets' => $list, 'type' => $type, 'sgdb_id' => $sgdbGameId], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         $list = sgdbAssetsBySteam($appId, $type);
         echo json_encode([
             'ok' => true,
