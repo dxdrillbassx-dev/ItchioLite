@@ -401,6 +401,14 @@ function getDB() {
         ensureColumn($pdo, 'users', 'display_publisher_id', "INT NULL DEFAULT NULL");
         try { $pdo->exec("CREATE INDEX idx_games_publisher ON games (publisher_id)"); } catch (Throwable $e) {}
 
+        $pdo->exec("CREATE TABLE IF NOT EXISTS publisher_subscriptions (
+            publisher_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (publisher_id, user_id),
+            INDEX idx_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
         return $pdo;
     } catch (PDOException $e) {
         die(json_encode(['error' => 'DB connection failed: ' . $e->getMessage()]));

@@ -89,15 +89,55 @@ try {
             ");
             $ms->execute([(int)$p['id']]);
             $p['members'] = $ms->fetchAll();
+            $viewerId = 0;
+            try {
+                $meTmp = getCurrentUser();
+                if ($meTmp) $viewerId = (int)$meTmp['id'];
+            } catch (Throwable $e) {}
             $gs = $pdo->prepare("
-                SELECT id, title, slug, cover_url, price, discount_percent, genre, short_description, developer_name
-                FROM games
-                WHERE publisher_id = ? AND is_published = 1 AND COALESCE(status,'published') NOT IN ('pending','rejected','draft')
-                ORDER BY id DESC
+                SELECT g.id, g.title, g.slug, g.cover_url, g.price, g.discount_percent, g.genre, g.short_description, g.developer_name,
+                  CASE WHEN l.user_id IS NOT NULL THEN 1 ELSE 0 END AS owned
+                FROM games g
+                LEFT JOIN library l ON l.game_id = g.id AND l.user_id = ?
+                WHERE g.publisher_id = ? AND g.is_published = 1 AND COALESCE(g.status,'published') NOT IN ('pending','rejected','draft')
+                ORDER BY g.id DESC
                 LIMIT 60
             ");
-            $gs->execute([(int)$p['id']]);
+            $gs->execute([$viewerId, (int)$p['id']]);
             $p['games'] = $gs->fetchAll();
+
+            // игроки: уникальные владельцы игр этого издательства
+            $pc = $pdo->prepare("
+                SELECT COUNT(DISTINCT l.user_id) FROM library l
+                INNER JOIN games g ON g.id = l.game_id
+                WHERE g.publisher_id = ? AND g.is_published = 1
+            ");
+            try {
+                $pc->execute([(int)$p['id']]);
+                $p['players_count'] = (int)$pc->fetchColumn();
+            } catch (Throwable $e) {
+                $p['players_count'] = 0;
+            }
+
+            $me = getCurrentUser();
+            $p['is_owner'] = false;
+            $p['my_role'] = null;
+            $p['is_subscribed'] = false;
+            if ($me) {
+                $uid = (int)$me['id'];
+                $r = $pdo->prepare("SELECT role FROM publisher_members WHERE publisher_id=? AND user_id=?");
+                $r->execute([(int)$p['id'], $uid]);
+                $row = $r->fetch();
+                if ($row) {
+                    $p['my_role'] = $row['role'];
+                    $p['is_owner'] = ($row['role'] === 'owner');
+                }
+                try {
+                    $s = $pdo->prepare("SELECT 1 FROM publisher_subscriptions WHERE publisher_id=? AND user_id=?");
+                    $s->execute([(int)$p['id'], $uid]);
+                    $p['is_subscribed'] = (bool)$s->fetch();
+                } catch (Throwable $e) {}
+            }
             jsonOut(['ok' => true, 'publisher' => $p]);
         }
 
@@ -207,6 +247,57 @@ try {
             }
             $pdo->prepare("UPDATE users SET display_publisher_id = ? WHERE id = ?")->execute([$val, (int)$user['id']]);
             jsonOut(['ok'=>true, 'display_publisher_id'=>$val]);
+        }
+
+        case 'subscribe': {
+            if ($method !== 'POST') jsonOut(['ok'=>false], 405);
+            $user = requireUserP();
+            $body = json_decode(file_get_contents('php://input'), true);
+            if (!is_array($body)) $body = $_POST;
+            if (!verifyCsrfToken($body['csrf_token'] ?? '')) jsonOut(['ok'=>false,'error'=>'CSRF'], 403);
+            $pid = (int)($body['publisher_id'] ?? 0);
+            if ($pid <= 0) jsonOut(['ok'=>false,'error'=>'publisher_id'], 400);
+            $chk = $pdo->prepare("SELECT id FROM publishers WHERE id = ?");
+            $chk->execute([$pid]);
+            if (!$chk->fetch()) jsonOut(['ok'=>false,'error'=>'Не найдено'], 404);
+            $pdo->prepare("INSERT IGNORE INTO publisher_subscriptions (publisher_id, user_id) VALUES (?, ?)")
+                ->execute([$pid, (int)$user['id']]);
+            jsonOut(['ok' => true, 'subscribed' => true]);
+        }
+
+        case 'unsubscribe': {
+            if ($method !== 'POST') jsonOut(['ok'=>false], 405);
+            $user = requireUserP();
+            $body = json_decode(file_get_contents('php://input'), true);
+            if (!is_array($body)) $body = $_POST;
+            if (!verifyCsrfToken($body['csrf_token'] ?? '')) jsonOut(['ok'=>false,'error'=>'CSRF'], 403);
+            $pid = (int)($body['publisher_id'] ?? 0);
+            if ($pid <= 0) jsonOut(['ok'=>false,'error'=>'publisher_id'], 400);
+            $pdo->prepare("DELETE FROM publisher_subscriptions WHERE publisher_id=? AND user_id=?")
+                ->execute([$pid, (int)$user['id']]);
+            jsonOut(['ok' => true, 'subscribed' => false]);
+        }
+
+        case 'delete': {
+            if ($method !== 'POST') jsonOut(['ok'=>false], 405);
+            $user = requireUserP();
+            $body = json_decode(file_get_contents('php://input'), true);
+            if (!is_array($body)) $body = $_POST;
+            if (!verifyCsrfToken($body['csrf_token'] ?? '')) jsonOut(['ok'=>false,'error'=>'CSRF'], 403);
+            $pid = (int)($body['publisher_id'] ?? $body['id'] ?? 0);
+            if ($pid <= 0) jsonOut(['ok'=>false,'error'=>'id'], 400);
+            $own = $pdo->prepare("SELECT role FROM publisher_members WHERE publisher_id=? AND user_id=?");
+            $own->execute([$pid, (int)$user['id']]);
+            $role = $own->fetchColumn();
+            if ($role !== 'owner' && ($user['role'] ?? '') !== 'admin') {
+                jsonOut(['ok'=>false,'error'=>'Только владелец может удалить'], 403);
+            }
+            $pdo->prepare("UPDATE games SET publisher_id = NULL WHERE publisher_id = ?")->execute([$pid]);
+            $pdo->prepare("DELETE FROM publisher_subscriptions WHERE publisher_id = ?")->execute([$pid]);
+            $pdo->prepare("DELETE FROM publisher_members WHERE publisher_id = ?")->execute([$pid]);
+            $pdo->prepare("DELETE FROM publishers WHERE id = ?")->execute([$pid]);
+            $pdo->prepare("UPDATE users SET display_publisher_id = 0 WHERE display_publisher_id = ?")->execute([$pid]);
+            jsonOut(['ok' => true]);
         }
 
         default:

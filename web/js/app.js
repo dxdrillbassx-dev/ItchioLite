@@ -721,6 +721,11 @@ function syncUrl(view, gameId) {
   const params = new URLSearchParams();
   params.set('view', view);
   if (view === 'game' && gameId) params.set('id', gameId);
+  if (view === 'publisher') {
+    const cur = new URLSearchParams(window.location.search);
+    const pub = cur.get('pub');
+    if (pub) params.set('pub', pub);
+  }
   if (window.IS_CLIENT) params.set('client', '1');
   history.replaceState(null, '', '?' + params.toString());
 }
@@ -776,6 +781,11 @@ function showView(name, gameId, opts) {
   if (name === 'game') {
     const gid = gameId || window.__lastGameForCart?.id || window.GAME_ID_FROM_URL || 0;
     if (gid) loadGamePage(gid);
+  }
+  if (name === 'publisher') {
+    const params = new URLSearchParams(window.location.search);
+    const pubId = +(params.get('pub') || 0);
+    if (pubId) openPublisherPage(pubId);
   }
 }
 
@@ -4141,6 +4151,39 @@ function formatPlaytimeShort(minutes) {
   return h + 'ч';
 }
 
+function publisherGameCardHtml(g) {
+  const cover = g.cover_src || g.cover_url || ('media.php?type=cover&id=' + g.id);
+  const price = formatPrice(g.price, g.discount_percent);
+  const owned = !!(g.owned === 1 || g.owned === true || g.owned === '1');
+  let priceHtml = '';
+  if (!owned) {
+    if (price.className === 'free') {
+      priceHtml = `<span class="hp-game-price is-free">Бесплатно</span>`;
+    } else if (price.discount > 0) {
+      priceHtml = `<span class="hp-game-price is-sale"><span class="hp-game-price-disc">-${price.discount}%</span><span class="hp-game-price-col"><span class="hp-game-price-old">${escapeHtml(price.original)}</span><span class="hp-game-price-final">${escapeHtml(price.text)}</span></span></span>`;
+    } else {
+      priceHtml = `<span class="hp-game-price">${escapeHtml(price.text)}</span>`;
+    }
+  }
+  let actionBtn = '';
+  if (owned) {
+    actionBtn = `<button type="button" class="game-item__plus-wrapper is-owned" data-id="${g.id}" title="В библиотеке" disabled>
+      <svg class="gi-icon gi-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </button>`;
+  } else {
+    const title = price.className === 'free' ? 'В библиотеку' : 'В корзину';
+    actionBtn = `<button type="button" class="game-item__plus-wrapper is-add" data-id="${g.id}" data-price="${escapeHtml(String(g.price ?? 0))}" data-discount="${escapeHtml(String(g.discount_percent ?? 0))}" title="${title}">
+      <svg class="gi-icon gi-plus" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>`;
+  }
+  return `
+    <div class="hp-game-card" data-id="${g.id}" data-title="${escapeHtml((g.title || '').toLowerCase())}">
+      <img src="${escapeHtml(cover)}" alt="${escapeHtml(g.title)}" loading="lazy" />
+      ${priceHtml}
+      ${actionBtn}
+    </div>`;
+}
+
 function gameCardHtml(g, { showPin = true } = {}) {
   const mins = parseInt(g.playtime_minutes, 10) || 0;
   const timeLabel = formatPlaytimeShort(mins);
@@ -4297,6 +4340,11 @@ async function loadProfile() {
   }
 
   // статистика / библиотека / активность — параллельно после identity
+  // вернуть боковые карточки (могли быть скрыты на чужом профиле)
+  ['#hp-activity', '#hp-friends-list'].forEach(sel => {
+    const el = $(sel);
+    if (el) setSideCardVisible(el, true);
+  });
   await Promise.all([
     loadProfileStats(),
     loadProfileActivity(),
@@ -4307,7 +4355,15 @@ async function loadProfile() {
   initProfileControls();
   try {
     const me2 = window.AUTH_STATE && window.AUTH_STATE.user;
-    if (me2 && me2.id) loadProfilePublishers(me2.id);
+    if (me2 && me2.id) {
+      const line = document.getElementById('hp-publisher-line');
+      if (line) line.dataset.forUser = String(me2.id);
+      // если в AUTH уже 0 — сразу прячем, потом сверим с API
+      if (me2.display_publisher_id === 0 || me2.display_publisher_id === '0') {
+        renderPublisherLine(line, []);
+      }
+      await loadProfilePublishers(me2.id);
+    }
   } catch (e) {}
 }
 
@@ -4342,26 +4398,26 @@ async function loadProfileActivity() {
     const data = await fetchJSON(`${USER_API}?action=activity`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     if (!data.activity || !data.activity.length) {
-      setAccordionHTML(box, '<div class="hp-empty" style="padding:20px 0">Пока нет активности</div>');
+      setAccordionHTML(box, '');
+      setSideCardVisible(box, false);
       return;
     }
+    setSideCardVisible(box, true);
     setAccordionHTML(box, data.activity.slice(0, 8).map(a => {
       const title = a.title || a.text || 'Игра';
       const timeLabel = a.playtime_minutes
         ? formatPlaytimeShort(a.playtime_minutes)
         : (a.ts ? formatDateTime(a.ts) : '');
-      return `
-        <div class="hp-activity-item" data-id="${a.game_id || ''}">
-          <img class="hp-activity-icon" src="media.php?type=cover&id=${a.game_id || 0}" alt="" loading="lazy"
-               onerror="this.style.display='none'" />
-          <div class="hp-activity-info">
-            <div class="hp-activity-title">${escapeHtml(title)}</div>
-            <div class="hp-activity-time">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              ${escapeHtml(timeLabel)}
-            </div>
-          </div>
-        </div>`;
+      const cover = a.game_id ? ('media.php?type=cover&id=' + a.game_id) : '';
+      return (
+        '<div class="hp-friend-row hp-activity-item" data-id="' + (a.game_id || '') + '">' +
+          '<div class="hp-friend-avatar" style="' + (cover ? ('background-image:url(\'' + cover + '\')') : 'background:#3a3632') + '">' + (cover ? '' : '•') + '</div>' +
+          '<div class="hp-friend-text">' +
+            '<div class="hp-friend-name">' + escapeHtml(title) + '</div>' +
+            '<div class="hp-friend-status">' + escapeHtml(timeLabel) + '</div>' +
+          '</div>' +
+        '</div>'
+      );
     }).join(''));
 
     $$('.hp-activity-item', box).forEach(item => {
@@ -4370,7 +4426,8 @@ async function loadProfileActivity() {
       });
     });
   } catch (err) {
-    setAccordionHTML(box, `<div class="hp-empty" style="padding:20px 0">${escapeHtml(err.message)}</div>`);
+    setAccordionHTML(box, '');
+    setSideCardVisible(box, false);
   }
 }
 
@@ -5115,7 +5172,11 @@ function enhanceSelect(sel) {
 
 function initCatioSelects(root = document) {
   const nodes = root.querySelectorAll('select.settings-select, select.sort-select, select.hp-select, select.cart-modal-for, select#settings-lang, select#sort-select, select#library-sort, select#hp-sort, select#hp-platform, select#settings-profile-vis, select#settings-media-vis');
-  nodes.forEach(enhanceSelect);
+  nodes.forEach(sel => {
+    // список издательств при публикации и в настройках — нативный select (надёжнее)
+    if (sel.id === 'sg-publisher-id' || sel.id === 'settings-display-pub') return;
+    enhanceSelect(sel);
+  });
 }
 
 document.addEventListener('click', (e) => {
@@ -5266,33 +5327,57 @@ function openBannerEditModal() {
 async function fillSettingsDisplayPub() {
   const sel = $('#settings-display-pub');
   if (!sel) return;
+  // защита от повторных гонок при быстром переключении вкладок
+  const token = (sel._fillToken = (sel._fillToken || 0) + 1);
+
+  let pubs = [];
+  let display = null;
   try {
     const data = await fetchJSON(PUB_API + '?action=mine');
-    const pubs = data.publishers || [];
-    let display = null;
-    try {
-      const me = window.AUTH_STATE && window.AUTH_STATE.user;
-      if (me && me.id) {
-        const fu = await fetchJSON(PUB_API + '?action=for_user&user_id=' + me.id);
-        display = fu.display_publisher_id;
-      }
-    } catch (e) {}
-    // reset catio
-    const oldWrap = sel.closest('.catio-select');
-    if (oldWrap && oldWrap.parentNode) {
-      oldWrap.parentNode.insertBefore(sel, oldWrap);
-      oldWrap.remove();
+    pubs = data.publishers || [];
+  } catch (e) { console.warn('fillSettingsDisplayPub mine', e); }
+  if (sel._fillToken !== token) return;
+  try {
+    const me = window.AUTH_STATE && window.AUTH_STATE.user;
+    if (me && me.id) {
+      const fu = await fetchJSON(PUB_API + '?action=for_user&user_id=' + me.id);
+      if (sel._fillToken !== token) return;
+      display = fu.display_publisher_id;
     }
-    delete sel.dataset.catioEnhanced;
-    sel.style.cssText = '';
-    sel.classList.add('settings-select');
-    sel.innerHTML = '<option value="hide">Не показывать</option>' +
-      pubs.map(p => '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>').join('');
-    if (display === 0 || display === '0') sel.value = 'hide';
-    else if (display) sel.value = String(display);
-    else sel.value = 'hide';
-    try { enhanceSelect(sel); } catch (e) {}
   } catch (e) {}
+  if (sel._fillToken !== token) return;
+
+  // Снимаем старую catio-обёртку аккуратно
+  const oldWrap = sel.closest('.catio-select');
+  if (oldWrap && oldWrap.parentNode) {
+    oldWrap.parentNode.insertBefore(sel, oldWrap);
+    oldWrap.remove();
+  }
+  delete sel.dataset.catioEnhanced;
+  sel.removeAttribute('tabindex');
+  sel.removeAttribute('aria-hidden');
+  sel.classList.add('settings-select');
+  sel.classList.remove('select-native-hidden');
+  sel.style.cssText = '';
+
+  const html = '<option value="hide">Не показывать</option>' +
+    pubs.map(p => '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>').join('');
+  sel.innerHTML = html;
+  if (display === 0 || display === '0' || display === null || display === undefined || display === '') {
+    sel.value = 'hide';
+  } else if ([...sel.options].some(o => o.value === String(display))) {
+    sel.value = String(display);
+  } else {
+    sel.value = 'hide';
+  }
+
+  // Нативный select надёжнее кастомного в settings — не пропадает
+  // (catio иногда мигает и схлопывается из-за overflow/перестроения)
+  // Оставляем обычный settings-select вид.
+  try {
+    // если очень хочется кастом — enhance, но без повторного destroy
+    // enhanceSelect(sel);
+  } catch (e) { console.warn(e); }
 }
 
 function initSettingsView() {
@@ -5410,16 +5495,47 @@ function initSettingsView() {
         window.AUTH_STATE.user.allow_friend_requests = $('#settings-allow-friends')?.checked ? 1 : 0;
         window.AUTH_STATE.user.email = $('#settings-email')?.value?.trim();
       }
-      // издательство в профиле
+      // издательство в профиле — мгновенно + API
       try {
-        const v = $('#settings-display-pub')?.value || 'hide';
-        await postJSON(PUB_API + '?action=set_display', {
-          csrf_token: window.CSRF_TOKEN || '',
-          display_publisher_id: v
-        });
+        const sel = $('#settings-display-pub');
+        const v = sel?.value || 'hide';
+        const hide = (v === 'hide' || v === '' || v === '0');
         const me = window.AUTH_STATE && window.AUTH_STATE.user;
-        if (me && me.id) loadProfilePublishers(me.id);
-      } catch (e2) { console.warn(e2); }
+        const line = document.getElementById('hp-publisher-line');
+
+        // оптимистично: сразу прячем или ставим выбранное
+        if (me && me.id && line) {
+          line.dataset.forUser = String(me.id);
+          if (hide) {
+            renderPublisherLine(line, []);
+            if (window.AUTH_STATE.user) window.AUTH_STATE.user.display_publisher_id = 0;
+          } else {
+            const opt = sel?.selectedOptions && sel.selectedOptions[0];
+            const name = (opt && opt.textContent) ? opt.textContent.trim() : '';
+            const pid = Number(v) || 0;
+            if (pid && name) {
+              renderPublisherLine(line, [{ id: pid, name: name, slug: '' }]);
+            }
+            if (window.AUTH_STATE.user) window.AUTH_STATE.user.display_publisher_id = pid;
+          }
+        }
+
+        const resPub = await postJSON(PUB_API + '?action=set_display', {
+          csrf_token: window.CSRF_TOKEN || '',
+          display_publisher_id: hide ? 'hide' : v
+        });
+        if (resPub && resPub.ok === false) throw new Error(resPub.error || 'Не удалось сохранить издательство');
+
+        // синхронизация с сервером (на случай slug и т.п.)
+        if (me && me.id) {
+          window.__pubLineToken = (window.__pubLineToken || 0) + 1;
+          if (typeof viewingUserId !== 'undefined') viewingUserId = null;
+          await loadProfilePublishers(me.id);
+        }
+      } catch (e2) {
+        console.warn(e2);
+        toast(e2.message || 'Настройки сохранены, но издательство не обновилось');
+      }
       toast('Конфиденциальность сохранена');
     } catch (err) {
       if (errBox) { errBox.textContent = err.message; errBox.classList.remove('hidden'); }
@@ -5602,16 +5718,18 @@ async function loadProfileFriends(userId) {
     const friends = data.friends || [];
     if (countEl) countEl.textContent = friends.length;
     if (!friends.length) {
-      setAccordionHTML(box, '<div class="hp-empty" style="padding:12px 0">Пока нет друзей</div>');
+      setAccordionHTML(box, '');
+      setSideCardVisible(box, false);
       return;
     }
+    setSideCardVisible(box, true);
     setAccordionHTML(box, friends.map(u => `
       <div class="hp-friend-row" data-id="${u.id}" data-username="${escapeHtml(u.username)}">
         <div class="hp-friend-avatar" style="${friendAvatarStyle(u)}">
           ${friendAvatarText(u)}
           ${u.is_online ? '<span class="online-dot"></span>' : ''}
         </div>
-        <div style="min-width:0">
+        <div class="hp-friend-text">
           <div class="hp-friend-name">${escapeHtml(u.username)}</div>
           <div class="hp-friend-status">${u.is_online ? 'В сети' : 'Не в сети'}</div>
         </div>
@@ -6127,6 +6245,12 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
   }
   const uname = $('#hp-username');
   if (uname) uname.textContent = p.username;
+  // сразу чистим строку — иначе на чужом профиле видно моё издательство
+  const pubLine = document.getElementById('hp-publisher-line');
+  if (pubLine) {
+    pubLine.dataset.forUser = String(p.id);
+    renderPublisherLine(pubLine, []);
+  }
   try { loadProfilePublishers(p.id); } catch (e) {}
   renderProfileFriendCode(p.friend_code || '');
   setProfileRoleBadge(p);
@@ -6256,8 +6380,12 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
     card.addEventListener('click', () => gotoGame(card.dataset.id));
   });
 
+  // активность чужого профиля пока не отдаём — блок скрываем целиком
   const act = $('#hp-activity');
-  if (act) act.innerHTML = '<div class="hp-empty" style="padding:12px 0">Скрыто</div>';
+  if (act) {
+    setAccordionHTML(act, '');
+    setSideCardVisible(act, false);
+  }
   loadProfileFriends(p.id);
   loadProfileReviews(p.id);
   renderForeignLibraryOnly(library);
@@ -7591,8 +7719,18 @@ function initSubmitGame() {
           fillBtn.dataset.bound = '1';
           fillBtn.addEventListener('click', fillSubmitFromSteam);
         }
-        try { initCatioSelects(formModal); } catch (e) {}
-        try { initPublishFilePreviews(formModal); initPublishPriceInput(); initPublishRte(); fillPublishPublisherSelect(); } catch (e) {}
+        try { initPublishFilePreviews(formModal); initPublishPriceInput(); initPublishRte(); } catch (e) {}
+        try {
+          const pending = window.__pendingPublishPublishers;
+          fillPublishPublisherSelect(pending).then(() => {
+            try { initCatioSelects(formModal); } catch (e2) {}
+          }).catch((err) => {
+            console.warn(err);
+            try { initCatioSelects(formModal); } catch (e2) {}
+          });
+        } catch (e) {
+          try { initCatioSelects(formModal); } catch (e2) {}
+        }
         try {
           $$('.sg-genre').forEach(c => {
             if (c.dataset.boundGenre) return;
@@ -9621,15 +9759,14 @@ function initCreateMenu() {
   $('#create-menu-game')?.addEventListener('click', async () => {
     closeCreateMenu();
     try {
-      const data = await fetchJSON(PUB_API + '?action=mine');
-      const pubs = data.publishers || [];
+      const pubs = await fetchMyPublishers(true);
+      window.__pendingPublishPublishers = pubs;
       if (!pubs.length) {
         openNoPubModal();
         return;
       }
       openSubmitRules();
     } catch (e) {
-      // если API недоступен — всё равно пускаем, форма покажет select
       openSubmitRules();
     }
   });
@@ -9687,9 +9824,8 @@ async function openPubsListModal() {
   modal.classList.remove('hidden');
   list.innerHTML = '<div class="loading">Загрузка...</div>';
   try {
-    const data = await fetchJSON(PUB_API + '?action=mine');
-    if (!data.ok) throw new Error(data.error || 'Ошибка');
-    const pubs = data.publishers || [];
+    const pubs = await fetchMyPublishers(true);
+    if (!Array.isArray(pubs)) throw new Error('Ошибка');
     if (!pubs.length) {
       list.innerHTML = '<div class="friends-empty">Пока нет издательств.<br>Создайте первое — и выбирайте его при публикации.</div>';
       return;
@@ -9793,7 +9929,14 @@ async function saveNewPublisher() {
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     toast('Издательство создано');
     $('#pubs-create-modal')?.classList.add('hidden');
+    window.__myPublishersCache = { list: null, ts: 0 };
     await fillPublishPublisherSelect();
+    try {
+      const me = window.AUTH_STATE && window.AUTH_STATE.user;
+      if (me && me.id && typeof loadProfilePublishers === 'function') {
+        loadProfilePublishers(me.id);
+      }
+    } catch (e) {}
     openPubsListModal();
   } catch (e) {
     toast(e.message || 'Не удалось создать');
@@ -9802,75 +9945,107 @@ async function saveNewPublisher() {
   }
 }
 
-async function fillPublishPublisherSelect() {
-  const sel = $('#sg-publisher-id');
-  if (!sel) return;
-  const cur = sel.value;
-  try {
-    const data = await fetchJSON(PUB_API + '?action=mine');
-    const pubs = data.publishers || [];
-    const prefer = cur || (pubs[0] ? String(pubs[0].id) : '');
-    if (!pubs.length) {
-      sel.innerHTML = '<option value="">— нет издательств —</option>';
-    } else {
-      sel.innerHTML = pubs.map(p => {
-        const av = p.avatar_url ? escapeHtml(p.avatar_url) : '';
-        return '<option value="' + p.id + '" data-avatar="' + av + '"' +
-          (String(p.id) === prefer ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
-      }).join('');
-      if (prefer) sel.value = prefer;
-    }
-    const hid = $('#sg-publisher');
-    const syncHid = () => {
-      const c = pubs.find(p => String(p.id) === String(sel.value));
-      if (hid) hid.value = c ? c.name : '';
-    };
-    syncHid();
-    sel.onchange = syncHid;
+/** Кэш издательств текущего пользователя */
+window.__myPublishersCache = window.__myPublishersCache || { list: null, ts: 0 };
+window.__pendingPublishPublishers = null;
 
-    // снять старую обёртку catio и пересоздать (иначе select остаётся hidden)
-    const oldWrap = sel.closest('.catio-select');
-    if (oldWrap && oldWrap.parentNode) {
-      oldWrap.parentNode.insertBefore(sel, oldWrap);
-      oldWrap.remove();
+async function fetchMyPublishers(force) {
+  const now = Date.now();
+  if (!force && Array.isArray(window.__myPublishersCache.list) && (now - window.__myPublishersCache.ts) < 15000) {
+    return window.__myPublishersCache.list;
+  }
+  let pubs = [];
+  try {
+    const data = await fetchJSON(PUB_API + '?action=mine&_t=' + now);
+    if (data && data.ok === false) {
+      console.warn('mine error', data.error);
     }
-    delete sel.dataset.catioEnhanced;
-    sel.classList.add('settings-select');
-    sel.classList.remove('select-native-hidden');
-    sel.removeAttribute('aria-hidden');
-    sel.style.cssText = '';
+    pubs = (data && Array.isArray(data.publishers)) ? data.publishers : [];
+  } catch (e) {
+    console.warn('fetchMyPublishers mine', e);
+  }
+  // fallback: for_user по текущему id (если mine пустой/упал, а membership есть)
+  if (!pubs.length) {
     try {
-      enhanceSelect(sel);
-      // аватарки в option через Mutation / rebuild hook
-      const catio = sel.closest('.catio-select');
-      if (catio) {
-        const paint = () => {
-          const opt = sel.options[sel.selectedIndex];
-          const url = opt && opt.getAttribute('data-avatar');
-          const val = catio.querySelector('.catio-select__value');
-          if (val) {
-            const txt = opt ? escapeHtml(opt.textContent) : '';
-            val.innerHTML = (url
-              ? '<span class="catio-select__ico"><img class="catio-pub-av" src="' + url + '" alt="" /></span>'
-              : '') + '<span class="catio-select__txt">' + txt + '</span>';
-          }
-          catio.querySelectorAll('.catio-select__option').forEach((o, i) => {
-            const op = sel.options[i];
-            if (!op) return;
-            const u = op.getAttribute('data-avatar');
-            const label = escapeHtml(op.textContent);
-            o.innerHTML = (u
-              ? '<span class="catio-select__ico"><img class="catio-pub-av" src="' + u + '" alt="" /></span>'
-              : '') + '<span class="catio-select__txt">' + label + '</span>';
-          });
-        };
-        paint();
-        sel.addEventListener('change', paint);
-        // после клика по option catio сам sync — перекрасим чуть позже
-        catio.addEventListener('click', () => setTimeout(paint, 0));
+      const me = window.AUTH_STATE && window.AUTH_STATE.user;
+      if (me && me.id) {
+        const fu = await fetchJSON(PUB_API + '?action=for_user&user_id=' + me.id + '&_t=' + now);
+        pubs = (fu && Array.isArray(fu.publishers)) ? fu.publishers : [];
       }
-    } catch (e) { console.warn(e); }
-  } catch (e) { console.warn('fillPublishPublisherSelect', e); }
+    } catch (e2) {
+      console.warn('fetchMyPublishers for_user', e2);
+    }
+  }
+  if (pubs.length) {
+    window.__myPublishersCache = { list: pubs, ts: now };
+  }
+  return pubs;
+}
+
+function applyPublisherOptionsToSelect(sel, pubs, prefer) {
+  if (!sel) return;
+  // снять catio
+  const oldWrap = sel.closest('.catio-select');
+  if (oldWrap && oldWrap.parentNode) {
+    oldWrap.parentNode.insertBefore(sel, oldWrap);
+    oldWrap.remove();
+  }
+  delete sel.dataset.catioEnhanced;
+  sel.classList.add('settings-select');
+  sel.classList.remove('select-native-hidden');
+  sel.removeAttribute('aria-hidden');
+  sel.removeAttribute('tabindex');
+  sel.style.cssText = '';
+
+  let html = '<option value="">— без издательства —</option>';
+  (pubs || []).forEach(p => {
+    html += '<option value="' + p.id + '">' + escapeHtml(p.name || ('#' + p.id)) + '</option>';
+  });
+  sel.innerHTML = html;
+
+  const pref = prefer != null ? String(prefer) : '';
+  if (pref && (pubs || []).some(p => String(p.id) === pref)) {
+    sel.value = pref;
+  } else if ((pubs || []).length === 1) {
+    sel.value = String(pubs[0].id);
+  } else {
+    sel.value = '';
+  }
+
+  const hid = document.getElementById('sg-publisher');
+  const syncHid = () => {
+    const c = (pubs || []).find(p => String(p.id) === String(sel.value));
+    if (hid) hid.value = c ? (c.name || '') : '';
+  };
+  syncHid();
+  sel.onchange = syncHid;
+}
+
+async function fillPublishPublisherSelect(preloaded) {
+  const formModal = document.getElementById('submit-form-modal');
+  const sel = (formModal && formModal.querySelector('#sg-publisher-id'))
+    || document.getElementById('sg-publisher-id')
+    || document.querySelector('select[name="publisher_id"]');
+  if (!sel) {
+    console.warn('fillPublishPublisherSelect: select not found');
+    return;
+  }
+  const cur = sel.value;
+  let pubs = Array.isArray(preloaded) ? preloaded : null;
+  if (!pubs || !pubs.length) {
+    if (Array.isArray(window.__pendingPublishPublishers) && window.__pendingPublishPublishers.length) {
+      pubs = window.__pendingPublishPublishers;
+    }
+  }
+  if (!pubs || !pubs.length) {
+    pubs = await fetchMyPublishers(true);
+  }
+  window.__pendingPublishPublishers = pubs;
+  applyPublisherOptionsToSelect(sel, pubs, cur);
+  if (!pubs.length) {
+    console.warn('fillPublishPublisherSelect: пустой список издательств');
+    try { toast('Не удалось загрузить ваши издательства — обновите страницу'); } catch (e) {}
+  }
 }
 
 async function openPublisherPage(id, slug) {
@@ -9892,7 +10067,12 @@ async function openPublisherPage(id, slug) {
   const memEl = $('#pub-page-members');
   const av = $('#pub-page-avatar');
   const ban = $('#pub-page-banner');
+  const actionsEl = $('#pub-page-actions');
+  const playersNum = $('#pub-players-num');
+  const gamesCountEl = $('#pub-games-count');
+  const membersCountEl = $('#pub-members-count');
   if (gamesEl) gamesEl.innerHTML = '<div class="loading">Загрузка...</div>';
+  if (actionsEl) actionsEl.innerHTML = '';
   try {
     const q = id ? ('id=' + id) : ('slug=' + encodeURIComponent(slug || ''));
     const data = await fetchJSON(PUB_API + '?action=get&' + q);
@@ -9919,40 +10099,158 @@ async function openPublisherPage(id, slug) {
         ban.classList.remove('has-image');
       }
     }
+    if (playersNum) playersNum.textContent = String(p.players_count || 0);
+    const list = p.members || [];
+    if (membersCountEl) membersCountEl.textContent = String(list.length);
     if (memEl) {
-      const list = p.members || [];
       memEl.innerHTML = list.length ? list.map(m => {
         const avStyle = m.avatar_url
           ? ('background-image:url(' + JSON.stringify(m.avatar_url) + ')')
           : ('background:' + (m.avatar_color || '#ef5b2c'));
         const letter = m.avatar_url ? '' : escapeHtml((m.username || '?').slice(0, 1).toUpperCase());
-        const role = m.role === 'owner' ? '<span class="pub-member-role">владелец</span>' : '';
-        return '<button type="button" class="pub-member-row" data-username="' + escapeHtml(m.username) + '" data-id="' + m.id + '">' +
-          '<span class="pub-member-av" style="' + avStyle + '">' + letter + '</span>' +
-          '<span class="pub-member-meta"><span class="pub-member-name">' + escapeHtml(m.username) + '</span>' + role + '</span></button>';
-      }).join('') : '<div class="settings-hint">Нет участников</div>';
+        const role = m.role === 'owner' ? 'владелец' : 'участник';
+        return '<div class="hp-friend-row pub-member-row" data-username="' + escapeHtml(m.username) + '" data-id="' + m.id + '" role="button" tabindex="0">' +
+          '<div class="hp-friend-avatar" style="' + avStyle + '">' + letter + '</div>' +
+          '<div style="min-width:0">' +
+            '<div class="hp-friend-name">' + escapeHtml(m.username) + '</div>' +
+            '<div class="hp-friend-status">' + role + '</div>' +
+          '</div></div>';
+      }).join('') : '<div class="settings-hint" style="padding:8px 6px">Нет участников</div>';
       $$('.pub-member-row', memEl).forEach(r => {
         r.addEventListener('click', () => openUserProfile(r.dataset.username, r.dataset.id));
       });
     }
+    // accordion toggle for members (как в профиле)
+    const memCard = $('#pub-members-card');
+    if (memCard && !memCard.dataset.toggleBound) {
+      memCard.dataset.toggleBound = '1';
+      const head = memCard.querySelector('.hp-side-head');
+      const body = memCard.querySelector('.hp-side-body');
+      const toggleBtn = memCard.querySelector('.hp-side-toggle');
+      const onToggle = () => {
+        if (!body) return;
+        const collapsed = animateAccordion(memCard, body, 'is-collapsed');
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      };
+      if (head) head.addEventListener('click', (e) => { if (e.target.closest('.hp-side-toggle') || e.target === head || head.contains(e.target)) onToggle(); });
+      if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); onToggle(); });
+    }
     if (p.name && headTitle) headTitle.textContent = p.name;
+    const games = p.games || [];
+    if (gamesCountEl) gamesCountEl.textContent = String(games.length);
     if (gamesEl) {
-      const games = p.games || [];
+      gamesEl.classList.remove('store-grid');
+      gamesEl.classList.add('hp-games-grid');
       if (!games.length) {
         gamesEl.innerHTML = '<div class="friends-empty">Пока нет опубликованных игр</div>';
       } else {
-        gamesEl.innerHTML = games.map(g => {
-          const cover = g.cover_url || '';
-          return `<article class="store-card" data-id="${g.id}">
-            <div class="store-card-cover" style="${cover ? `background-image:url('${escapeHtml(cover)}')` : ''}"></div>
-            <div class="store-card-body">
-              <div class="store-card-title">${escapeHtml(g.title)}</div>
-              <div class="store-grid-meta">${escapeHtml(g.genre || '')}</div>
-            </div>
-          </article>`;
-        }).join('');
-        $$('.store-card', gamesEl).forEach(c => {
-          c.addEventListener('click', () => gotoGame(+c.dataset.id));
+        const byId = {};
+        games.forEach(g => { byId[String(g.id)] = g; });
+        gamesEl.innerHTML = games.map(g => publisherGameCardHtml(g)).join('');
+        $$('.hp-game-card', gamesEl).forEach(c => {
+          const g = byId[String(c.dataset.id)];
+          c.addEventListener('click', (e) => {
+            if (e.target.closest('.game-item__plus-wrapper') || e.target.closest('.hp-game-price')) return;
+            gotoGame(+c.dataset.id);
+          });
+          const plus = c.querySelector('.game-item__plus-wrapper.is-add');
+          if (plus && g) {
+            plus.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (plus.disabled) return;
+              const price = formatPrice(g.price, g.discount_percent);
+              plus.disabled = true;
+              try {
+                if (price.className === 'free' || g.purchased) {
+                  const data = await postJSON(API_BASE + '?action=buy', { game_id: g.id });
+                  if (!data.ok) throw new Error(data.error || 'Не удалось оформить');
+                  if (data.balance !== undefined && typeof updateBalance === 'function') updateBalance(data.balance);
+                  g.owned = true;
+                  markStoreRowOwned(plus);
+                  const priceEl = c.querySelector('.hp-game-price');
+                  if (priceEl) priceEl.remove();
+                  try { if (typeof sideLibAddOptimistic === 'function') sideLibAddOptimistic(g); } catch (err) {}
+                  toast(data.message || ('«' + (g.title || 'Игра') + '» добавлена в библиотеку'));
+                } else {
+                  const ok = typeof addToCart === 'function' && addToCart(g);
+                  if (ok) {
+                    plus.remove();
+                    if (typeof showAddToCartModal === 'function') showAddToCartModal(g);
+                    else toast('Добавлено в корзину');
+                  } else {
+                    plus.disabled = false;
+                  }
+                }
+              } catch (err) {
+                plus.disabled = false;
+                toast(err.message || 'Ошибка');
+              }
+            });
+          }
+        });
+      }
+    }
+    // кнопки в toolbar
+    if (actionsEl) {
+      const isOwner = !!p.is_owner;
+      const isSub = !!p.is_subscribed;
+      if (isOwner) {
+        actionsEl.innerHTML = `
+          <button type="button" class="hp-btn-edit" id="pub-btn-edit" title="Редактировать">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            Редактировать
+          </button>
+          <button type="button" class="hp-btn-logout hp-btn-danger" id="pub-btn-delete" title="Удалить издательство">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Удалить
+          </button>`;
+        $('#pub-btn-edit')?.addEventListener('click', () => {
+          toast('Редактирование издательства — скоро');
+        });
+        $('#pub-btn-delete')?.addEventListener('click', async () => {
+          if (!confirm('Удалить издательство «' + (p.name || '') + '»? Игры останутся, но без привязки.')) return;
+          try {
+            const res = await postJSON(PUB_API + '?action=delete', {
+              csrf_token: window.CSRF_TOKEN || '',
+              publisher_id: p.id
+            });
+            if (!res.ok) throw new Error(res.error || 'Ошибка');
+            toast('Издательство удалено');
+            showView('home');
+          } catch (err) {
+            toast(err.message || 'Не удалось удалить');
+          }
+        });
+      } else {
+        const starSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.2 6.6H21l-5.4 4 2.1 6.6L12 15.8 6.3 19.2l2.1-6.6L3 8.6h6.8L12 2z"/></svg>';
+        actionsEl.innerHTML = `
+          <button type="button" class="hp-btn-subscribe${isSub ? ' is-subscribed' : ''}" id="pub-btn-sub" data-sub="${isSub ? '1' : '0'}">
+            ${starSvg}
+            <span>${isSub ? 'Вы подписаны' : 'Подписаться'}</span>
+          </button>`;
+        const btn = $('#pub-btn-sub');
+        btn?.addEventListener('click', async () => {
+          const nowSub = btn.dataset.sub === '1';
+          btn.disabled = true;
+          try {
+            const act = nowSub ? 'unsubscribe' : 'subscribe';
+            const res = await postJSON(PUB_API + '?action=' + act, {
+              csrf_token: window.CSRF_TOKEN || '',
+              publisher_id: p.id
+            });
+            if (!res.ok) throw new Error(res.error || 'Ошибка');
+            const sub = !!res.subscribed;
+            btn.dataset.sub = sub ? '1' : '0';
+            btn.classList.toggle('is-subscribed', sub);
+            const span = btn.querySelector('span');
+            if (span) span.textContent = sub ? 'Вы подписаны' : 'Подписаться';
+            toast(sub ? 'Подписка оформлена — скидки этого издательства будут в уведомлениях' : 'Подписка отменена');
+          } catch (err) {
+            toast(err.message || 'Ошибка');
+          } finally {
+            btn.disabled = false;
+          }
         });
       }
     }
@@ -9962,51 +10260,113 @@ async function openPublisherPage(id, slug) {
 }
 window.openPublisherPage = openPublisherPage;
 
-async function loadProfilePublishers(userId, lineEl) {
-  const el = lineEl || $('#hp-publisher-line');
-  if (!el || !userId) return;
-  el.hidden = true;
-  el.innerHTML = '';
-  try {
-    const data = await fetchJSON(PUB_API + '?action=for_user&user_id=' + userId);
-    let pubs = data.publishers || [];
-    const pref = data.display_publisher_id;
-    // 0 = скрыть; null = первое; id = выбранное
-    if (pref === 0 || pref === '0') {
-      el.hidden = true;
-      return;
-    }
-    if (pref) {
-      pubs = pubs.filter(p => +p.id === +pref);
-    } else if (pubs.length > 1) {
-      pubs = [pubs[0]];
-    }
-    if (!pubs.length) {
-      el.hidden = true;
-      return;
-    }
-    el.hidden = false;
-    el.innerHTML = pubs.map(p =>
-      '<button type="button" class="hp-publisher-link" data-id="' + p.id + '" data-slug="' + escapeHtml(p.slug || '') + '">' + escapeHtml(p.name) + '</button>'
-    ).join('<span class="hp-publisher-sep">·</span>');
-    $$('.hp-publisher-link', el).forEach(b => {
-      b.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openPublisherPage(+b.dataset.id, b.dataset.slug);
-      });
+// ===== Издательство в профиле =====
+window.__pubLineToken = 0;
+
+function bindPublisherLineClicks(el) {
+  if (!el) return;
+  el.querySelectorAll('.hp-publisher-link').forEach(b => {
+    if (b.dataset.bound === '1') return;
+    b.dataset.bound = '1';
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = +b.dataset.id;
+      if (id) openPublisherPage(id, b.dataset.slug || '');
     });
-  } catch (e) {
+  });
+}
+
+/** Мгновенно рисует/прячет строку издательства (без сети). */
+function renderPublisherLine(el, pubs) {
+  if (!el) return;
+  if (!pubs || !pubs.length) {
+    el.innerHTML = '';
     el.hidden = true;
+    el.setAttribute('hidden', '');
+    el.style.display = 'none';
+    return;
   }
+  el.innerHTML = pubs.map(p =>
+    '<button type="button" class="hp-publisher-link" data-id="' + p.id + '" data-slug="' + escapeHtml(p.slug || '') + '">' +
+      escapeHtml(p.name) +
+    '</button>'
+  ).join('<span class="hp-publisher-sep">·</span>');
+  el.hidden = false;
+  el.removeAttribute('hidden');
+  el.style.display = 'flex';
+  el.style.visibility = 'visible';
+  el.style.opacity = '1';
+  bindPublisherLineClicks(el);
+}
+
+/**
+ * Загружает издательство для userId.
+ * При смене userId сразу очищает строку, чтобы не светилось чужое.
+ */
+async function loadProfilePublishers(userId, lineEl) {
+  const el = lineEl || document.getElementById('hp-publisher-line');
+  if (!el || !userId) return;
+  const uid = +userId;
+  if (!uid) return;
+
+  const prev = +(el.dataset.forUser || 0);
+  el.dataset.forUser = String(uid);
+  // смена пользователя → сразу убираем чужое/моё, пока не пришёл ответ
+  if (prev && prev !== uid) {
+    renderPublisherLine(el, []);
+  }
+
+  const token = ++window.__pubLineToken;
+
+  try {
+    const data = await fetchJSON(PUB_API + '?action=for_user&user_id=' + uid + '&_t=' + Date.now());
+    if (token !== window.__pubLineToken) return;
+    if (+(el.dataset.forUser || 0) !== uid) return;
+
+    const all = (data && Array.isArray(data.publishers)) ? data.publishers : [];
+    let pref = data ? data.display_publisher_id : null;
+    if (pref === 'hide' || pref === false || pref === '0') pref = 0;
+    if (pref !== null && pref !== undefined && pref !== '') pref = Number(pref);
+
+    let show = [];
+    if (pref === 0) {
+      show = [];
+    } else if (pref > 0) {
+      const one = all.find(p => +p.id === +pref);
+      show = one ? [one] : [];
+    } else {
+      show = all.length ? [all[0]] : [];
+    }
+    renderPublisherLine(el, show);
+  } catch (e) {
+    console.warn('loadProfilePublishers', e);
+  }
+}
+
+/** Скрыть/показать боковую карточку целиком */
+function setSideCardVisible(bodyEl, visible) {
+  if (!bodyEl) return;
+  const card = bodyEl.closest ? bodyEl.closest('.hp-side-card') : null;
+  if (!card) return;
+  card.style.display = visible ? '' : 'none';
 }
 
 
   try { initSubmitGame(); } catch (e) { console.error('initSubmitGame', e); }
   try { initCreateMenu(); } catch (e) { console.error('initCreateMenu', e); }
   try {
+    // клики по серверному рендеру строки издательства
+    bindPublisherLineClicks(document.getElementById('hp-publisher-line'));
     const me = window.AUTH_STATE && window.AUTH_STATE.user;
-    if (me && me.id) loadProfilePublishers(me.id);
+    const view = (typeof getViewFromUrl === 'function') ? getViewFromUrl() : 'home';
+    if (me && me.id) {
+      // всегда синхронизируем строку для своего профиля (даже если уже есть PHP-рендер)
+      if (!viewingUserId) {
+        loadProfilePublishers(me.id);
+      }
+      fetchMyPublishers(true).catch(() => {});
+    }
   } catch (e) {}
 
   const safe = (name, fn) => { try { fn(); } catch (e) { console.error(name, e); } };

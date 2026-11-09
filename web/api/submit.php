@@ -317,10 +317,27 @@ try {
                     'title' => $gameTitle,
                 ], JSON_UNESCAPED_UNICODE);
                 try {
-                    $users = $pdo->query("SELECT id FROM users")->fetchAll(PDO::FETCH_COLUMN);
-                    $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?, 'sale', ?, ?, ?)");
-                    foreach ($users as $uid) {
-                        $ins->execute([(int)$uid, $title, $body, $meta]);
+                    // уведомляем только подписчиков издательства игры (если есть publisher_id)
+                    $pubId = 0;
+                    try {
+                        $stP = $pdo->prepare("SELECT publisher_id FROM games WHERE id = ?");
+                        $stP->execute([$id]);
+                        $pubId = (int)($stP->fetchColumn() ?: 0);
+                    } catch (Throwable $e) {}
+                    $users = [];
+                    if ($pubId > 0) {
+                        try {
+                            $stU = $pdo->prepare("SELECT user_id FROM publisher_subscriptions WHERE publisher_id = ?");
+                            $stU->execute([$pubId]);
+                            $users = $stU->fetchAll(PDO::FETCH_COLUMN);
+                        } catch (Throwable $e) {}
+                    }
+                    // если нет подписчиков / нет издательства — не спамим всем
+                    if ($users) {
+                        $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?, 'sale', ?, ?, ?)");
+                        foreach ($users as $uid) {
+                            $ins->execute([(int)$uid, $title, $body, $meta]);
+                        }
                     }
                 } catch (Throwable $e) { /* ignore notify errors */ }
             }

@@ -588,7 +588,43 @@ if ($isAuthorized) {
                 <div class="hp-user-info" id="hp-user-info">
                   <span class="hp-role-badge <?php echo $roleCls; ?>" id="hp-role-badge"><?php echo htmlspecialchars($roleBadge); ?></span>
                   <h1 class="hp-username" id="hp-username"><?php echo htmlspecialchars($user['username'] ?? ''); ?></h1>
-                  <div class="hp-publisher-line" id="hp-publisher-line" hidden></div>
+                  <div class="hp-publisher-line" id="hp-publisher-line"<?php
+                    $__pubLineHtml = '';
+                    $__pubLineShow = false;
+                    try {
+                      if (!empty($isAuthorized) && !empty($user['id'])) {
+                        $__pdo = function_exists('getDB') ? getDB() : null;
+                        if ($__pdo) {
+                          $__disp = null;
+                          try {
+                            $__st = $__pdo->prepare('SELECT display_publisher_id FROM users WHERE id = ?');
+                            $__st->execute([(int)$user['id']]);
+                            $__row = $__st->fetch();
+                            if ($__row && array_key_exists('display_publisher_id', $__row) && $__row['display_publisher_id'] !== null) {
+                              $__disp = (int)$__row['display_publisher_id'];
+                            }
+                          } catch (Throwable $e) {}
+                          if ($__disp !== 0) {
+                            $__sql = "SELECT p.id, p.name, p.slug FROM publisher_members pm JOIN publishers p ON p.id = pm.publisher_id WHERE pm.user_id = ?";
+                            $__params = [(int)$user['id']];
+                            if ($__disp > 0) {
+                              $__sql .= " AND p.id = ?";
+                              $__params[] = $__disp;
+                            }
+                            $__sql .= " ORDER BY pm.role = 'owner' DESC, p.name ASC LIMIT 1";
+                            $__st2 = $__pdo->prepare($__sql);
+                            $__st2->execute($__params);
+                            $__pub = $__st2->fetch();
+                            if ($__pub) {
+                              $__pubLineShow = true;
+                              $__pubLineHtml = '<button type="button" class="hp-publisher-link" data-id="'.(int)$__pub['id'].'" data-slug="'.htmlspecialchars($__pub['slug'] ?? '', ENT_QUOTES).'">'.htmlspecialchars($__pub['name'] ?? '').'</button>';
+                            }
+                          }
+                        }
+                      }
+                    } catch (Throwable $e) {}
+                    echo $__pubLineShow ? '' : ' hidden';
+                  ?>><?php echo $__pubLineHtml; ?></div>
                 </div>
               </div>
             </div>
@@ -967,8 +1003,10 @@ if ($isAuthorized) {
           </div>
         </div>
       </section>
-      <?php if ($isAuthorized && ($user['role'] ?? '') === 'admin'): ?>
-            <section id="view-publisher" class="view">
+
+      <?php if ($isAuthorized): ?>
+      <!-- ===== СТРАНИЦА ИЗДАТЕЛЬСТВА ===== -->
+      <section id="view-publisher" class="view">
         <div class="profile-page hydra-profile" id="publisher-page">
           <div class="hp-hero" id="pub-page-hero">
             <div class="hp-hero-bg" id="pub-page-banner"></div>
@@ -982,22 +1020,48 @@ if ($isAuthorized) {
                 </div>
               </div>
             </div>
+            <!-- Полоска с blur как в профиле: слева статистика, справа кнопки -->
+            <div class="hp-toolbar" id="pub-page-toolbar">
+              <div class="hp-toolbar-left" id="pub-page-stats">
+                <span class="pub-stat-chip" id="pub-players-count" title="Игроки, добавившие или играющие в игры издательства">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  <span id="pub-players-num">0</span> игроков
+                </span>
+              </div>
+              <div class="hp-toolbar-spacer"></div>
+              <div class="hp-toolbar-actions" id="pub-page-actions">
+                <!-- кнопки заполняются JS: владелец — редактировать/удалить, остальные — подписаться -->
+              </div>
+            </div>
           </div>
           <div class="hp-body">
             <div class="hp-main">
-              <h2 class="pub-page-section-title">Игры</h2>
-              <div class="store-grid" id="pub-page-games"><div class="loading">Загрузка...</div></div>
+              <div class="hp-section">
+                <div class="hp-section-head">
+                  <h3>Игры <span class="hp-count" id="pub-games-count">0</span></h3>
+                </div>
+                <div class="hp-games-grid" id="pub-page-games"><div class="loading">Загрузка...</div></div>
+              </div>
             </div>
             <aside class="hp-side">
-              <div class="hp-side-card">
-                <div class="hp-side-head" style="cursor:default">Участники</div>
+              <div class="hp-side-card" id="pub-members-card">
+                <div class="hp-side-head">
+                  <span>Участники <span class="hp-count" id="pub-members-count">0</span></span>
+                  <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
+                    <span class="hp-side-arrow" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+                    </span>
+                  </button>
+                </div>
                 <div class="hp-side-body" id="pub-page-members"></div>
               </div>
             </aside>
           </div>
         </div>
       </section>
+      <?php endif; ?>
 
+      <?php if ($isAuthorized && ($user['role'] ?? '') === 'admin'): ?>
 <section id="view-admin" class="view <?php echo $currentView === 'admin' ? 'active' : ''; ?>">
         <div class="settings-layout admin-settings-layout">
           <aside class="settings-nav" id="admin-nav">
