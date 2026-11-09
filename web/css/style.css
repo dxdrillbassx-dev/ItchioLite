@@ -5663,7 +5663,8 @@ button.avatar,
 .submit-modal.hidden { display: none; }
 .submit-modal-backdrop {
   position: absolute; inset: 0;
-  background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+  background: rgba(0,0,0,0.62);
+  /* без backdrop-filter: в WebView2 blur + file dialog иногда глушит слой модалки */
 }
 .submit-modal-box {
   position: relative;
@@ -11264,24 +11265,32 @@ html[data-theme="light"] .catio-select__btn {
   transition: opacity 0.22s ease, visibility 0.22s ease;
 }
 .submit-modal.hidden {
-  display: flex !important;
+  display: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
 }
 .submit-modal:not(.hidden) {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 .submit-modal-box {
   transform: translateY(12px) scale(0.97);
   opacity: 0;
   transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
 }
+/* контент модалки всегда видим, пока она открыта (file dialog не сбрасывает) */
 .submit-modal:not(.hidden) .submit-modal-box {
-  transform: none;
-  opacity: 1;
+  transform: none !important;
+  opacity: 1 !important;
+}
+#submit-form-modal:not(.hidden) .submit-modal-box,
+#submit-form-modal:not(.hidden) .pub-modal-body,
+#submit-form-modal:not(.hidden) .submit-modal-body {
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 
@@ -11858,9 +11867,40 @@ select.select-native-hidden,
   overflow: hidden;
 }
 .pub-file-preview.has-img span { display: none; }
-.pub-file-preview--wide { height: 88px; }
-.pub-file-preview--logo { height: 88px; background-size: contain; }
-.pub-file-preview--icon { height: 88px; background-size: contain; }
+/* обложка — портрет 2:3 */
+.pub-file-card[data-for="sg-cover"] .pub-file-preview {
+  aspect-ratio: 2 / 3;
+  height: auto;
+  min-height: 120px;
+  max-height: 180px;
+  background-size: cover;
+  background-position: center;
+}
+.pub-file-preview--wide {
+  height: 96px;
+  aspect-ratio: 16 / 5;
+  width: 100%;
+  background-size: cover;
+  background-position: center;
+}
+.pub-file-preview--logo {
+  height: 72px;
+  width: 100%;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: rgba(0,0,0,0.25);
+}
+.pub-file-preview--icon {
+  width: 88px !important;
+  height: 88px !important;
+  max-width: 88px;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  margin: 0 auto;
+}
 .pub-file-input {
   position: absolute !important;
   width: 1px !important;
@@ -13291,4 +13331,367 @@ body.client .content > .main > #view-home.active {
   font-size: 0.9rem !important;
   font-weight: 600 !important;
   align-items: center !important;
+}
+
+
+/* ===== Публикация: жанры, RTE, селекты ===== */
+.pub-field-hint {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+.pub-genre-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.pub-genre-chip {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+.pub-genre-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.pub-genre-chip span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.82rem;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.pub-genre-chip:hover span {
+  color: var(--text-bright);
+  border-color: var(--text-muted);
+}
+.pub-genre-chip input:checked + span {
+  background: rgba(239, 91, 44, 0.15);
+  border-color: var(--accent);
+  color: var(--text-bright);
+  font-weight: 600;
+}
+.pub-platform-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-top: 8px;
+}
+
+.pub-rte {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  margin-top: 8px;
+}
+.pub-rte-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+}
+.pub-rte-btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.pub-rte-btn:hover {
+  color: var(--text-bright);
+  background: rgba(255,255,255,0.06);
+  border-color: var(--border);
+}
+.pub-rte-btn:active,
+.pub-rte-btn.is-active {
+  color: var(--accent);
+  background: rgba(239, 91, 44, 0.12);
+  border-color: rgba(239, 91, 44, 0.35);
+}
+.pub-rte-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 4px 4px;
+  align-self: center;
+}
+.pub-rte-editor {
+  min-height: 160px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  outline: none;
+  color: var(--text-bright);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.pub-rte-editor:empty:before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.pub-rte-editor h2 {
+  font-size: 1.15rem;
+  margin: 0.6em 0 0.35em;
+  color: var(--text-bright);
+}
+.pub-rte-editor h3 {
+  font-size: 1.02rem;
+  margin: 0.5em 0 0.3em;
+  color: var(--text-bright);
+}
+.pub-rte-editor p { margin: 0.35em 0; }
+.pub-rte-editor ul, .pub-rte-editor ol {
+  margin: 0.4em 0 0.4em 1.2em;
+  padding: 0;
+}
+.pub-rte-editor img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 8px 0;
+  display: block;
+}
+.pub-rte-editor a { color: var(--accent); }
+
+/* selects in publish modal — same as profile catio */
+#submit-form-modal .catio-select,
+.pub-form .catio-select {
+  width: 100%;
+}
+#submit-form-modal .catio-select__btn {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+}
+
+
+/* Publish file inputs: клик идёт через JS (input в body), сами прячем */
+#submit-form-modal .pub-file-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  left: -9999px !important;
+}
+#submit-form-modal .pub-file-preview {
+  cursor: pointer;
+}
+#submit-form-modal:not(.hidden),
+#submit-form-modal:not(.hidden) .submit-modal-box {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+}
+
+
+/* ===== Create menu + publishers ===== */
+.create-menu-body { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.create-menu-item {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; text-align: left;
+  padding: 14px 14px; border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.create-menu-item:hover:not(.is-disabled) {
+  border-color: rgba(239,91,44,0.45);
+  background: rgba(239,91,44,0.06);
+}
+.create-menu-item.is-disabled {
+  opacity: 0.45; cursor: not-allowed;
+}
+.create-menu-ico {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.create-menu-item:hover:not(.is-disabled) .create-menu-ico {
+  color: var(--accent);
+  border-color: rgba(239,91,44,0.35);
+  background: rgba(239,91,44,0.08);
+}
+.create-menu-txt { display: flex; flex-direction: column; gap: 2px; }
+.create-menu-txt strong { color: var(--text-bright); font-size: 0.95rem; }
+.create-menu-txt em { font-style: normal; font-size: 0.78rem; color: var(--text-muted); }
+
+.pubs-list { display: flex; flex-direction: column; gap: 8px; min-height: 80px; }
+.pubs-list-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; text-align: left;
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+}
+.pubs-list-item:hover { border-color: rgba(239,91,44,0.4); }
+.pubs-list-av {
+  width: 40px; height: 40px; border-radius: 10px;
+  background-size: cover; background-position: center;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.pubs-list-info { display: flex; flex-direction: column; gap: 2px; }
+.pubs-list-info strong { color: var(--text-bright); }
+.pubs-list-info em { font-style: normal; font-size: 0.75rem; color: var(--text-muted); }
+
+.pub-member-suggest {
+  margin-top: 6px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-elevated); max-height: 180px; overflow-y: auto;
+}
+.pub-member-opt {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 10px; border: none; background: transparent;
+  color: var(--text); cursor: pointer; text-align: left;
+}
+.pub-member-opt:hover { background: rgba(255,255,255,0.05); }
+.pub-member-empty { padding: 10px; color: var(--text-muted); font-size: 0.85rem; }
+.pub-member-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pub-member-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border-radius: 999px;
+  background: rgba(239,91,44,0.12); border: 1px solid rgba(239,91,44,0.3);
+  color: var(--text-bright); font-size: 0.8rem;
+}
+.pub-member-chip button {
+  border: none; background: transparent; color: var(--text-muted);
+  cursor: pointer; font-size: 1rem; line-height: 1;
+}
+
+.hp-publisher-line {
+  margin-top: 4px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
+.hp-publisher-link {
+  border: none; background: transparent; padding: 0;
+  color: var(--accent); font-size: 0.85rem; cursor: pointer;
+  font-weight: 600;
+}
+.hp-publisher-link:hover { text-decoration: underline; }
+.hp-publisher-sep { color: var(--text-muted); font-size: 0.8rem; }
+
+.gp-publisher-link {
+  border: none; background: transparent; padding: 0;
+  color: var(--accent); cursor: pointer; font: inherit;
+}
+.gp-publisher-link:hover { text-decoration: underline; }
+
+.pub-page-desc {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  max-width: 520px;
+}
+.pub-page-section-title {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: var(--text-bright);
+}
+#view-publisher .hp-avatar {
+  background-size: cover;
+  background-position: center;
+}
+
+.no-pub-text {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+
+.pub-member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  margin: 0 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.pub-member-row:hover {
+  border-color: rgba(239,91,44,0.35);
+  background: rgba(239,91,44,0.06);
+}
+.pub-member-av {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+.pub-member-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pub-member-name {
+  color: var(--text-bright);
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.pub-member-role {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.catio-pub-av {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: cover;
+  display: block;
+}
+#submit-form-modal #sg-publisher-id,
+#submit-form-modal .catio-select {
+  width: 100%;
+  min-width: 0;
 }

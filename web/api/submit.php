@@ -72,6 +72,16 @@ try {
             $desc = trim($_POST['description'] ?? '');
             $short = trim($_POST['short_description'] ?? '');
             $genre = trim($_POST['genre'] ?? '');
+            $tags = trim($_POST['tags'] ?? '');
+            if (mb_strlen($genre) > 255) $genre = mb_substr($genre, 0, 255);
+            if (mb_strlen($tags) > 512) $tags = mb_substr($tags, 0, 512);
+            $publisherId = (int)($_POST['publisher_id'] ?? 0);
+            if ($publisherId > 0) {
+                // только если пользователь — участник
+                $chk = $pdo->prepare("SELECT publisher_id FROM publisher_members WHERE publisher_id=? AND user_id=?");
+                $chk->execute([$publisherId, (int)$user['id']]);
+                if (!$chk->fetch()) $publisherId = 0;
+            }
             $video = trim($_POST['video_url'] ?? '');
             $sysMin = trim($_POST['sys_req_min'] ?? '');
             $sysRec = trim($_POST['sys_req_rec'] ?? '');
@@ -79,6 +89,16 @@ try {
             $languages = trim($_POST['languages'] ?? '');
             $price = (float)($_POST['price'] ?? 0);
             $isAdult = !empty($_POST['is_adult']) ? 1 : 0;
+            $developerIn = trim($_POST['developer'] ?? '');
+            $publisherIn = trim($_POST['publisher'] ?? '');
+            $devName = $publisherIn !== '' ? $publisherIn : ($developerIn !== '' ? $developerIn : $user['username']);
+            if ($publisherId > 0) {
+                $pn = $pdo->prepare("SELECT name FROM publishers WHERE id = ?");
+                $pn->execute([$publisherId]);
+                $prow = $pn->fetch();
+                if ($prow) $devName = $prow['name'];
+            }
+            $developerCol = $developerIn !== '' ? $developerIn : $user['username'];
 
             if ($title === '' || mb_strlen($title) > 120) {
                 http_response_code(400);
@@ -110,20 +130,28 @@ try {
             }
             $bannerUrl = null;
             try { $bannerUrl = saveUpload('banner', $bannerDir, $imgAllowed, 8); } catch (Throwable $e) {}
+            $logoDir = $base . '/logos';
+            $iconDir = $base . '/icons';
+            if (!is_dir($logoDir)) @mkdir($logoDir, 0755, true);
+            if (!is_dir($iconDir)) @mkdir($iconDir, 0755, true);
+            $logoUrl = null;
+            try { $logoUrl = saveUpload('logo', $logoDir, $imgAllowed, 4); } catch (Throwable $e) {}
+            $iconUrl = null;
+            try { $iconUrl = saveUpload('icon', $iconDir, $imgAllowed, 3); } catch (Throwable $e) {}
 
             $slug = slugify($title) . '-' . substr(uniqid(), -4);
             $stmt = $pdo->prepare("
                 INSERT INTO games
-                  (title, slug, short_description, description, developer, developer_name, price, genre,
-                   cover_url, banner_url, video_url, sys_req_min, sys_req_rec, controllers, languages,
-                   status, is_published, submitted_by, is_adult)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',0,?,?)
+                  (title, slug, short_description, description, developer, developer_name, price, genre, tags,
+                   cover_url, banner_url, logo_url, icon_url, video_url, sys_req_min, sys_req_rec, controllers, languages,
+                   status, is_published, submitted_by, is_adult, publisher_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',0,?,?,?)
             ");
             $stmt->execute([
                 $title, $slug, $short ?: mb_substr($desc, 0, 200), $desc,
-                $user['username'], $user['username'], $price, $genre,
-                $coverUrl, $bannerUrl, $video, $sysMin, $sysRec, $controllers, $languages,
-                (int)$user['id'], $isAdult,
+                $developerCol, $devName, $price, $genre, $tags,
+                $coverUrl, $bannerUrl, $logoUrl, $iconUrl, $video, $sysMin, $sysRec, $controllers, $languages,
+                (int)$user['id'], $isAdult, $publisherId ?: null,
             ]);
             $gameId = (int)$pdo->lastInsertId();
 
@@ -243,7 +271,9 @@ try {
                 'review_note' => trim($_POST['review_note'] ?? ''),
                 'is_adult' => !empty($_POST['is_adult']) ? 1 : 0,
                 'developer' => trim($_POST['developer'] ?? ''),
+                'publisher' => trim($_POST['publisher'] ?? ''),
             ];
+            $devName = $fields['publisher'] !== '' ? $fields['publisher'] : ($fields['developer'] !== '' ? $fields['developer'] : '');
             $pdo->prepare("
                 UPDATE games SET title=?, short_description=?, description=?, genre=?, video_url=?,
                   sys_req_min=?, sys_req_rec=?, controllers=?, languages=?, price=?, discount_percent=?, review_note=?, is_adult=?,
@@ -253,7 +283,7 @@ try {
                 $fields['title'], $fields['short_description'], $fields['description'], $fields['genre'],
                 $fields['video_url'], $fields['sys_req_min'], $fields['sys_req_rec'], $fields['controllers'],
                 $fields['languages'], $fields['price'], $fields['discount_percent'], $fields['review_note'], $fields['is_adult'],
-                $fields['developer'], $fields['developer'], $id,
+                $fields['developer'] ?: $devName, $devName ?: $fields['developer'], $id,
             ]);
 
             // Уведомление всем пользователям, если появилась/выросла скидка
@@ -306,6 +336,18 @@ try {
                 try {
                     $url = saveUpload('banner', $base.'/banners', $imgAllowed, 8);
                     if ($url) $pdo->prepare("UPDATE games SET banner_url=? WHERE id=?")->execute([$url, $id]);
+                } catch (Throwable $e) {}
+            }
+            if (!empty($_FILES['logo']['tmp_name'])) {
+                try {
+                    $url = saveUpload('logo', $base.'/logos', $imgAllowed, 4);
+                    if ($url) $pdo->prepare("UPDATE games SET logo_url=? WHERE id=?")->execute([$url, $id]);
+                } catch (Throwable $e) {}
+            }
+            if (!empty($_FILES['icon']['tmp_name'])) {
+                try {
+                    $url = saveUpload('icon', $base.'/icons', $imgAllowed, 3);
+                    if ($url) $pdo->prepare("UPDATE games SET icon_url=? WHERE id=?")->execute([$url, $id]);
                 } catch (Throwable $e) {}
             }
             // new screenshots
@@ -362,31 +404,41 @@ try {
                 echo json_encode(['ok'=>false,'error'=>'Не найдено'], JSON_UNESCAPED_UNICODE);
                 break;
             }
+            $adminName = $user['username'] ?? 'админ';
+            $adminId = (int)($user['id'] ?? 0);
             if ($action === 'publish') {
                 $pdo->prepare("UPDATE games SET status='published', is_published=1, category=IF(category='' OR category IS NULL,'game',category) WHERE id=?")->execute([$id]);
-                $note = 'Игра «' . $g['title'] . '» опубликована';
                 $type = 'game_published';
-                // всем пользователям — о добавлении игры
+                $titleN = 'Ваша игра опубликована';
+                $bodyN = 'Игра «' . $g['title'] . '» прошла модерацию. Рассмотрел: ' . $adminName;
+                // каталог — остальным
                 try {
                     $users = $pdo->query("SELECT id FROM users")->fetchAll();
                     $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)");
-                    $titleN = 'Новая игра в каталоге';
-                    $bodyN = 'Добавлена игра «' . $g['title'] . '»';
-                    $meta = json_encode(['game_id' => $id], JSON_UNESCAPED_UNICODE);
+                    $metaCat = json_encode(['game_id' => $id], JSON_UNESCAPED_UNICODE);
                     foreach ($users as $u) {
-                        $ins->execute([(int)$u['id'], 'game_added', $titleN, $bodyN, $meta]);
+                        if ((int)$u['id'] === (int)$g['submitted_by']) continue;
+                        $ins->execute([(int)$u['id'], 'game_added', 'Новая игра в каталоге', 'В каталоге появилась «' . $g['title'] . '»', $metaCat]);
                     }
                 } catch (Throwable $e) {}
             } else {
                 $pdo->prepare("UPDATE games SET status='rejected', is_published=0, review_note=? WHERE id=?")
                     ->execute([trim($body['note'] ?? ''), $id]);
-                $note = 'Игра «' . $g['title'] . '» отклонена';
                 $type = 'game_rejected';
+                $titleN = 'Игра не прошла модерацию';
+                $bodyN = 'Игра «' . $g['title'] . '» отклонена. Отказал: ' . $adminName;
+                $extra = trim($body['note'] ?? '');
+                if ($extra !== '') $bodyN .= '. Причина: ' . $extra;
             }
             if ($g['submitted_by']) {
                 try {
+                    $metaDev = json_encode([
+                        'game_id' => $id,
+                        'admin_id' => $adminId,
+                        'admin_username' => $adminName,
+                    ], JSON_UNESCAPED_UNICODE);
                     $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)")
-                        ->execute([(int)$g['submitted_by'], $type, $note, $body['note'] ?? '', json_encode(['game_id'=>$id])]);
+                        ->execute([(int)$g['submitted_by'], $type, $titleN, $bodyN, $metaDev]);
                 } catch (Throwable $e) {}
             }
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);

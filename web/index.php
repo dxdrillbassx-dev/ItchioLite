@@ -289,7 +289,7 @@ if ($isAuthorized) {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
           <span class="cart-badge hidden" id="cart-badge">0</span>
         </button>
-        <button type="button" class="head-add-game" id="btn-add-game" title="Добавить игру" onclick="if(window.openSubmitRules){openSubmitRules();}else{alert('Скрипт ещё не загрузился');}">
+        <button type="button" class="head-add-game" id="btn-add-game" title="Создать" onclick="if(window.openCreateMenu){openCreateMenu();}else if(window.openSubmitRules){openSubmitRules();}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         </div>
@@ -588,6 +588,7 @@ if ($isAuthorized) {
                 <div class="hp-user-info" id="hp-user-info">
                   <span class="hp-role-badge <?php echo $roleCls; ?>" id="hp-role-badge"><?php echo htmlspecialchars($roleBadge); ?></span>
                   <h1 class="hp-username" id="hp-username"><?php echo htmlspecialchars($user['username'] ?? ''); ?></h1>
+                  <div class="hp-publisher-line" id="hp-publisher-line" hidden></div>
                 </div>
               </div>
             </div>
@@ -941,6 +942,13 @@ if ($isAuthorized) {
                 <input type="email" id="settings-email" class="auth-input" value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" />
               </label>
 
+              <label class="settings-label"><span>Издательство в профиле</span>
+                <select class="settings-select" id="settings-display-pub">
+                  <option value="hide">Не показывать</option>
+                </select>
+              </label>
+              <p class="settings-hint" style="margin-top:-4px;margin-bottom:12px;color:var(--text-muted);font-size:0.8rem">Какое издательство видно под ником (или скрыть)</p>
+
               <p id="settings-privacy-error" class="auth-error hidden"></p>
               <button type="button" class="auth-submit" id="settings-save-privacy">Сохранить</button>
             </div>
@@ -960,7 +968,37 @@ if ($isAuthorized) {
         </div>
       </section>
       <?php if ($isAuthorized && ($user['role'] ?? '') === 'admin'): ?>
-      <section id="view-admin" class="view <?php echo $currentView === 'admin' ? 'active' : ''; ?>">
+            <section id="view-publisher" class="view">
+        <div class="profile-page hydra-profile" id="publisher-page">
+          <div class="hp-hero" id="pub-page-hero">
+            <div class="hp-hero-bg" id="pub-page-banner"></div>
+            <div class="hp-banner">
+              <div class="hp-user">
+                <div class="hp-avatar" id="pub-page-avatar"></div>
+                <div class="hp-user-info">
+                  <span class="hp-role-badge is-dev">Издательство</span>
+                  <h1 class="hp-username" id="pub-page-name">—</h1>
+                  <p class="pub-page-desc" id="pub-page-desc"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="hp-body">
+            <div class="hp-main">
+              <h2 class="pub-page-section-title">Игры</h2>
+              <div class="store-grid" id="pub-page-games"><div class="loading">Загрузка...</div></div>
+            </div>
+            <aside class="hp-side">
+              <div class="hp-side-card">
+                <div class="hp-side-head" style="cursor:default">Участники</div>
+                <div class="hp-side-body" id="pub-page-members"></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+<section id="view-admin" class="view <?php echo $currentView === 'admin' ? 'active' : ''; ?>">
         <div class="settings-layout admin-settings-layout">
           <aside class="settings-nav" id="admin-nav">
             <button type="button" class="settings-nav-btn active" data-atab="moderation">
@@ -1632,6 +1670,127 @@ function socialAuth(provider) {
   </div>
 
   <!-- ===== МОДАЛКА ПРАВИЛ ПУБЛИКАЦИИ ===== -->
+  <!-- Нет издательства — нельзя публиковать -->
+  <div class="submit-modal hidden" id="no-pub-modal">
+    <div class="submit-modal-backdrop" data-close-no-pub></div>
+    <div class="submit-modal-box" style="max-width:420px">
+      <div class="submit-modal-head">
+        <h2>Нужно издательство</h2>
+        <button type="button" class="pub-modal-close" data-close-no-pub aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body">
+        <p class="no-pub-text">Вы не состоите ни в одном издательстве. Чтобы отправить игру на модерацию, сначала создайте издательство или вступите в существующее.</p>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close-no-pub>Отмена</button>
+        <button type="button" class="hp-btn-edit" id="no-pub-create">Создать издательство</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Меню создания ===== -->
+  <div class="submit-modal hidden" id="create-menu-modal">
+    <div class="submit-modal-backdrop" data-close-create-menu></div>
+    <div class="submit-modal-box" style="max-width:420px">
+      <div class="submit-modal-head">
+        <h2>Создать</h2>
+        <button type="button" class="pub-modal-close" data-close-create-menu aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body create-menu-body">
+        <button type="button" class="create-menu-item" id="create-menu-game">
+          <span class="create-menu-ico" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></svg>
+          </span>
+          <span class="create-menu-txt"><strong>Добавить игру</strong><em>Карточка на модерацию</em></span>
+        </button>
+        <button type="button" class="create-menu-item is-disabled" id="create-menu-workshop" disabled title="Скоро">
+          <span class="create-menu-ico" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          </span>
+          <span class="create-menu-txt"><strong>Мастерская</strong><em>Скоро будет доступно</em></span>
+        </button>
+        <button type="button" class="create-menu-item" id="create-menu-pubs">
+          <span class="create-menu-ico" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
+          </span>
+          <span class="create-menu-txt"><strong>Мои издательства</strong><em>Студии и бренды</em></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Список издательств ===== -->
+  <div class="submit-modal hidden" id="pubs-list-modal">
+    <div class="submit-modal-backdrop" data-close-pubs-list></div>
+    <div class="submit-modal-box" style="max-width:480px">
+      <div class="submit-modal-head">
+        <h2>Мои издательства</h2>
+        <button type="button" class="pub-modal-close" data-close-pubs-list aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body">
+        <div id="pubs-list" class="pubs-list"><div class="loading">Загрузка...</div></div>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close-pubs-list>Закрыть</button>
+        <button type="button" class="hp-btn-edit" id="pubs-create-open">Создать издательство</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Создание издательства ===== -->
+  <div class="submit-modal hidden" id="pubs-create-modal">
+    <div class="submit-modal-backdrop" data-close-pubs-create></div>
+    <div class="submit-modal-box submit-modal-wide pub-modal-box">
+      <div class="submit-modal-head pub-modal-head">
+        <div>
+          <h2>Новое издательство</h2>
+          <p class="pub-modal-sub">Аватар, баннер, описание и участники</p>
+        </div>
+        <button type="button" class="pub-modal-close" data-close-pubs-create aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body pub-modal-body">
+        <div class="submit-grid">
+          <label class="settings-label full"><span>Название *</span><input class="auth-input" id="pub-name" maxlength="120" placeholder="Например: Neon Fox Games" /></label>
+          <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="pub-desc" rows="3" placeholder="Коротко о студии"></textarea></label>
+          <div class="settings-label">
+            <span>Аватар</span>
+            <div class="pub-file-card" style="margin-top:6px">
+              <div class="pub-file-preview pub-file-preview--icon" id="pub-avatar-preview"><span>1:1</span></div>
+              <label class="pub-file-btn" for="pub-avatar">Выбрать</label>
+              <input type="file" id="pub-avatar" class="pub-file-input" accept="image/*" />
+            </div>
+          </div>
+          <div class="settings-label">
+            <span>Обложка / баннер</span>
+            <div class="pub-file-card" style="margin-top:6px">
+              <div class="pub-file-preview pub-file-preview--wide" id="pub-banner-preview"><span>Широкий</span></div>
+              <label class="pub-file-btn" for="pub-banner">Выбрать</label>
+              <input type="file" id="pub-banner" class="pub-file-input" accept="image/*" />
+            </div>
+          </div>
+          <div class="settings-label full">
+            <span>Участники</span>
+            <input class="auth-input" id="pub-member-search" placeholder="Поиск пользователя…" autocomplete="off" />
+            <div id="pub-member-suggest" class="pub-member-suggest hidden"></div>
+            <div id="pub-member-chips" class="pub-member-chips"></div>
+          </div>
+        </div>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close-pubs-create>Отмена</button>
+        <button type="button" class="auth-submit" id="pub-create-save">Создать</button>
+      </div>
+    </div>
+  </div>
+
   <div class="submit-modal hidden" id="submit-rules-modal">
     <div class="submit-modal-backdrop" data-close="rules"></div>
     <div class="submit-modal-box privacy-modal-box">
@@ -1706,7 +1865,7 @@ function socialAuth(provider) {
       <div class="submit-modal-head pub-modal-head">
         <div>
           <h2>Публикация игры</h2>
-          <p class="pub-modal-sub">Заполните карточку вручную или подтяните данные из Steam</p>
+          <p class="pub-modal-sub">Заполните карточку игры — жанры, медиа, требования и описание</p>
         </div>
         <button type="button" class="pub-modal-close" data-close="form" aria-label="Закрыть">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -1717,35 +1876,81 @@ function socialAuth(provider) {
 
           <section class="pub-section">
             <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
-              <h3>Импорт из Steam</h3>
-            </div>
-            <div class="pub-steam-row">
-              <input class="auth-input" type="text" id="sg-steam-url" placeholder="Ссылка или AppID Steam…" />
-              <button type="button" class="hp-btn-edit" id="sg-steam-fill">Подтянуть</button>
-            </div>
-            <p class="pub-hint">Название, описание, жанр, обложка и системные требования заполнятся автоматически — можно править вручную.</p>
-          </section>
-
-          <section class="pub-section">
-            <div class="pub-section-head">
               <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
               <h3>Основное</h3>
             </div>
             <div class="submit-grid">
               <label class="settings-label"><span>Название *</span><input class="auth-input" name="title" id="sg-title" required maxlength="120" /></label>
-              <label class="settings-label"><span>Жанр *</span>
-                <select class="settings-select" name="genre" id="sg-genre" required>
-                  <option value="">Выберите</option>
-                  <option>Экшен</option><option>Приключения</option><option>RPG</option>
-                  <option>Стратегия</option><option>Симулятор</option><option>Инди</option>
-                  <option>Хоррор</option><option>Гонки</option><option>Спорт</option><option>Другое</option>
+              <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" name="price" id="sg-price" type="text" inputmode="numeric" pattern="[0-9]*" value="0" maxlength="7" autocomplete="off" /></label>
+              <label class="settings-label"><span>Разработчик</span><input class="auth-input" name="developer" id="sg-developer" maxlength="120" placeholder="Студия или автор" /></label>
+              <label class="settings-label"><span>Издательство</span>
+                <select class="settings-select" id="sg-publisher-id" name="publisher_id">
+                  <option value="">— без издательства —</option>
                 </select>
               </label>
-              <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" name="price" id="sg-price" type="text" inputmode="numeric" pattern="[0-9]*" value="0" maxlength="7" autocomplete="off" /></label>
-              <label class="settings-label"><span>Разработчик</span><input class="auth-input" name="developer" id="sg-developer" maxlength="120" /></label>
-              <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" name="short_description" id="sg-short" maxlength="200" /></label>
-              <label class="settings-label full"><span>Описание *</span><textarea class="auth-input settings-textarea" name="description" id="sg-desc" rows="5" required></textarea></label>
+              <input type="hidden" name="publisher" id="sg-publisher" value="" />
+              <label class="settings-label"><span>Дата релиза</span><input class="auth-input" name="release_date" id="sg-release" type="date" /></label>
+              <label class="settings-label"><span>Сайт / страница</span><input class="auth-input" name="website" id="sg-website" type="url" placeholder="https://" maxlength="255" /></label>
+              <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" name="short_description" id="sg-short" maxlength="200" placeholder="Одна строка для карточки в каталоге" /></label>
+              <div class="settings-label full">
+                <span>Жанры * <em class="pub-field-hint">можно несколько</em></span>
+                <div class="pub-genre-grid" id="sg-genre-grid">
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Экшен" /><span>Экшен</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Приключения" /><span>Приключения</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="RPG" /><span>RPG</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Стратегия" /><span>Стратегия</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Симулятор" /><span>Симулятор</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Инди" /><span>Инди</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Хоррор" /><span>Хоррор</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Гонки" /><span>Гонки</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Спорт" /><span>Спорт</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Шутер" /><span>Шутер</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Платформер" /><span>Платформер</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Головоломка" /><span>Головоломка</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Выживание" /><span>Выживание</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Открытый мир" /><span>Открытый мир</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Мультиплеер" /><span>Мультиплеер</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Казуальная" /><span>Казуальная</span></label>
+                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Другое" /><span>Другое</span></label>
+                </div>
+                <input type="hidden" name="genre" id="sg-genre" value="" />
+              </div>
+              <label class="settings-label full"><span>Теги</span><input class="auth-input" name="tags" id="sg-tags" maxlength="200" placeholder="через запятую: pixel-art, co-op, roguelike…" /></label>
+              <div class="settings-label full">
+                <span>Платформы</span>
+                <div class="submit-checks pub-platform-checks">
+                  <label class="settings-check"><input type="checkbox" class="sg-platform" value="windows" checked /> Windows</label>
+                  <label class="settings-check"><input type="checkbox" class="sg-platform" value="linux" /> Linux</label>
+                  <label class="settings-check"><input type="checkbox" class="sg-platform" value="mac" /> macOS</label>
+                </div>
+              </div>
+              <div class="settings-label full">
+                <span>Описание * <em class="pub-field-hint">форматирование как в Steam</em></span>
+                <div class="pub-rte" id="sg-rte">
+                  <div class="pub-rte-toolbar" role="toolbar" aria-label="Форматирование">
+                    <button type="button" class="pub-rte-btn" data-cmd="bold" title="Жирный"><b>B</b></button>
+                    <button type="button" class="pub-rte-btn" data-cmd="italic" title="Курсив"><i>I</i></button>
+                    <button type="button" class="pub-rte-btn" data-cmd="underline" title="Подчёркнутый"><u>U</u></button>
+                    <span class="pub-rte-sep"></span>
+                    <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="h2" title="Заголовок">H2</button>
+                    <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="h3" title="Подзаголовок">H3</button>
+                    <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="p" title="Абзац">¶</button>
+                    <span class="pub-rte-sep"></span>
+                    <button type="button" class="pub-rte-btn" data-cmd="insertUnorderedList" title="Список">• List</button>
+                    <button type="button" class="pub-rte-btn" data-cmd="insertOrderedList" title="Нумерация">1. List</button>
+                    <button type="button" class="pub-rte-btn" data-cmd="indent" title="Отступ →">→</button>
+                    <button type="button" class="pub-rte-btn" data-cmd="outdent" title="Отступ ←">←</button>
+                    <span class="pub-rte-sep"></span>
+                    <button type="button" class="pub-rte-btn" data-cmd="createLink" title="Ссылка">🔗</button>
+                    <button type="button" class="pub-rte-btn" data-cmd="insertHorizontalRule" title="Линия">―</button>
+                    <button type="button" class="pub-rte-btn" data-cmd="removeFormat" title="Сбросить стиль">✕</button>
+                    <span class="pub-rte-sep"></span>
+                    <button type="button" class="pub-rte-btn" data-cmd="insertShot" title="Вставить скриншот">🖼 Скрин</button>
+                  </div>
+                  <div class="pub-rte-editor auth-input" id="sg-desc-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Подробное описание игры…"></div>
+                  <textarea class="hidden" name="description" id="sg-desc" required></textarea>
+                </div>
+              </div>
             </div>
           </section>
 

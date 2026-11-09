@@ -372,6 +372,35 @@ function getDB() {
 
         ensureColumn($pdo, 'comments', 'parent_id', "INT UNSIGNED NULL DEFAULT NULL");
         ensureColumn($pdo, 'comments', 'likes', "INT UNSIGNED NOT NULL DEFAULT 0");
+
+        // ===== Издательства =====
+        $pdo->exec("CREATE TABLE IF NOT EXISTS publishers (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(120) NOT NULL,
+            slug VARCHAR(140) NOT NULL UNIQUE,
+            description TEXT NULL,
+            avatar_url VARCHAR(512) NULL,
+            banner_url VARCHAR(512) NULL,
+            owner_id INT UNSIGNED NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_owner (owner_id),
+            INDEX idx_slug (slug)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS publisher_members (
+            publisher_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            role ENUM('owner','member') NOT NULL DEFAULT 'member',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (publisher_id, user_id),
+            INDEX idx_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        ensureColumn($pdo, 'games', 'publisher_id', "INT UNSIGNED NULL DEFAULT NULL");
+        ensureColumn($pdo, 'users', 'display_publisher_id', "INT NULL DEFAULT NULL");
+        try { $pdo->exec("CREATE INDEX idx_games_publisher ON games (publisher_id)"); } catch (Throwable $e) {}
+
         return $pdo;
     } catch (PDOException $e) {
         die(json_encode(['error' => 'DB connection failed: ' . $e->getMessage()]));

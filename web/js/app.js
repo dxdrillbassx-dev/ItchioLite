@@ -4,6 +4,7 @@
 
 const API_BASE = 'api/games.php';
 const USER_API = 'api/user.php';
+const PUB_API = 'api/publishers.php';
 const FETCH_TIMEOUT = 6000;
 const FETCH_TIMEOUT_LONG = 120000; // импорт Steam, публикация, тяжёлые загрузки
 
@@ -707,6 +708,7 @@ const VIEW_TITLES = {
   game: 'Страница игры',
   auth: 'Вход',
   achievements: 'Достижения',
+  publisher: 'Издательство',
 };
 let prevView = 'home';
 
@@ -2418,7 +2420,7 @@ function renderGamePage(wrap, data) {
         <div class="gp-main">
           <div class="gp-meta-card">
             ${releaseLabel ? `<p class="gp-meta-strong">${escapeHtml(releaseLabel)}</p>` : ''}
-            ${publisher ? `<p class="gp-meta-muted">Издатель ${escapeHtml(publisher)}</p>` : ''}
+            ${publisher ? `<p class="gp-meta-muted">Издатель ${g.publisher_id ? `<button type="button" class="gp-publisher-link" data-pub-id="${g.publisher_id}">${escapeHtml(publisher)}</button>` : escapeHtml(publisher)}</p>` : ''}
             ${!releaseLabel && !publisher ? `<p class="gp-meta-muted">${escapeHtml(g.genre || 'Игра')}</p>` : ''}
           </div>
 
@@ -4303,6 +4305,10 @@ async function loadProfile() {
   ]);
   loadProfileReviews(null);
   initProfileControls();
+  try {
+    const me2 = window.AUTH_STATE && window.AUTH_STATE.user;
+    if (me2 && me2.id) loadProfilePublishers(me2.id);
+  } catch (e) {}
 }
 
 async function loadProfileStats() {
@@ -5257,6 +5263,38 @@ function openBannerEditModal() {
   openAnimatedModal(modal);
 }
 
+async function fillSettingsDisplayPub() {
+  const sel = $('#settings-display-pub');
+  if (!sel) return;
+  try {
+    const data = await fetchJSON(PUB_API + '?action=mine');
+    const pubs = data.publishers || [];
+    let display = null;
+    try {
+      const me = window.AUTH_STATE && window.AUTH_STATE.user;
+      if (me && me.id) {
+        const fu = await fetchJSON(PUB_API + '?action=for_user&user_id=' + me.id);
+        display = fu.display_publisher_id;
+      }
+    } catch (e) {}
+    // reset catio
+    const oldWrap = sel.closest('.catio-select');
+    if (oldWrap && oldWrap.parentNode) {
+      oldWrap.parentNode.insertBefore(sel, oldWrap);
+      oldWrap.remove();
+    }
+    delete sel.dataset.catioEnhanced;
+    sel.style.cssText = '';
+    sel.classList.add('settings-select');
+    sel.innerHTML = '<option value="hide">Не показывать</option>' +
+      pubs.map(p => '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>').join('');
+    if (display === 0 || display === '0') sel.value = 'hide';
+    else if (display) sel.value = String(display);
+    else sel.value = 'hide';
+    try { enhanceSelect(sel); } catch (e) {}
+  } catch (e) {}
+}
+
 function initSettingsView() {
   const view = $('#view-settings');
   if (!view) return;
@@ -5372,6 +5410,16 @@ function initSettingsView() {
         window.AUTH_STATE.user.allow_friend_requests = $('#settings-allow-friends')?.checked ? 1 : 0;
         window.AUTH_STATE.user.email = $('#settings-email')?.value?.trim();
       }
+      // издательство в профиле
+      try {
+        const v = $('#settings-display-pub')?.value || 'hide';
+        await postJSON(PUB_API + '?action=set_display', {
+          csrf_token: window.CSRF_TOKEN || '',
+          display_publisher_id: v
+        });
+        const me = window.AUTH_STATE && window.AUTH_STATE.user;
+        if (me && me.id) loadProfilePublishers(me.id);
+      } catch (e2) { console.warn(e2); }
       toast('Конфиденциальность сохранена');
     } catch (err) {
       if (errBox) { errBox.textContent = err.message; errBox.classList.remove('hidden'); }
@@ -5400,6 +5448,9 @@ function initSettingsView() {
 function switchSettingsTab(tab) {
   $$('.settings-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.stab === tab));
   $$('.settings-pane').forEach(p => p.classList.toggle('hidden', p.id !== `settings-pane-${tab}`));
+  if (tab === 'privacy' && typeof fillSettingsDisplayPub === 'function') {
+    try { fillSettingsDisplayPub(); } catch (e) {}
+  }
 }
 
 // ---------- Меню под аватаркой ----------
@@ -6076,6 +6127,7 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
   }
   const uname = $('#hp-username');
   if (uname) uname.textContent = p.username;
+  try { loadProfilePublishers(p.id); } catch (e) {}
   renderProfileFriendCode(p.friend_code || '');
   setProfileRoleBadge(p);
 
@@ -6579,8 +6631,8 @@ async function loadNotifications() {
         : '';
       return `
       <div class="notif-item ${n.is_read ? '' : 'unread'} ${wantBanner && banner ? 'has-banner' : ''} ${isDeleted ? 'is-deleted' : ''}" data-id="${n.id}" data-type="${escapeHtml(n.type)}"
-           data-from="${meta.from_id || ''}"
-           data-username="${meta.from_username ? escapeHtml(meta.from_username) : ''}"
+           data-from="${meta.from_id || meta.admin_id || ''}"
+           data-username="${escapeHtml(meta.from_username || meta.admin_username || '')}"
            data-game-id="${gid}">
         <div class="notif-item-icon">${iconMap[n.type] || defaultIcon}</div>
         <div class="notif-item-body">
@@ -6605,7 +6657,12 @@ async function loadNotifications() {
           openChat(+from, uname);
         } else if ((type === 'friend_request' || type === 'friend_accepted') && uname) {
           openUserProfile(uname, from);
-        } else if ((type === 'sale' || type === 'system') && gameId) {
+        } else if (type === 'game_published' || type === 'game_rejected') {
+          const adminId = meta.admin_id || meta.adminId;
+          const adminName = meta.admin_username || meta.admin_name || uname || '';
+          if (adminName || adminId) openUserProfile(adminName, adminId);
+          else if (gameId && typeof gotoGame === 'function') gotoGame(+gameId);
+        } else if ((type === 'sale' || type === 'system' || type === 'game_added') && gameId) {
           if (typeof gotoGame === 'function') gotoGame(+gameId);
         }
         refreshBadge();
@@ -6957,25 +7014,122 @@ function fillSysReq(containerId, data) {
 const PUB_PRICE_MIN = 0;
 const PUB_PRICE_MAX = 15000;
 
+function ensurePubModalAlive() {
+  const formModal = document.getElementById('submit-form-modal');
+  if (!formModal) return;
+  formModal.classList.remove('hidden', 'is-closing');
+  formModal.style.opacity = '1';
+  formModal.style.visibility = 'visible';
+  formModal.style.pointerEvents = 'auto';
+  formModal.style.display = 'flex';
+  const box = formModal.querySelector('.submit-modal-box');
+  if (box) {
+    box.style.opacity = '1';
+    box.style.visibility = 'visible';
+    box.style.transform = 'none';
+  }
+}
+
+/**
+ * В WebView2/Electron file input внутри модалки «убивает» слой.
+ * Открываем нативный диалог через временный input в body.
+ */
+function openPubFilePicker(sourceInput, { multiple = false, accept = 'image/*' } = {}) {
+  if (!sourceInput) return;
+  window.__pubFileDialogOpen = true;
+  window.__pubFileDialogTs = Date.now();
+
+  const tmp = document.createElement('input');
+  tmp.type = 'file';
+  tmp.accept = accept || sourceInput.accept || 'image/*';
+  if (multiple || sourceInput.multiple) tmp.multiple = true;
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;width:1px;height:1px;';
+  document.body.appendChild(tmp);
+
+  const cleanup = () => {
+    setTimeout(() => {
+      try { tmp.remove(); } catch (e) {}
+      window.__pubFileDialogOpen = false;
+      window.__pubFileDialogTs = Date.now();
+      ensurePubModalAlive();
+    }, 300);
+  };
+
+  tmp.addEventListener('change', () => {
+    try {
+      // переносим FileList в исходный input через DataTransfer
+      const dt = new DataTransfer();
+      [...(tmp.files || [])].forEach(f => dt.items.add(f));
+      sourceInput.files = dt.files;
+      sourceInput.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (e) {
+      console.warn('pub file transfer failed', e);
+    }
+    ensurePubModalAlive();
+    cleanup();
+  });
+  // cancel (не во всех браузерах)
+  tmp.addEventListener('cancel', () => {
+    ensurePubModalAlive();
+    cleanup();
+  });
+  // фокус/видимость после диалога
+  const onVis = () => {
+    if (document.visibilityState === 'visible') {
+      ensurePubModalAlive();
+      document.removeEventListener('visibilitychange', onVis);
+    }
+  };
+  document.addEventListener('visibilitychange', onVis);
+  window.addEventListener('focus', () => ensurePubModalAlive(), { once: true });
+
+  try {
+    tmp.click();
+  } catch (e) {
+    cleanup();
+  }
+}
+
 function initPublishFilePreviews(root = document) {
   const bindOne = (inputId, previewId, nameId) => {
     const input = root.querySelector('#' + inputId) || document.getElementById(inputId);
     if (!input || input.dataset.previewBound) return;
     input.dataset.previewBound = '1';
+
+    // кнопки/label открывают picker снаружи модалки
+    const open = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openPubFilePicker(input, { multiple: false, accept: input.accept || 'image/*' });
+    };
+    input.addEventListener('click', open);
+    const id = input.id;
+    if (id) {
+      document.querySelectorAll('label[for="' + id + '"]').forEach(lab => {
+        lab.addEventListener('click', open);
+      });
+    }
+    // клик по превью тоже
+    const prevEl = document.getElementById(previewId);
+    if (prevEl) prevEl.addEventListener('click', open);
+
     input.addEventListener('change', () => {
+      ensurePubModalAlive();
       const file = input.files && input.files[0];
       const prev = document.getElementById(previewId);
       const nameEl = document.getElementById(nameId);
       if (!file) {
         if (prev) { prev.style.backgroundImage = ''; prev.classList.remove('has-img'); }
-        if (nameEl) nameEl.textContent = nameEl.dataset.placeholder || '';
+        if (nameEl) nameEl.textContent = nameEl.dataset.placeholder || nameEl.textContent;
         return;
       }
       if (nameEl) nameEl.textContent = file.name;
-      if (prev && file.type.startsWith('image/')) {
-        const url = URL.createObjectURL(file);
-        prev.style.backgroundImage = `url('${url}')`;
-        prev.classList.add('has-img');
+      if (prev && file.type && file.type.startsWith('image/')) {
+        try {
+          const url = URL.createObjectURL(file);
+          prev.style.backgroundImage = "url('" + url + "')";
+          prev.classList.add('has-img');
+        } catch (e) {}
       }
     });
   };
@@ -6987,15 +7141,25 @@ function initPublishFilePreviews(root = document) {
   const shots = document.getElementById('sg-shots');
   if (shots && !shots.dataset.previewBound) {
     shots.dataset.previewBound = '1';
+    const openShots = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openPubFilePicker(shots, { multiple: true, accept: 'image/*' });
+    };
+    shots.addEventListener('click', openShots);
+    document.querySelectorAll('label[for="sg-shots"]').forEach(lab => {
+      lab.addEventListener('click', openShots);
+    });
     shots.addEventListener('change', () => {
+      ensurePubModalAlive();
       const box = document.getElementById('sg-shots-preview');
       if (!box) return;
       box.innerHTML = '';
       [...(shots.files || [])].slice(0, 8).forEach(f => {
-        if (!f.type.startsWith('image/')) return;
+        if (!f.type || !f.type.startsWith('image/')) return;
         const d = document.createElement('div');
         d.className = 'pub-shot-thumb';
-        d.style.backgroundImage = `url('${URL.createObjectURL(f)}')`;
+        try { d.style.backgroundImage = "url('" + URL.createObjectURL(f) + "')"; } catch (e) {}
         box.appendChild(d);
       });
     });
@@ -7022,17 +7186,90 @@ function initPublishPriceInput() {
   price.addEventListener('change', sanitize);
 }
 
+function syncPublishGenres() {
+  const genres = $$('.sg-genre').filter(c => c.checked).map(c => c.value);
+  const hidden = $('#sg-genre');
+  if (hidden) hidden.value = genres.join(', ');
+  return genres;
+}
+
+function syncPublishDescription() {
+  const ed = $('#sg-desc-editor');
+  const ta = $('#sg-desc');
+  if (!ed || !ta) return '';
+  const html = (ed.innerHTML || '').trim();
+  ta.value = html;
+  return html;
+}
+
+function plainTextFromHtml(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html || '';
+  return (d.textContent || d.innerText || '').trim();
+}
+
+function initPublishRte() {
+  const root = $('#sg-rte');
+  const ed = $('#sg-desc-editor');
+  if (!root || !ed || root.dataset.bound === '1') return;
+  root.dataset.bound = '1';
+
+  const run = (cmd, val) => {
+    ed.focus();
+    try {
+      if (cmd === 'createLink') {
+        const url = prompt('URL ссылки:', 'https://');
+        if (!url) return;
+        document.execCommand('createLink', false, url);
+      } else if (cmd === 'formatBlock') {
+        document.execCommand('formatBlock', false, val || 'p');
+      } else if (cmd === 'insertShot') {
+        const shots = $('#sg-shots')?.files;
+        if (!shots || !shots.length) {
+          toast('Сначала выберите скриншоты в блоке «Медиа»');
+          return;
+        }
+        const file = shots[0];
+        const reader = new FileReader();
+        reader.onload = () => {
+          ed.focus();
+          document.execCommand('insertImage', false, reader.result);
+          syncPublishDescription();
+        };
+        reader.readAsDataURL(file);
+      } else {
+        document.execCommand(cmd, false, val || null);
+      }
+    } catch (e) {}
+    syncPublishDescription();
+  };
+
+  $$('.pub-rte-btn', root).forEach(btn => {
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      run(btn.dataset.cmd, btn.dataset.val || null);
+    });
+  });
+  ed.addEventListener('input', syncPublishDescription);
+  ed.addEventListener('blur', syncPublishDescription);
+  ed.addEventListener('paste', () => setTimeout(syncPublishDescription, 0));
+}
+
 function validatePublishForm() {
+  syncPublishGenres();
+  syncPublishDescription();
   const title = ($('#sg-title')?.value || '').trim();
   if (title.length < 2) return 'Укажите название игры (минимум 2 символа)';
   const genre = ($('#sg-genre')?.value || '').trim();
-  if (!genre) return 'Выберите жанр';
-  const desc = ($('#sg-desc')?.value || '').trim();
-  if (desc.length < 20) return 'Описание слишком короткое (минимум 20 символов)';
+  if (!genre) return 'Выберите хотя бы один жанр';
+  const descHtml = ($('#sg-desc')?.value || '').trim();
+  const descText = plainTextFromHtml(descHtml);
+  if (descText.length < 20) return 'Описание слишком короткое (минимум 20 символов)';
   let price = parseInt(String($('#sg-price')?.value || '0').replace(/[^\d]/g, ''), 10);
   if (Number.isNaN(price)) price = 0;
-  if (price < PUB_PRICE_MIN) return `Цена не может быть меньше ${PUB_PRICE_MIN} ₽`;
-  if (price > PUB_PRICE_MAX) return `Цена не может быть больше ${PUB_PRICE_MAX} ₽`;
+  if (price < PUB_PRICE_MIN) return 'Цена не может быть меньше ' + PUB_PRICE_MIN + ' ₽';
+  if (price > PUB_PRICE_MAX) return 'Цена не может быть больше ' + PUB_PRICE_MAX + ' ₽';
   const cover = $('#sg-cover')?.files?.[0];
   const coverUrl = $('#sg-cover-url')?.value;
   if (!cover && !coverUrl) return 'Добавьте обложку';
@@ -7332,7 +7569,8 @@ function initSubmitGame() {
       if (btn) {
         e.preventDefault();
         e.stopPropagation();
-        openSubmitRules();
+        if (typeof openCreateMenu === 'function') openCreateMenu();
+        else openSubmitRules();
       }
     });
   }
@@ -7354,18 +7592,35 @@ function initSubmitGame() {
           fillBtn.addEventListener('click', fillSubmitFromSteam);
         }
         try { initCatioSelects(formModal); } catch (e) {}
-        try { initPublishFilePreviews(formModal); initPublishPriceInput(); } catch (e) {}
+        try { initPublishFilePreviews(formModal); initPublishPriceInput(); initPublishRte(); fillPublishPublisherSelect(); } catch (e) {}
+        try {
+          $$('.sg-genre').forEach(c => {
+            if (c.dataset.boundGenre) return;
+            c.dataset.boundGenre = '1';
+            c.addEventListener('change', syncPublishGenres);
+          });
+        } catch (e) {}
       }
     });
   }
 
+  // защита: после открытия file dialog WebView шлёт «ghost click» на backdrop
+  window.__pubFileDialogOpen = false;
+  window.__pubFileDialogTs = 0;
+
   $$('[data-close]').forEach(el => {
     if (el.dataset.closeBound) return;
     el.dataset.closeBound = '1';
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
       const k = el.dataset.close;
+      if (k === 'form') {
+        // не закрывать, если только что выбирали файл
+        if (window.__pubFileDialogOpen) return;
+        if (Date.now() - (window.__pubFileDialogTs || 0) < 800) return;
+        $('#submit-form-modal')?.classList.add('hidden');
+        return;
+      }
       if (k === 'rules') $('#submit-rules-modal')?.classList.add('hidden');
-      if (k === 'form') $('#submit-form-modal')?.classList.add('hidden');
       if (k === 'done') $('#submit-done-modal')?.classList.add('hidden');
     });
   });
@@ -7446,14 +7701,75 @@ function openSubmitRules() {
 // Глобальный хук на случай inline onclick
 window.openSubmitRules = openSubmitRules;
 
+function resetPublishModalMode() {
+  window.__adminModeratingId = null;
+  const formModal = $('#submit-form-modal');
+  const h2 = formModal && formModal.querySelector('.pub-modal-head h2, .submit-modal-head h2');
+  if (h2) h2.textContent = 'Публикация игры';
+  const sub = formModal && formModal.querySelector('.pub-modal-sub');
+  if (sub) sub.textContent = 'Заполните карточку игры — жанры, медиа, требования и описание';
+  const sendBtn = $('#submit-game-send');
+  if (sendBtn) {
+    sendBtn.textContent = 'Отправить на модерацию';
+    delete sendBtn.dataset.adminPublish;
+  }
+  const rej = $('#submit-admin-reject');
+  if (rej) rej.classList.add('hidden');
+}
+
 async function submitGameForm() {
   const btn = $('#submit-game-send');
-  if (btn) { btn.disabled = true; btn.textContent = 'Отправка...'; }
+  const isAdminPub = !!(btn && btn.dataset.adminPublish === '1' && window.__adminModeratingId);
+  if (btn) { btn.disabled = true; btn.textContent = isAdminPub ? 'Публикация...' : 'Отправка...'; }
   try {
+    if (isAdminPub) {
+      const id = window.__adminModeratingId;
+      const fd = new FormData();
+      fd.append('csrf_token', window.CSRF_TOKEN || '');
+      fd.append('id', id);
+      if (typeof syncPublishGenres === 'function') syncPublishGenres();
+      if (typeof syncPublishDescription === 'function') syncPublishDescription();
+      fd.append('title', ($('#sg-title') && $('#sg-title').value.trim()) || '');
+      fd.append('genre', ($('#sg-genre') && $('#sg-genre').value) || '');
+      fd.append('price', String(parseInt(String(($('#sg-price') && $('#sg-price').value) || '0').replace(/[^\d]/g, ''), 10) || 0));
+      fd.append('short_description', ($('#sg-short') && $('#sg-short').value) || '');
+      fd.append('description', ($('#sg-desc') && $('#sg-desc').value) || '');
+      fd.append('video_url', ($('#sg-video') && $('#sg-video').value) || '');
+      fd.append('developer', ($('#sg-developer') && $('#sg-developer').value) || '');
+      fd.append('publisher', ($('#sg-publisher') && $('#sg-publisher').value) || '');
+      fd.append('sys_req_min', JSON.stringify(collectSysReq('#sg-sys-min-fields')));
+      fd.append('sys_req_rec', JSON.stringify(collectSysReq('#sg-sys-rec-fields')));
+      fd.append('languages', JSON.stringify(collectLanguages('#sg-lang-table')));
+      fd.append('controllers', $$('.sg-ctrl').filter(function(c){return c.checked;}).map(function(c){return c.value;}).join(','));
+      const aCover = $('#sg-cover') && $('#sg-cover').files && $('#sg-cover').files[0];
+      if (aCover) fd.append('cover', aCover);
+      const aBanner = $('#sg-banner') && $('#sg-banner').files && $('#sg-banner').files[0];
+      if (aBanner) fd.append('banner', aBanner);
+      const aLogo = $('#sg-logo') && $('#sg-logo').files && $('#sg-logo').files[0];
+      if (aLogo) fd.append('logo', aLogo);
+      const aIcon = $('#sg-icon') && $('#sg-icon').files && $('#sg-icon').files[0];
+      if (aIcon) fd.append('icon', aIcon);
+      const aShots = $('#sg-shots') && $('#sg-shots').files;
+      if (aShots) for (let i = 0; i < aShots.length; i++) fd.append('screenshots[]', aShots[i]);
+      let res = await fetch(SUBMIT_API + '?action=admin_save', { method: 'POST', body: fd });
+      let data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Не удалось сохранить');
+      res = await postJSON(SUBMIT_API + '?action=publish', { csrf_token: window.CSRF_TOKEN || '', id: id });
+      if (!res.ok) throw new Error(res.error || 'Не удалось опубликовать');
+      toast('Игра опубликована');
+      if ($('#submit-form-modal')) $('#submit-form-modal').classList.add('hidden');
+      resetPublishModalMode();
+      loadAdminPending();
+      homeCache = null;
+      storeCache = [];
+      return;
+    }
     const err = validatePublishForm();
     if (err) throw new Error(err);
     const fd = new FormData();
-    fd.append('csrf_token', window.CSRF_TOKEN || '');
+        fd.append('csrf_token', window.CSRF_TOKEN || '');
+    syncPublishGenres();
+    syncPublishDescription();
     fd.append('title', $('#sg-title')?.value?.trim() || '');
     fd.append('genre', $('#sg-genre')?.value || '');
     fd.append('price', String(parseInt(String($('#sg-price')?.value || '0').replace(/[^\d]/g, ''), 10) || 0));
@@ -7461,6 +7777,13 @@ async function submitGameForm() {
     fd.append('description', $('#sg-desc')?.value || '');
     fd.append('video_url', $('#sg-video')?.value || '');
     fd.append('developer', $('#sg-developer')?.value || '');
+    fd.append('publisher', $('#sg-publisher')?.value || '');
+    fd.append('publisher_id', $('#sg-publisher-id')?.value || '');
+    fd.append('website', $('#sg-website')?.value || '');
+    fd.append('release_date', $('#sg-release')?.value || '');
+    fd.append('tags', $('#sg-tags')?.value || '');
+    const plats = $$('.sg-platform').filter(c => c.checked).map(c => c.value).join(',');
+    fd.append('platforms', plats);
     if ($('#sg-cover-url')?.value) fd.append('cover_url', $('#sg-cover-url').value);
     if ($('#sg-banner-url')?.value) fd.append('banner_url', $('#sg-banner-url').value);
     fd.append('sys_req_min', JSON.stringify(collectSysReq('#sg-sys-min-fields')));
@@ -7487,6 +7810,11 @@ async function submitGameForm() {
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     $('#submit-form-modal')?.classList.add('hidden');
     $('#submit-game-form')?.reset();
+    const ed = $('#sg-desc-editor');
+    if (ed) ed.innerHTML = '';
+    $$('.sg-genre').forEach(c => { c.checked = false; });
+    syncPublishGenres();
+    syncPublishDescription();
     $('#submit-done-modal')?.classList.remove('hidden');
   } catch (err) {
     toast(err.message || 'Не удалось отправить');
@@ -8016,6 +8344,77 @@ async function openAdminGame(id) {
     renderLangTable('#admin-lang-table', g.languages);
     $('#admin-video').value = g.video_url || '';
     $('#admin-note').value = g.review_note || '';
+
+    // Модерация: открыть ту же модалку, что публикация
+    try {
+      window.__adminModeratingId = g.id;
+      const formModal = $('#submit-form-modal');
+      if (formModal) {
+        if ($('#sg-title')) $('#sg-title').value = g.title || '';
+        if ($('#sg-price')) $('#sg-price').value = String(parseInt(g.price, 10) || 0);
+        if ($('#sg-developer')) $('#sg-developer').value = g.developer || '';
+        if ($('#sg-publisher')) $('#sg-publisher').value = g.developer_name || g.developer || '';
+        if ($('#sg-short')) $('#sg-short').value = g.short_description || '';
+        if ($('#sg-tags')) $('#sg-tags').value = g.tags || '';
+        if ($('#sg-video')) $('#sg-video').value = g.video_url || '';
+        const genres = String(g.genre || '').split(',').map(s => s.trim()).filter(Boolean);
+        $$('.sg-genre').forEach(c => { c.checked = genres.includes(c.value); });
+        if (typeof syncPublishGenres === 'function') syncPublishGenres();
+        const ed = $('#sg-desc-editor');
+        if (ed) ed.innerHTML = g.description || '';
+        if ($('#sg-desc')) $('#sg-desc').value = g.description || '';
+        try { fillSysReq('#sg-sys-min-fields', g.sys_req_min); } catch (e) {}
+        try { fillSysReq('#sg-sys-rec-fields', g.sys_req_rec); } catch (e) {}
+        try { renderLangTable('#sg-lang-table', g.languages); } catch (e) {}
+        const setPrev = (pid, url) => {
+          const el = document.getElementById(pid);
+          if (!el || !url) return;
+          el.style.backgroundImage = 'url(' + JSON.stringify(String(url)) + ')';
+          el.classList.add('has-img');
+        };
+        setPrev('sg-cover-preview', g.cover_url || g.cover_src);
+        setPrev('sg-banner-preview', g.banner_url);
+        setPrev('sg-logo-preview', g.logo_url);
+        setPrev('sg-icon-preview', g.icon_url || g.icon_src);
+        const h2 = formModal.querySelector('.pub-modal-head h2, .submit-modal-head h2');
+        if (h2) h2.textContent = 'Модерация: ' + (g.title || 'игра');
+        const sub = formModal.querySelector('.pub-modal-sub');
+        if (sub) sub.textContent = 'Проверьте карточку и опубликуйте или отклоните';
+        const sendBtn = $('#submit-game-send');
+        if (sendBtn) {
+          sendBtn.textContent = 'Опубликовать';
+          sendBtn.dataset.adminPublish = '1';
+        }
+        let rej = $('#submit-admin-reject');
+        if (!rej) {
+          rej = document.createElement('button');
+          rej.type = 'button';
+          rej.className = 'hp-btn-edit';
+          rej.id = 'submit-admin-reject';
+          rej.textContent = 'Отклонить';
+          if (sendBtn && sendBtn.parentElement) sendBtn.parentElement.insertBefore(rej, sendBtn);
+          rej.addEventListener('click', async () => {
+            const note = prompt('Причина отказа (необязательно):', '') || '';
+            try {
+              const res = await postJSON(SUBMIT_API + '?action=reject', {
+                csrf_token: window.CSRF_TOKEN || '',
+                id: window.__adminModeratingId,
+                note
+              });
+              if (!res.ok) throw new Error(res.error || 'Ошибка');
+              toast('Отклонено');
+              formModal.classList.add('hidden');
+              if (typeof resetPublishModalMode === 'function') resetPublishModalMode();
+              loadAdminPending();
+            } catch (err) { toast(err.message); }
+          });
+        }
+        rej.classList.remove('hidden');
+        formModal.classList.remove('hidden');
+        try { initPublishFilePreviews(formModal); initPublishRte(); } catch (e) {}
+      }
+    } catch (e) { console.warn(e); }
+
 
     // Сброс файлов и превью от предыдущей игры
     const coverInput = $('#admin-cover');
@@ -9186,7 +9585,429 @@ function initCartUI() {
 
 document.addEventListener('DOMContentLoaded', () => {
   // Сначала кнопка «+», чтобы сбой других init её не убил
+
+
+/* ===== Издательства / меню создания ===== */
+window.__pubMembersSelected = [];
+
+function openCreateMenu() {
+  const m = $('#create-menu-modal');
+  if (!m) { openSubmitRules(); return; }
+  m.classList.remove('hidden');
+}
+function openNoPubModal() {
+  const m = $('#no-pub-modal');
+  if (m) m.classList.remove('hidden');
+  else toast('Сначала создайте издательство');
+}
+function closeCreateMenu() {
+  $('#create-menu-modal')?.classList.add('hidden');
+}
+
+document.addEventListener('click', (e) => {
+  const pl = e.target.closest && e.target.closest('.gp-publisher-link');
+  if (pl) {
+    e.preventDefault();
+    openPublisherPage(+pl.dataset.pubId);
+  }
+});
+
+function initCreateMenu() {
+  if (window.__createMenuBound) return;
+  window.__createMenuBound = true;
+  document.querySelectorAll('[data-close-create-menu]').forEach(el => {
+    el.addEventListener('click', closeCreateMenu);
+  });
+  $('#create-menu-game')?.addEventListener('click', async () => {
+    closeCreateMenu();
+    try {
+      const data = await fetchJSON(PUB_API + '?action=mine');
+      const pubs = data.publishers || [];
+      if (!pubs.length) {
+        openNoPubModal();
+        return;
+      }
+      openSubmitRules();
+    } catch (e) {
+      // если API недоступен — всё равно пускаем, форма покажет select
+      openSubmitRules();
+    }
+  });
+  document.querySelectorAll('[data-close-no-pub]').forEach(el => {
+    el.addEventListener('click', () => $('#no-pub-modal')?.classList.add('hidden'));
+  });
+  $('#no-pub-create')?.addEventListener('click', () => {
+    $('#no-pub-modal')?.classList.add('hidden');
+    openPubsCreateModal();
+  });
+  $('#create-menu-pubs')?.addEventListener('click', () => {
+    closeCreateMenu();
+    openPubsListModal();
+  });
+  document.querySelectorAll('[data-close-pubs-list]').forEach(el => {
+    el.addEventListener('click', () => $('#pubs-list-modal')?.classList.add('hidden'));
+  });
+  document.querySelectorAll('[data-close-pubs-create]').forEach(el => {
+    el.addEventListener('click', () => $('#pubs-create-modal')?.classList.add('hidden'));
+  });
+  $('#pubs-create-open')?.addEventListener('click', () => {
+    $('#pubs-list-modal')?.classList.add('hidden');
+    openPubsCreateModal();
+  });
+  $('#pub-create-save')?.addEventListener('click', saveNewPublisher);
+  // file previews
+  const bindPrev = (inputId, prevId) => {
+    const input = document.getElementById(inputId);
+    const prev = document.getElementById(prevId);
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = '1';
+    input.addEventListener('change', () => {
+      const f = input.files && input.files[0];
+      if (!f || !prev) return;
+      prev.style.backgroundImage = 'url(' + JSON.stringify(URL.createObjectURL(f)) + ')';
+      prev.classList.add('has-img');
+    });
+  };
+  bindPrev('pub-avatar', 'pub-avatar-preview');
+  bindPrev('pub-banner', 'pub-banner-preview');
+  // member search
+  const search = $('#pub-member-search');
+  let st = null;
+  search?.addEventListener('input', () => {
+    clearTimeout(st);
+    st = setTimeout(() => searchPubMembers(search.value.trim()), 220);
+  });
+  window.openCreateMenu = openCreateMenu;
+}
+
+async function openPubsListModal() {
+  const modal = $('#pubs-list-modal');
+  const list = $('#pubs-list');
+  if (!modal || !list) return;
+  modal.classList.remove('hidden');
+  list.innerHTML = '<div class="loading">Загрузка...</div>';
+  try {
+    const data = await fetchJSON(PUB_API + '?action=mine');
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    const pubs = data.publishers || [];
+    if (!pubs.length) {
+      list.innerHTML = '<div class="friends-empty">Пока нет издательств.<br>Создайте первое — и выбирайте его при публикации.</div>';
+      return;
+    }
+    list.innerHTML = pubs.map(p => `
+      <button type="button" class="pubs-list-item" data-id="${p.id}" data-slug="${escapeHtml(p.slug || '')}">
+        <span class="pubs-list-av" style="${p.avatar_url ? `background-image:url('${escapeHtml(p.avatar_url)}')` : 'background:#ef5b2c'}">${p.avatar_url ? '' : escapeHtml((p.name || '?')[0])}</span>
+        <span class="pubs-list-info">
+          <strong>${escapeHtml(p.name)}</strong>
+          <em>${p.games_count || 0} игр · ${p.members_count || 0} уч. · ${p.my_role === 'owner' ? 'владелец' : 'участник'}</em>
+        </span>
+      </button>`).join('');
+    $$('.pubs-list-item', list).forEach(btn => {
+      btn.addEventListener('click', () => {
+        modal.classList.add('hidden');
+        openPublisherPage(+btn.dataset.id, btn.dataset.slug);
+      });
+    });
+  } catch (e) {
+    list.innerHTML = `<div class="friends-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function openPubsCreateModal() {
+  window.__pubMembersSelected = [];
+  renderPubMemberChips();
+  const name = $('#pub-name'); if (name) name.value = '';
+  const desc = $('#pub-desc'); if (desc) desc.value = '';
+  const av = $('#pub-avatar'); if (av) av.value = '';
+  const bn = $('#pub-banner'); if (bn) bn.value = '';
+  const ap = $('#pub-avatar-preview'); if (ap) { ap.style.backgroundImage = ''; ap.classList.remove('has-img'); }
+  const bp = $('#pub-banner-preview'); if (bp) { bp.style.backgroundImage = ''; bp.classList.remove('has-img'); }
+  $('#pub-member-suggest')?.classList.add('hidden');
+  $('#pubs-create-modal')?.classList.remove('hidden');
+}
+
+async function searchPubMembers(q) {
+  const box = $('#pub-member-suggest');
+  if (!box) return;
+  if (!q) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  try {
+    const data = await fetchJSON(PUB_API + '?action=search_users&q=' + encodeURIComponent(q));
+    const users = (data.users || []).filter(u => !window.__pubMembersSelected.some(m => +m.id === +u.id));
+    if (!users.length) {
+      box.innerHTML = '<div class="pub-member-empty">Никого не найдено</div>';
+      box.classList.remove('hidden');
+      return;
+    }
+    box.innerHTML = users.map(u => `
+      <button type="button" class="pub-member-opt" data-id="${u.id}" data-name="${escapeHtml(u.username)}">
+        <span class="pubs-list-av" style="${u.avatar_url ? `background-image:url('${escapeHtml(u.avatar_url)}')` : `background:${escapeHtml(u.avatar_color || '#ef5b2c')}`}">${u.avatar_url ? '' : escapeHtml((u.username||'?')[0])}</span>
+        ${escapeHtml(u.username)}
+      </button>`).join('');
+    box.classList.remove('hidden');
+    $$('.pub-member-opt', box).forEach(b => {
+      b.addEventListener('click', () => {
+        window.__pubMembersSelected.push({ id: +b.dataset.id, username: b.dataset.name });
+        renderPubMemberChips();
+        box.classList.add('hidden');
+        const s = $('#pub-member-search'); if (s) s.value = '';
+      });
+    });
+  } catch (e) {
+    box.classList.add('hidden');
+  }
+}
+
+function renderPubMemberChips() {
+  const box = $('#pub-member-chips');
+  if (!box) return;
+  box.innerHTML = (window.__pubMembersSelected || []).map(m => `
+    <span class="pub-member-chip" data-id="${m.id}">
+      ${escapeHtml(m.username)}
+      <button type="button" data-rm="${m.id}" aria-label="Убрать">×</button>
+    </span>`).join('');
+  $$('[data-rm]', box).forEach(b => {
+    b.addEventListener('click', () => {
+      window.__pubMembersSelected = window.__pubMembersSelected.filter(m => +m.id !== +b.dataset.rm);
+      renderPubMemberChips();
+    });
+  });
+}
+
+async function saveNewPublisher() {
+  const btn = $('#pub-create-save');
+  const name = ($('#pub-name')?.value || '').trim();
+  if (name.length < 2) { toast('Укажите название'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Создание...'; }
+  try {
+    const fd = new FormData();
+    fd.append('csrf_token', window.CSRF_TOKEN || '');
+    fd.append('name', name);
+    fd.append('description', $('#pub-desc')?.value || '');
+    fd.append('members', (window.__pubMembersSelected || []).map(m => m.id).join(','));
+    const av = $('#pub-avatar')?.files?.[0];
+    if (av) fd.append('avatar', av);
+    const bn = $('#pub-banner')?.files?.[0];
+    if (bn) fd.append('banner', bn);
+    const res = await fetch(PUB_API + '?action=create', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    toast('Издательство создано');
+    $('#pubs-create-modal')?.classList.add('hidden');
+    await fillPublishPublisherSelect();
+    openPubsListModal();
+  } catch (e) {
+    toast(e.message || 'Не удалось создать');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Создать'; }
+  }
+}
+
+async function fillPublishPublisherSelect() {
+  const sel = $('#sg-publisher-id');
+  if (!sel) return;
+  const cur = sel.value;
+  try {
+    const data = await fetchJSON(PUB_API + '?action=mine');
+    const pubs = data.publishers || [];
+    const prefer = cur || (pubs[0] ? String(pubs[0].id) : '');
+    if (!pubs.length) {
+      sel.innerHTML = '<option value="">— нет издательств —</option>';
+    } else {
+      sel.innerHTML = pubs.map(p => {
+        const av = p.avatar_url ? escapeHtml(p.avatar_url) : '';
+        return '<option value="' + p.id + '" data-avatar="' + av + '"' +
+          (String(p.id) === prefer ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
+      }).join('');
+      if (prefer) sel.value = prefer;
+    }
+    const hid = $('#sg-publisher');
+    const syncHid = () => {
+      const c = pubs.find(p => String(p.id) === String(sel.value));
+      if (hid) hid.value = c ? c.name : '';
+    };
+    syncHid();
+    sel.onchange = syncHid;
+
+    // снять старую обёртку catio и пересоздать (иначе select остаётся hidden)
+    const oldWrap = sel.closest('.catio-select');
+    if (oldWrap && oldWrap.parentNode) {
+      oldWrap.parentNode.insertBefore(sel, oldWrap);
+      oldWrap.remove();
+    }
+    delete sel.dataset.catioEnhanced;
+    sel.classList.add('settings-select');
+    sel.classList.remove('select-native-hidden');
+    sel.removeAttribute('aria-hidden');
+    sel.style.cssText = '';
+    try {
+      enhanceSelect(sel);
+      // аватарки в option через Mutation / rebuild hook
+      const catio = sel.closest('.catio-select');
+      if (catio) {
+        const paint = () => {
+          const opt = sel.options[sel.selectedIndex];
+          const url = opt && opt.getAttribute('data-avatar');
+          const val = catio.querySelector('.catio-select__value');
+          if (val) {
+            const txt = opt ? escapeHtml(opt.textContent) : '';
+            val.innerHTML = (url
+              ? '<span class="catio-select__ico"><img class="catio-pub-av" src="' + url + '" alt="" /></span>'
+              : '') + '<span class="catio-select__txt">' + txt + '</span>';
+          }
+          catio.querySelectorAll('.catio-select__option').forEach((o, i) => {
+            const op = sel.options[i];
+            if (!op) return;
+            const u = op.getAttribute('data-avatar');
+            const label = escapeHtml(op.textContent);
+            o.innerHTML = (u
+              ? '<span class="catio-select__ico"><img class="catio-pub-av" src="' + u + '" alt="" /></span>'
+              : '') + '<span class="catio-select__txt">' + label + '</span>';
+          });
+        };
+        paint();
+        sel.addEventListener('change', paint);
+        // после клика по option catio сам sync — перекрасим чуть позже
+        catio.addEventListener('click', () => setTimeout(paint, 0));
+      }
+    } catch (e) { console.warn(e); }
+  } catch (e) { console.warn('fillPublishPublisherSelect', e); }
+}
+
+async function openPublisherPage(id, slug) {
+  $$('.view').forEach(v => v.classList.remove('active'));
+  const view = $('#view-publisher');
+  if (view) view.classList.add('active');
+  $$('.nav-btn').forEach(b => b.classList.remove('active'));
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set('view', 'publisher');
+    if (id) url.searchParams.set('pub', String(id));
+    history.pushState({}, '', url);
+  } catch (e) {}
+  const headTitle = $('#head-title');
+  if (headTitle) headTitle.textContent = 'Издательство';
+  const nameEl = $('#pub-page-name');
+  const descEl = $('#pub-page-desc');
+  const gamesEl = $('#pub-page-games');
+  const memEl = $('#pub-page-members');
+  const av = $('#pub-page-avatar');
+  const ban = $('#pub-page-banner');
+  if (gamesEl) gamesEl.innerHTML = '<div class="loading">Загрузка...</div>';
+  try {
+    const q = id ? ('id=' + id) : ('slug=' + encodeURIComponent(slug || ''));
+    const data = await fetchJSON(PUB_API + '?action=get&' + q);
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    const p = data.publisher;
+    if (nameEl) nameEl.textContent = p.name || '';
+    if (descEl) descEl.textContent = p.description || '';
+    if (av) {
+      if (p.avatar_url) {
+        av.style.backgroundImage = 'url(' + JSON.stringify(p.avatar_url) + ')';
+        av.textContent = '';
+      } else {
+        av.style.backgroundImage = '';
+        av.style.background = '#ef5b2c';
+        av.textContent = (p.name || '?')[0];
+      }
+    }
+    if (ban) {
+      if (p.banner_url) {
+        ban.style.backgroundImage = 'url(' + JSON.stringify(p.banner_url) + ')';
+        ban.classList.add('has-image');
+      } else {
+        ban.style.backgroundImage = '';
+        ban.classList.remove('has-image');
+      }
+    }
+    if (memEl) {
+      const list = p.members || [];
+      memEl.innerHTML = list.length ? list.map(m => {
+        const avStyle = m.avatar_url
+          ? ('background-image:url(' + JSON.stringify(m.avatar_url) + ')')
+          : ('background:' + (m.avatar_color || '#ef5b2c'));
+        const letter = m.avatar_url ? '' : escapeHtml((m.username || '?').slice(0, 1).toUpperCase());
+        const role = m.role === 'owner' ? '<span class="pub-member-role">владелец</span>' : '';
+        return '<button type="button" class="pub-member-row" data-username="' + escapeHtml(m.username) + '" data-id="' + m.id + '">' +
+          '<span class="pub-member-av" style="' + avStyle + '">' + letter + '</span>' +
+          '<span class="pub-member-meta"><span class="pub-member-name">' + escapeHtml(m.username) + '</span>' + role + '</span></button>';
+      }).join('') : '<div class="settings-hint">Нет участников</div>';
+      $$('.pub-member-row', memEl).forEach(r => {
+        r.addEventListener('click', () => openUserProfile(r.dataset.username, r.dataset.id));
+      });
+    }
+    if (p.name && headTitle) headTitle.textContent = p.name;
+    if (gamesEl) {
+      const games = p.games || [];
+      if (!games.length) {
+        gamesEl.innerHTML = '<div class="friends-empty">Пока нет опубликованных игр</div>';
+      } else {
+        gamesEl.innerHTML = games.map(g => {
+          const cover = g.cover_url || '';
+          return `<article class="store-card" data-id="${g.id}">
+            <div class="store-card-cover" style="${cover ? `background-image:url('${escapeHtml(cover)}')` : ''}"></div>
+            <div class="store-card-body">
+              <div class="store-card-title">${escapeHtml(g.title)}</div>
+              <div class="store-grid-meta">${escapeHtml(g.genre || '')}</div>
+            </div>
+          </article>`;
+        }).join('');
+        $$('.store-card', gamesEl).forEach(c => {
+          c.addEventListener('click', () => gotoGame(+c.dataset.id));
+        });
+      }
+    }
+  } catch (e) {
+    if (gamesEl) gamesEl.innerHTML = `<div class="friends-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+window.openPublisherPage = openPublisherPage;
+
+async function loadProfilePublishers(userId, lineEl) {
+  const el = lineEl || $('#hp-publisher-line');
+  if (!el || !userId) return;
+  el.hidden = true;
+  el.innerHTML = '';
+  try {
+    const data = await fetchJSON(PUB_API + '?action=for_user&user_id=' + userId);
+    let pubs = data.publishers || [];
+    const pref = data.display_publisher_id;
+    // 0 = скрыть; null = первое; id = выбранное
+    if (pref === 0 || pref === '0') {
+      el.hidden = true;
+      return;
+    }
+    if (pref) {
+      pubs = pubs.filter(p => +p.id === +pref);
+    } else if (pubs.length > 1) {
+      pubs = [pubs[0]];
+    }
+    if (!pubs.length) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = pubs.map(p =>
+      '<button type="button" class="hp-publisher-link" data-id="' + p.id + '" data-slug="' + escapeHtml(p.slug || '') + '">' + escapeHtml(p.name) + '</button>'
+    ).join('<span class="hp-publisher-sep">·</span>');
+    $$('.hp-publisher-link', el).forEach(b => {
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openPublisherPage(+b.dataset.id, b.dataset.slug);
+      });
+    });
+  } catch (e) {
+    el.hidden = true;
+  }
+}
+
+
   try { initSubmitGame(); } catch (e) { console.error('initSubmitGame', e); }
+  try { initCreateMenu(); } catch (e) { console.error('initCreateMenu', e); }
+  try {
+    const me = window.AUTH_STATE && window.AUTH_STATE.user;
+    if (me && me.id) loadProfilePublishers(me.id);
+  } catch (e) {}
 
   const safe = (name, fn) => { try { fn(); } catch (e) { console.error(name, e); } };
   safe('initWebNav', initWebNav);
