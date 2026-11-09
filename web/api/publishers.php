@@ -56,27 +56,40 @@ try {
         case 'mine': {
             $user = requireUserP();
             $uid = (int)$user['id'];
-            // все издательства, где user в members ИЛИ owner
-            $stmt = $pdo->prepare("
-              SELECT DISTINCT p.id, p.name, p.slug, p.description, p.avatar_url, p.banner_url, p.owner_id,
-                COALESCE(pm.role, CASE WHEN p.owner_id = ? THEN 'owner' ELSE 'member' END) AS my_role
-              FROM publishers p
-              LEFT JOIN publisher_members pm ON pm.publisher_id = p.id AND pm.user_id = ?
-              WHERE p.owner_id = ? OR pm.user_id = ?
-              ORDER BY p.name ASC
-            ");
-            $stmt->execute([$uid, $uid, $uid, $uid]);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            // починить membership для owner
-            foreach ($rows as $r) {
-                if ((int)($r['owner_id'] ?? 0) === $uid) {
-                    try {
-                        $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')")
-                            ->execute([(int)$r['id'], $uid]);
-                    } catch (Throwable $e) {}
-                }
+            $rows = [];
+            try {
+                $st = $pdo->prepare("
+                  SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id,
+                    COALESCE(pm.role, 'member') AS my_role
+                  FROM publisher_members pm
+                  INNER JOIN publishers p ON p.id = pm.publisher_id
+                  WHERE pm.user_id = ?
+                  ORDER BY p.name ASC
+                ");
+                $st->execute([$uid]);
+                $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable $e) {
+                jsonOut(['ok' => false, 'error' => 'DB members: ' . $e->getMessage()], 500);
             }
-            jsonOut(['ok' => true, 'publishers' => $rows]);
+            try {
+                $st2 = $pdo->prepare("SELECT id, name, slug, avatar_url, owner_id FROM publishers WHERE owner_id = ?");
+                $st2->execute([$uid]);
+                foreach ($st2->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                    $found = false;
+                    foreach ($rows as $ex) {
+                        if ((int)$ex['id'] === (int)$r['id']) { $found = true; break; }
+                    }
+                    if (!$found) {
+                        $r['my_role'] = 'owner';
+                        $rows[] = $r;
+                        try {
+                            $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')")
+                                ->execute([(int)$r['id'], $uid]);
+                        } catch (Throwable $e) {}
+                    }
+                }
+            } catch (Throwable $e) {}
+            jsonOut(['ok' => true, 'publishers' => $rows, 'user_id' => $uid, 'count' => count($rows)]);
         }
 
         case 'get': {

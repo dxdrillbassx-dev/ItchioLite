@@ -2273,7 +2273,8 @@ function renderGamePage(wrap, data) {
   window.__lastGameForCart = g;
   const price = formatPrice(g.price, g.discount_percent);
   const tags = tagsToArray(g.tags);
-  const shots = data.screenshots || [];
+  const shots = (data.screenshots || []).map(s => (typeof s === 'string' ? s : (s && (s.url || s.image_url)) || '')).filter(Boolean);
+  window.__lastGameScreenshots = shots.slice();
   const videos = data.videos || [];
   const viewer = data.viewer || {};
   const authorized = viewer.authorized;
@@ -2281,23 +2282,42 @@ function renderGamePage(wrap, data) {
   const hero = g.banner_url || g.cover_url || cover || (`media.php?type=hero&id=${g.id}`);
   // как в Steam: сначала трейлеры, потом скрины
   const gallery = [];
+  const videoItems = [];
   videos.forEach((v, i) => {
     if (!v || !v.url) return;
     let src = String(v.url).replace(/^http:\/\//i, 'https://');
+    // DASH alone often unplayable — skip as primary if only mpd
+    if (/\.mpd(\?|$)/i.test(src) && !/\.m3u8/i.test(src)) {
+      // keep as fallback candidate only if we have nothing else later
+      videoItems.push({
+        type: 'video', src, fallbacks: [], format: 'dash',
+        thumb: v.thumbnail || cover || '', name: v.name || ('Трейлер ' + (i + 1)),
+        _prio: 3,
+      });
+      return;
+    }
     const fallbacks = Array.isArray(v.fallbacks)
       ? v.fallbacks.map(u => String(u).replace(/^http:\/\//i, 'https://'))
       : [];
-    gallery.push({
-      type: 'video',
-      src,
-      fallbacks,
-      format: v.format || '',
-      thumb: v.thumbnail || cover || '',
-      name: v.name || ('Трейлер ' + (i + 1)),
+    let prio = 1;
+    if (/youtube\.com|youtu\.be/i.test(src)) prio = 0;
+    else if (/^uploads\//i.test(src) || /\.(mp4|webm)(\?|$)/i.test(src)) prio = 0;
+    else if (/\.m3u8(\?|$)/i.test(src)) prio = 2;
+    videoItems.push({
+      type: 'video', src, fallbacks, format: v.format || '',
+      thumb: v.thumbnail || cover || '', name: v.name || ('Трейлер ' + (i + 1)),
+      _prio: prio,
     });
   });
+  videoItems.sort((a, b) => (a._prio - b._prio));
+  videoItems.forEach(it => { delete it._prio; gallery.push(it); });
   (shots.length ? shots : (cover ? [cover] : [])).forEach((src) => {
     if (!src) return;
+    src = String(src).trim();
+    if (!src) return;
+    // не тащим в галерею явно битые/не-картинки
+    if (/\.ico(\?|$)/i.test(src)) return;
+    if (/\.mp4|\.webm|\.m3u8|\.mpd/i.test(src)) return;
     gallery.push({ type: 'image', src, thumb: src });
   });
   const descHtml = formatGameDescription(g.description || 'Описание отсутствует.');
@@ -3256,6 +3276,40 @@ function createCommentEl(c, viewer) {
 
 
 
+function clearPublishFormFields() {
+  const formModal = document.getElementById('submit-form-modal');
+  const form = document.getElementById('submit-game-form') || (formModal && formModal.querySelector('form'));
+  try { if (form && form.reset) form.reset(); } catch (e) {}
+  ['sg-title','sg-developer','sg-short','sg-tags','sg-price','sg-desc','sg-video','sg-cover-url','sg-banner-url','sg-logo-url','sg-icon-url','sg-screenshots-urls','sg-trailer-urls','sg-genre','sg-publisher','sg-publisher-id'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    else el.value = '';
+  });
+  const ed = document.getElementById('sg-desc-editor');
+  if (ed) ed.innerHTML = '';
+  document.querySelectorAll('.sg-genre').forEach(c => { c.checked = false; });
+  document.querySelectorAll('.sg-platform').forEach(c => { c.checked = (c.value === 'windows'); });
+  document.querySelectorAll('.sg-ctrl').forEach(c => { c.checked = false; });
+  document.querySelectorAll('.sg-content-flag').forEach(c => { c.checked = false; });
+  ['sg-cover-preview','sg-banner-preview','sg-logo-preview','sg-icon-preview'].forEach(id => {
+    const p = document.getElementById(id);
+    if (!p) return;
+    p.style.backgroundImage = '';
+    p.classList.remove('has-img');
+    p.innerHTML = '<span>' + (id.includes('cover') ? 'Обложка' : id.includes('banner') ? 'Баннер' : id.includes('logo') ? 'Логотип' : 'Иконка') + '</span>';
+  });
+  const shotsPrev = document.getElementById('sg-shots-preview');
+  if (shotsPrev) shotsPrev.innerHTML = '';
+  try { if (typeof fillSysReq === 'function') { fillSysReq('#sg-sys-min-fields', {}); fillSysReq('#sg-sys-rec-fields', {}); } } catch (e) {}
+  try { if (typeof renderLangTable === 'function') renderLangTable('#sg-lang-table', []); } catch (e) {}
+  try { if (typeof ensureTrailersEditorUi === 'function') { ensureTrailersEditorUi(); renderTrailersEditor(['']); } } catch (e) {}
+  try { if (typeof syncPublishGenres === 'function') syncPublishGenres(); } catch (e) {}
+  try { if (typeof syncPublishDescription === 'function') syncPublishDescription(); } catch (e) {}
+  window.__importedGamePack = null;
+  // pack sgdb оставляем — пригодится в CATioGridDB до перезагрузки
+}
+
 function resetPublishFormMode() {
   window.__adminModeratingId = null;
   window.__adminPublishMode = false;
@@ -3272,71 +3326,145 @@ function resetPublishFormMode() {
   }
   const extra = document.getElementById('sg-admin-extra-actions');
   if (extra) extra.remove();
+  try { clearPublishFormFields(); } catch (e) {}
+  try { ensurePublishAdminFooter(formModal, {}, null); } catch (e) {}
 }
 
 function ensurePublishAdminFooter(formModal, opts, g) {
-  let extra = document.getElementById('sg-admin-extra-actions');
-  if (extra) extra.remove();
-  if (!opts || !(opts.adminEdit || opts.moderate)) return;
+  opts = opts || {};
   const foot = formModal.querySelector('.submit-modal-foot');
   if (!foot) return;
-  extra = document.createElement('div');
-  extra.id = 'sg-admin-extra-actions';
-  extra.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;margin-bottom:8px';
-  const gid = g && g.id;
-  let html = '';
-  if (opts.adminEdit || opts.moderate) {
-    html += '<button type="button" class="btn-danger" id="sg-admin-delete">Удалить карточку</button>';
-  }
-  if (opts.moderate) {
-    html += '<button type="button" class="hp-btn-edit" id="sg-admin-reject">Отклонить</button>';
-  }
-  html += '<span style="flex:1"></span>';
-  extra.innerHTML = html;
-  foot.insertBefore(extra, foot.firstChild);
 
-  const del = document.getElementById('sg-admin-delete');
-  if (del) {
-    del.onclick = async () => {
-      if (!gid) return;
-      if (!confirm('Удалить карточку игры полностью?')) return;
-      if (!confirm('Точно удалить? Это нельзя отменить.')) return;
-      del.disabled = true;
-      try {
-        const data = await postJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=delete_game', { id: +gid });
-        if (!data.ok) throw new Error(data.error || 'Не удалось удалить');
-        toast('Игра удалена');
-        formModal.classList.add('hidden');
-        resetPublishFormMode();
-        try { if (typeof loadAdminPending === 'function') loadAdminPending(); } catch (e) {}
-        try { if (typeof gotoView === 'function') gotoView('home'); } catch (e) {}
-      } catch (e) {
-        toast(e.message || 'Ошибка удаления');
-      } finally {
-        del.disabled = false;
-      }
-    };
+  // левая зона футера (импорт/экспорт/удалить)
+  let left = foot.querySelector('.sg-foot-left');
+  if (!left) {
+    left = document.createElement('div');
+    left.className = 'sg-foot-left';
+    left.style.cssText = 'display:flex;gap:8px;align-items:center';
+    // переносим существующий import, если он вложен иначе
+    const oldImportBtn = foot.querySelector('#sg-import-pack-btn');
+    const oldImportInput = foot.querySelector('#sg-import-pack');
+    if (oldImportBtn && oldImportBtn.parentElement) {
+      const parent = oldImportBtn.parentElement;
+      left.appendChild(oldImportInput || document.createElement('span'));
+      if (oldImportInput) left.appendChild(oldImportInput);
+      left.appendChild(oldImportBtn);
+      // если parent пустой служебный div — можно оставить
+    }
+    foot.insertBefore(left, foot.firstChild);
   }
-  const rej = document.getElementById('sg-admin-reject');
-  if (rej) {
-    rej.onclick = async () => {
-      if (!gid) return;
-      const note = prompt('Причина отклонения (необязательно):') || '';
-      rej.disabled = true;
-      try {
-        const data = await postJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=reject', { id: +gid, note });
-        if (!data.ok) throw new Error(data.error || 'Не удалось отклонить');
-        toast('Заявка отклонена');
-        formModal.classList.add('hidden');
-        resetPublishFormMode();
-        try { if (typeof loadAdminPending === 'function') loadAdminPending(); } catch (e) {}
-      } catch (e) {
-        toast(e.message || 'Ошибка');
-      } finally {
-        rej.disabled = false;
-      }
-    };
+
+  // гарантируем import input/btn
+  let importInput = document.getElementById('sg-import-pack');
+  let importBtn = document.getElementById('sg-import-pack-btn');
+  if (!importInput) {
+    importInput = document.createElement('input');
+    importInput.type = 'file';
+    importInput.id = 'sg-import-pack';
+    importInput.accept = '.zip,application/zip';
+    importInput.hidden = true;
+    left.appendChild(importInput);
   }
+  if (!importBtn) {
+    importBtn = document.createElement('button');
+    importBtn.type = 'button';
+    importBtn.className = 'hp-btn-edit';
+    importBtn.id = 'sg-import-pack-btn';
+    importBtn.textContent = 'Импорт';
+    left.appendChild(importBtn);
+  }
+
+  // export + delete buttons
+  let exportBtn = document.getElementById('sg-admin-export');
+  if (!exportBtn) {
+    exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.className = 'hp-btn-edit';
+    exportBtn.id = 'sg-admin-export';
+    exportBtn.textContent = 'Экспорт';
+    left.appendChild(exportBtn);
+  }
+  let delBtn = document.getElementById('sg-admin-delete');
+  if (!delBtn) {
+    delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn-danger';
+    delBtn.id = 'sg-admin-delete';
+    delBtn.textContent = 'Удалить карточку';
+    left.appendChild(delBtn);
+  }
+
+  // порядок: Экспорт | Удалить | (Импорт только в submit)
+  // переставим
+  left.innerHTML = '';
+  left.appendChild(importInput);
+
+  const mode = opts.moderate ? 'moderate' : (opts.adminEdit ? 'adminEdit' : 'submit');
+  if (mode === 'submit') {
+    importBtn.style.display = '';
+    importBtn.textContent = 'Импорт';
+    left.appendChild(importBtn);
+    exportBtn.style.display = 'none';
+    delBtn.style.display = 'none';
+  } else if (mode === 'adminEdit') {
+    // Редактирование: Экспорт, справа от него Удалить. Импорта нет.
+    importBtn.style.display = 'none';
+    exportBtn.style.display = '';
+    delBtn.style.display = '';
+    left.appendChild(exportBtn);
+    left.appendChild(delBtn);
+  } else {
+    // Модерация: без удалить/отклонить/импорт/экспорт в этой модалке
+    importBtn.style.display = 'none';
+    exportBtn.style.display = 'none';
+    delBtn.style.display = 'none';
+  }
+
+  // убрать старый extra блок если был
+  const oldExtra = document.getElementById('sg-admin-extra-actions');
+  if (oldExtra) oldExtra.remove();
+  const oldRej = document.getElementById('sg-admin-reject');
+  if (oldRej) oldRej.remove();
+
+  const gid = g && g.id;
+  exportBtn.onclick = async () => {
+    if (!gid) return;
+    if (typeof runGamePackExport === 'function') {
+      await runGamePackExport(gid);
+    } else {
+      toast('Экспорт недоступен');
+    }
+  };
+  delBtn.onclick = async () => {
+    if (!gid) return;
+    if (!confirm('Удалить карточку игры полностью?')) return;
+    if (!confirm('Точно удалить? Это нельзя отменить.')) return;
+    delBtn.disabled = true;
+    try {
+      const data = await postJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=delete_game', { id: +gid });
+      if (!data.ok) throw new Error(data.error || 'Не удалось удалить');
+      toast('Игра удалена');
+      try { homeCache = null; storeCache = []; if (typeof loadHome==='function') loadHome(); if (typeof loadStore==='function') loadStore(); } catch(e) {}
+      formModal.classList.add('hidden');
+      try { resetPublishFormMode(); } catch (e) {}
+      // мгновенно убрать с главной / каталога
+      try {
+        homeCache = null;
+        storeCache = [];
+        const idNum = +gid;
+        document.querySelectorAll('[data-game-id="' + idNum + '"], .game-card[data-id="' + idNum + '"], .store-card[data-id="' + idNum + '"]').forEach(el => el.remove());
+        if (typeof loadHome === 'function') loadHome();
+        if (typeof loadStore === 'function') loadStore();
+        if (typeof loadSideLibrary === 'function') loadSideLibrary();
+      } catch (e) { console.warn(e); }
+      try { if (typeof loadAdminPending === 'function') loadAdminPending(); } catch (e) {}
+      try { if (typeof gotoView === 'function') gotoView('home'); } catch (e) {}
+    } catch (e) {
+      toast(e.message || 'Ошибка удаления');
+    } finally {
+      delBtn.disabled = false;
+    }
+  };
 }
 
 async function openPublishFormForGame(g, opts) {
@@ -3474,10 +3602,14 @@ function bindAdminGameEdit(g, viewer) {
 }
 
 async function loadSgdbAssetsForName(name) {
+  // онлайн поиск отключён — только локальные/ZIP ассеты
+  if (typeof window.loadSgdbAssetsGlobal === 'function') return window.loadSgdbAssetsGlobal('icons');
+  return;
+
   const q = String(name || '').trim();
   if (q.length < 2) return;
   const grid = document.getElementById('sgdb-grid') || document.querySelector('.sgdb-grid');
-  if (grid) grid.innerHTML = '<div class="loading">Поиск в CATioGridDB…</div>';
+  if (grid) grid.innerHTML = '<div class="loading">Только ассеты из ZIP-пакета (онлайн API отключён)</div>';
   try {
     const data = await fetchJSON('api/game_pack.php?action=sgdb_by_name&q=' + encodeURIComponent(q));
     if (!data.ok) throw new Error(data.error || 'Ошибка');
@@ -3522,28 +3654,27 @@ function setLocalGameAssets(gameId, assets) {
 }
 async function saveGameAssetsSelection(payload) {
   const gameId = payload.game_id || window.__steamEditGameId;
-  if (window.__assetsLocalOnly) {
-    const cur = getLocalGameAssets(gameId) || {};
-    const next = { ...cur, ...payload, updated_at: Date.now() };
-    setLocalGameAssets(gameId, next);
-    // применить локально к текущей странице
-    try {
-      if (payload.cover_url) {
-        document.querySelectorAll('img[data-game-cover="' + gameId + '"], .gp-cover img, #gallery-main-img').forEach(img => {
-          if (payload.cover_url) img.src = payload.cover_url;
-        });
-      }
-      if (payload.banner_url) {
-        const hero = document.querySelector('.gp-hero-bg, .gp-hero img, .game-hero-bg');
-        if (hero) {
-          if (hero.tagName === 'IMG') hero.src = payload.banner_url;
-          else hero.style.backgroundImage = 'url(' + JSON.stringify(payload.banner_url) + ')';
-        }
-      }
-    } catch (e) {}
-    return { ok: true, local: true };
+  payload = { ...(payload || {}), game_id: gameId, csrf_token: payload.csrf_token || window.CSRF_TOKEN || '' };
+  // админ/владелец — сохраняем через games.php (локальные uploads/ и http)
+  try {
+    const res = await postJSON((typeof API_BASE !== 'undefined' ? API_BASE : 'api/games.php') + '?action=update_assets', payload, typeof FETCH_TIMEOUT_LONG !== 'undefined' ? FETCH_TIMEOUT_LONG : 60000);
+    if (res && res.ok) return res;
+    // если сервер отказал не-админу — локально
+    if (window.__assetsLocalOnly || (res && res.error)) {
+      const cur = getLocalGameAssets(gameId) || {};
+      const next = { ...cur, ...payload, updated_at: Date.now() };
+      setLocalGameAssets(gameId, next);
+      return { ok: true, local: true };
+    }
+    return res || { ok: false, error: 'Ошибка сохранения' };
+  } catch (e) {
+    if (window.__assetsLocalOnly) {
+      const cur = getLocalGameAssets(gameId) || {};
+      setLocalGameAssets(gameId, { ...cur, ...payload, updated_at: Date.now() });
+      return { ok: true, local: true };
+    }
+    throw e;
   }
-  return postJSON((typeof STEAM_API !== 'undefined' ? STEAM_API : 'api/steam_import.php') + '?action=update_assets', payload, typeof FETCH_TIMEOUT_LONG !== 'undefined' ? FETCH_TIMEOUT_LONG : 60000);
 }
 
 /** Открыть модалку оформления (как Hydra) для конкретной игры */
@@ -3553,6 +3684,9 @@ function openGameAssetsModal(g) {
     toast('Модалка не найдена');
     return;
   }
+  window.__steamEditGameData = g || null;
+  if (g && Array.isArray(g.screenshots)) window.__lastGameScreenshots = g.screenshots;
+
   let appId = parseInt(g.steam_appid, 10) || 0;
   if (!appId && g.slug) {
     const m = String(g.slug).match(/-s(\d{3,10})$/);
@@ -3577,8 +3711,8 @@ function openGameAssetsModal(g) {
     modal2.classList.remove('hidden');
     // подгрузить ассеты по имени
     try {
-      if (typeof loadSgdbAssetsForName === 'function') loadSgdbAssetsForName(g.title || '');
-      else toast('Открыто без AppID — поиск по названию в CATioGridDB');
+      if (typeof window.loadSgdbAssetsGlobal === 'function') window.loadSgdbAssetsGlobal('icons');
+      else if (typeof loadSgdbAssets === 'function') loadSgdbAssets('icons');
     } catch (e) { console.warn(e); }
     return;
   }
@@ -3644,11 +3778,61 @@ function openGameAssetsModal(g) {
 
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
+  // если в пакете были CATioGridDB ассеты — подставить в кэш
+  if (window.__packSgdbAssets) {
+    window.__sgdbAssetsFromPack = window.__packSgdbAssets;
+  }
   setTimeout(() => {
-    if (typeof window.loadSgdbAssetsGlobal === 'function') window.loadSgdbAssetsGlobal('icons');
-    else document.querySelector('.sgdb-asset-tab[data-asset-type="icons"]')?.click();
+    if (window.__sgdbAssetsFromPack && typeof window.renderSgdbPackAssets === 'function') {
+      window.renderSgdbPackAssets('icons');
+    } else if (typeof window.loadSgdbAssetsGlobal === 'function') {
+      window.loadSgdbAssetsGlobal('icons');
+    } else {
+      document.querySelector('.sgdb-asset-tab[data-asset-type="icons"]')?.click();
+    }
   }, 40);
 }
+
+function renderSgdbPackAssets(type) {
+  const pack = window.__sgdbAssetsFromPack || window.__packSgdbAssets;
+  if (!pack) return false;
+  const key = type === 'covers' || type === 'grids' ? 'grids' : type;
+  const list = pack[key] || pack[type] || [];
+  const grid = document.getElementById('sgdb-grid') || document.querySelector('.sgdb-grid');
+  if (!grid) return false;
+  if (!list.length) {
+    grid.innerHTML = '<div class="loading">В пакете нет ассетов для этой вкладки</div>';
+    return true;
+  }
+  grid.innerHTML = list.map(a => {
+    const u = a.url || a.thumb;
+    const th = a.thumb || a.url;
+    return '<button type="button" class="sgdb-grid-item" data-url="' + escapeHtml(u) + '"><img src="' + escapeHtml(th) + '" alt="" loading="lazy" /></button>';
+  }).join('');
+  grid.querySelectorAll('.sgdb-grid-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      grid.querySelectorAll('.sgdb-grid-item').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      if (typeof selectSgdbAsset === 'function') selectSgdbAsset(btn.dataset.url, type);
+      else if (typeof window.selectSgdbAsset === 'function') window.selectSgdbAsset(btn.dataset.url, type);
+    });
+  });
+  return true;
+}
+window.renderSgdbPackAssets = renderSgdbPackAssets;
+if (!window.__sgdbPackTabDelegate) {
+  window.__sgdbPackTabDelegate = true;
+  document.addEventListener('click', (e) => {
+    const tab = e.target.closest && e.target.closest('.sgdb-asset-tab');
+    if (!tab) return;
+    if (!window.__sgdbAssetsFromPack && !window.__packSgdbAssets) return;
+    const type = tab.dataset.assetType || 'icons';
+    // дать штатному обработчику сработать, потом перерисовать из пакета
+    setTimeout(() => { try { renderSgdbPackAssets(type); } catch (err) {} }, 30);
+  });
+}
+
+
 
 
 
@@ -7087,7 +7271,8 @@ async function openGamePicker() {
 // ============================================================
 //  ЗАГРУЗКА ИГР + АДМИН-МОДЕРАЦИЯ
 // ============================================================
-const STEAM_API = 'api/steam_import.php';
+const STEAM_API = 'api/steam_import.php'; // disabled for diploma — do not call
+const STEAM_DISABLED = true;
 const SUBMIT_API = 'api/submit.php';
 
 const SYSREQ_LABELS = {
@@ -7955,11 +8140,33 @@ function applyGamePackToSubmitForm(data) {
     hid.value = [...new Set(localTrailers)].join('\n');
   }
 
+  // CATioGridDB ассеты из ZIP — в кэш для модалки оформления
+  try {
+    const sg = (files && files.sgdb) || (data.manifest && data.manifest.files && data.manifest.files.sgdb) || {};
+    const packSgdb = { icons: [], logos: [], heroes: [], grids: [] };
+    const mapKey = { icons: 'icons', logos: 'logos', heroes: 'heroes', covers: 'grids', grids: 'grids' };
+    Object.keys(sg || {}).forEach(k => {
+      const dst = mapKey[k] || k;
+      const arr = sg[k] || [];
+      if (!Array.isArray(arr)) return;
+      arr.forEach(item => {
+        const url = (item && (item.url || item.thumb || item.file)) || (typeof item === 'string' ? item : '');
+        if (!url) return;
+        packSgdb[dst] = packSgdb[dst] || [];
+        packSgdb[dst].push({ url, thumb: (item && item.thumb) || url, width: item && item.width, height: item && item.height });
+      });
+    });
+    window.__packSgdbAssets = packSgdb;
+    window.__packSgdbTitle = game.title || '';
+    console.log('[import] sgdb from pack', Object.keys(packSgdb).map(k => k + ':' + (packSgdb[k]||[]).length));
+  } catch (e) { console.warn(e); }
+
   const nShots = shotUrls ? shotUrls.length : 0;
-  const hasSys = !!(game.sys_req_min && (game.sys_req_min.os || game.sys_req_min.other || game.sys_req_min.notes));
   const nLang = Array.isArray(game.languages) ? game.languages.length : 0;
-  toast('Импорт: скринов ' + nShots + ', языков ' + nLang + (videoSet ? ', трейлер ✓' : ', без трейлера'));
+  const nTr = (typeof collectTrailerInputs === 'function' ? collectTrailerInputs() : []).length;
+  toast('Импорт: скринов ' + nShots + ', трейлеров ' + nTr + ', языков ' + nLang);
 }
+
 
 
 function ensureImportPackInput() {
@@ -8175,6 +8382,7 @@ function initSubmitGame() {
       const formModal = $('#submit-form-modal');
       if (formModal) {
         try { resetPublishFormMode(); } catch (e) {}
+        try { ensurePublishAdminFooter(formModal, {}, null); } catch (e) {}
         try { renderLangTable('#sg-lang-table', []); } catch (err) { console.warn(err); }
         formModal.classList.remove('hidden');
         const fillBtn = $('#sg-steam-fill');
@@ -8218,6 +8426,7 @@ function initSubmitGame() {
         // не закрывать, если только что выбирали файл
         if (window.__pubFileDialogOpen) return;
         if (Date.now() - (window.__pubFileDialogTs || 0) < 800) return;
+        try { resetPublishFormMode(); } catch (e) {}
         $('#submit-form-modal')?.classList.add('hidden');
         return;
       }
@@ -8235,88 +8444,7 @@ function initSubmitGame() {
 
 
 async function fillSubmitFromSteam() {
-  const input = $('#sg-steam-url');
-  const btn = $('#sg-steam-fill');
-  const raw = (input?.value || '').trim();
-  if (!raw) { toast('Вставь ссылку Steam или AppID'); return; }
-  let appid = raw;
-  const m = raw.match(/store\.steampowered\.com\/app\/(\d+)/i) || raw.match(/\/app\/(\d+)/) || raw.match(/^(\d+)$/);
-  if (m) appid = m[1];
-  if (btn) { btn.disabled = true; btn.textContent = 'Загрузка…'; }
-  try {
-    const data = await fetchJSON(`api/steam_import.php?action=preview&appid=${encodeURIComponent(appid)}`);
-    if (!data.ok) throw new Error(data.error || 'Не удалось получить данные Steam');
-    const g = data.game || data.preview || data;
-    if ($('#sg-title') && g.title) $('#sg-title').value = g.title;
-    if ($('#sg-short') && (g.short_description || g.short_desc)) $('#sg-short').value = g.short_description || g.short_desc;
-    if ($('#sg-desc') && (g.description || g.about)) $('#sg-desc').value = g.description || g.about;
-    if ($('#sg-developer') && (g.developer || g.developers)) {
-      const d = g.developer || (Array.isArray(g.developers) ? g.developers.join(', ') : g.developers);
-      $('#sg-developer').value = d || '';
-    }
-    if ($('#sg-genre') && g.genre) {
-      const genreSel = $('#sg-genre');
-      const gstr = String(g.genre).split(/[,/]/)[0].trim();
-      const opt = [...genreSel.options].find(o => o.value === gstr || o.textContent === gstr);
-      if (opt) genreSel.value = opt.value;
-      else { genreSel.value = 'Другое'; }
-    }
-    if ($('#sg-price') && g.price != null) $('#sg-price').value = parseFloat(g.price) || 0;
-    if ($('#sg-cover-url') && (g.cover_url || g.header_image)) $('#sg-cover-url').value = g.cover_url || g.header_image;
-    if ($('#sg-banner-url') && (g.banner_url || g.header_image)) $('#sg-banner-url').value = g.banner_url || g.header_image;
-    // sys req minimal if object
-    const fillSys = (boxId, obj) => {
-      const box = $(boxId);
-      if (!box || !obj) return;
-      $$('input[data-k]', box).forEach(inp => {
-        const k = inp.dataset.k;
-        if (obj[k]) inp.value = obj[k];
-      });
-    };
-    fillSys('#sg-sys-min-fields', g.pc_requirements_min || g.sys_min || g.requirements_min);
-    fillSys('#sg-sys-rec-fields', g.pc_requirements_rec || g.sys_rec || g.requirements_rec);
-    toast('Данные Steam подставлены — проверь и дополни');
-  } catch (err) {
-    toast(err.message || 'Ошибка Steam');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Подтянуть'; }
-  }
-}
-
-function openSubmitRules() {
-  const modal = document.getElementById('submit-rules-modal');
-  if (!modal) {
-    console.error('submit-rules-modal не найден в HTML. Обнови index.php');
-    alert('Модалка добавления игры не найдена. Нужен актуальный index.php');
-    return;
-  }
-  const agree = document.getElementById('submit-agree');
-  if (agree) agree.checked = false;
-  const next = document.getElementById('submit-rules-next');
-  if (next) next.disabled = true;
-  modal.classList.remove('hidden');
-  // язык-таблицу готовим заранее, но ошибка не должна блокировать окно
-  try { renderLangTable('#sg-lang-table', []); } catch (err) { console.warn(err); }
-}
-
-// Глобальный хук на случай inline onclick
-window.openSubmitRules = openSubmitRules;
-
-function resetPublishModalMode() {
-  window.__adminModeratingId = null;
-  const formModal = $('#submit-form-modal');
-  const h2 = formModal && formModal.querySelector('.pub-modal-head h2, .submit-modal-head h2');
-  try { resetPublishFormMode(); } catch (e) {}
-  if (h2) h2.textContent = 'Публикация игры';
-  const sub = formModal && formModal.querySelector('.pub-modal-sub');
-  if (sub) sub.textContent = 'Заполните карточку игры — жанры, медиа, требования и описание';
-  const sendBtn = $('#submit-game-send');
-  if (sendBtn) {
-    sendBtn.textContent = 'Отправить на модерацию';
-    delete sendBtn.dataset.adminPublish;
-  }
-  const rej = $('#submit-admin-reject');
-  if (rej) rej.classList.add('hidden');
+  toast('Импорт из Steam отключён. Используй ZIP (tools/steam-export.bat).');
 }
 
 async function submitGameForm() {
@@ -8431,7 +8559,13 @@ async function submitGameForm() {
     fd.append('is_adult', flags.includes('adult') ? '1' : '0');
 
     const res = await fetch(`${SUBMIT_API}?action=submit`, { method: 'POST', body: fd });
-    const data = await res.json();
+    const rawText = await res.text();
+    let data;
+    try { data = JSON.parse(rawText); }
+    catch (e) {
+      console.error('submit non-JSON', rawText.slice(0, 300));
+      throw new Error('Сервер вернул не JSON. Обнови api/submit.php');
+    }
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     $('#submit-form-modal')?.classList.add('hidden');
     $('#submit-game-form')?.reset();
@@ -8726,36 +8860,53 @@ function initAdminUI() {
   async function loadSgdbAssets(type) {
     const grid = $('#sgdb-asset-grid');
     if (!grid) return;
-    if (!steamAppId && window.__steamAppId) steamAppId = +window.__steamAppId;
-    if (!steamAppId) {
-      grid.innerHTML = '<div class="settings-hint">Сначала загрузи игру во вкладке «Основные»</div>';
-      return;
-    }
     grid.className = 'sgdb-asset-grid is-' + type;
-    if (sgdbCache[type]) {
-      renderSgdbGrid(sgdbCache[type], type);
+
+    // 1) ассеты из ZIP-пакета (импорт)
+    const pack = window.__sgdbAssetsFromPack || window.__packSgdbAssets;
+    if (pack) {
+      const key = (type === 'grids' || type === 'covers') ? 'grids' : (type === 'heroes' ? 'heroes' : type);
+      const list = pack[key] || pack[type] || pack.covers || [];
+      if (list.length) {
+        const mapped = list.map(a => ({
+          url: a.url || a.file || a.thumb,
+          thumb: a.thumb || a.url || a.file,
+        })).filter(a => a.url);
+        if (mapped.length) {
+          sgdbCache[type] = mapped;
+          renderSgdbGrid(mapped, type);
+          return;
+        }
+      }
+    }
+
+    // 2) локальные ассеты уже сохранённой игры
+    const g = window.__steamEditGameData || window.__lastGameForCart || (window.wrap && window.wrap._gameData) || null;
+    const gid = window.__steamEditGameId;
+    const local = [];
+    const pushLocal = (url) => {
+      if (!url) return;
+      const u = String(url);
+      if (!local.some(x => x.url === u)) local.push({ url: u, thumb: u });
+    };
+    if (g) {
+      if (type === 'icons') pushLocal(g.icon_url);
+      if (type === 'logos') pushLocal(g.logo_url);
+      if (type === 'heroes') { pushLocal(g.banner_url); pushLocal(g.cover_url); }
+      if (type === 'grids' || type === 'covers') { pushLocal(g.cover_url); pushLocal(g.cover_src); }
+    }
+    // скрины как варианты обложки
+    if ((type === 'grids' || type === 'covers' || type === 'heroes') && Array.isArray(window.__lastGameScreenshots)) {
+      window.__lastGameScreenshots.forEach(pushLocal);
+    }
+
+    if (local.length) {
+      sgdbCache[type] = local;
+      renderSgdbGrid(local, type);
       return;
     }
-    grid.innerHTML = '<div class="loading">Загрузка CATioGridDB...</div>';
-    try {
-      const data = await fetchJSON(`${API_BASE}?action=sgdb_assets&appid=${steamAppId}&type=${encodeURIComponent(type)}`, { timeout: FETCH_TIMEOUT_LONG });
-      if (!data.ok) {
-        grid.innerHTML = `<div class="settings-hint">${escapeHtml(data.error || 'Ошибка SGDB')}</div>`;
-        // fallback: steam CDN options from preview
-        if (steamPreviewData) {
-          const fb = [];
-          if (type === 'icons' && steamPreviewData.icon_options) fb.push(...steamPreviewData.icon_options.map(u => ({ url: u, thumb: u })));
-          if (type === 'grids' && steamPreviewData.cover_options) fb.push(...steamPreviewData.cover_options.map(u => ({ url: u, thumb: u })));
-          if (type === 'heroes' && steamPreviewData.banner_options) fb.push(...steamPreviewData.banner_options.map(u => ({ url: u, thumb: u })));
-          if (fb.length) renderSgdbGrid(fb, type);
-        }
-        return;
-      }
-      sgdbCache[type] = data.assets || [];
-      renderSgdbGrid(sgdbCache[type], type);
-    } catch (e) {
-      grid.innerHTML = `<div class="settings-hint">${escapeHtml(e.message || 'Ошибка')}</div>`;
-    }
+
+    grid.innerHTML = '<div class="settings-hint">Нет локальных ассетов. Импортируй ZIP-пакет (иконки/обложки из CATioGridDB внутри ZIP) или загрузи файлы в карточке игры.</div>';
   }
 
   function renderSgdbGrid(list, type) {
@@ -9465,16 +9616,39 @@ function loadHlsJs() {
   return _hlsScriptPromise;
 }
 
-function showTrailerFallback(box, src, thumb) {
-  const safe = escapeHtml(src || '');
-  const th = thumb ? `<img src="${escapeHtml(thumb)}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.55" />` : '';
-  box.innerHTML = `<div style="position:relative;width:100%;height:100%;background:#000;display:flex;align-items:center;justify-content:center">
-    ${th}
-    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;text-align:center">
-      <div style="color:#fff;font-weight:600">Трейлер</div>
-      <a class="hp-btn-edit" href="${safe}" target="_blank" rel="noopener" style="text-decoration:none">Открыть видео</a>
-    </div>
-  </div>`;
+function showTrailerFallback(box, src, thumb, wrap) {
+  // без кнопки «Открыть видео» — пробуем следующий ролик в галерее
+  const items = (wrap && wrap._galleryItems) || [];
+  const curSrc = String(src || '');
+  let nextIdx = -1;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type !== 'video') continue;
+    if (items[i].src === curSrc || (items[i].fallbacks || []).includes(curSrc)) {
+      // ищем следующий video после текущего
+      for (let j = i + 1; j < items.length; j++) {
+        if (items[j].type === 'video') { nextIdx = j; break; }
+      }
+      break;
+    }
+  }
+  if (nextIdx < 0) {
+    // первый рабочий video отличный от src
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type === 'video' && items[i].src !== curSrc) { nextIdx = i; break; }
+    }
+  }
+  if (nextIdx >= 0 && wrap) {
+    const it = items[nextIdx];
+    $$('.gp-gallery-thumb', wrap).forEach((t, ti) => t.classList.toggle('active', ti === nextIdx));
+    setGalleryMain(wrap, 'video', it.src, it.thumb || '', it.fallbacks || []);
+    return;
+  }
+  // последний шанс — постер без кнопки
+  if (thumb) {
+    box.innerHTML = `<img id="gallery-main-img" src="${escapeHtml(thumb)}" alt="Трейлер" />`;
+  } else {
+    box.innerHTML = `<div style="width:100%;height:100%;background:#000;display:flex;align-items:center;justify-content:center;color:#888">Трейлер недоступен</div>`;
+  }
 }
 function setGalleryMain(wrap, type, src, thumb, fallbacks) {
   const box = $('#gallery-main', wrap) || $('.gp-gallery-main', wrap);
@@ -9501,7 +9675,7 @@ function setGalleryMain(wrap, type, src, thumb, fallbacks) {
       let idx = 0;
       const tryPlay = async () => {
         if (idx >= queue.length) {
-          showTrailerFallback(box, src, thumb);
+          showTrailerFallback(box, src, thumb, wrap);
           return;
         }
         const safeSrc = queue[idx++];
@@ -9553,7 +9727,7 @@ function setGalleryMain(wrap, type, src, thumb, fallbacks) {
                   wrap._hls = null;
                   // CORS/Steam CDN — пробуем следующий URL, иначе кнопка «открыть»
                   if (idx < queue.length) tryPlay();
-                  else showTrailerFallback(box, safeSrc, thumb);
+                  else showTrailerFallback(box, safeSrc, thumb, wrap);
                 }
               });
               return;
@@ -10398,6 +10572,64 @@ window.setSideCardVisible = setSideCardVisible;
 if (typeof bindPublisherLineClicks === 'function') window.bindPublisherLineClicks = bindPublisherLineClicks;
 
 
+
+// --- global create / submit openers (must work even if other init fails) ---
+window.openSubmitRules = function openSubmitRules() {
+  try { if (typeof resetPublishFormMode === 'function') resetPublishFormMode(); } catch (e) {}
+  const modal = document.getElementById('submit-rules-modal');
+  if (!modal) {
+    // fallback: сразу форма
+    const formModal = document.getElementById('submit-form-modal');
+    if (formModal) {
+      formModal.classList.remove('hidden');
+      return;
+    }
+    alert('Модалка добавления игры не найдена. Обнови index.php');
+    return;
+  }
+  const agree = document.getElementById('submit-agree');
+  if (agree) agree.checked = false;
+  const next = document.getElementById('submit-rules-next');
+  if (next) next.disabled = true;
+  modal.classList.remove('hidden');
+};
+window.openCreateMenu = function openCreateMenu() {
+  const m = document.getElementById('create-menu-modal');
+  if (!m) {
+    window.openSubmitRules();
+    return;
+  }
+  m.classList.remove('hidden');
+};
+window.closeCreateMenu = function closeCreateMenu() {
+  const m = document.getElementById('create-menu-modal');
+  if (m) m.classList.add('hidden');
+};
+
+if (!window.__createMenuDelegated) {
+  window.__createMenuDelegated = true;
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('#btn-add-game')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.openCreateMenu) window.openCreateMenu();
+      else if (window.openSubmitRules) window.openSubmitRules();
+      return;
+    }
+    if (t.closest('#create-menu-game')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.closeCreateMenu) window.closeCreateMenu();
+      if (window.openSubmitRules) window.openSubmitRules();
+      return;
+    }
+    if (t.closest('[data-close-create-menu]')) {
+      if (window.closeCreateMenu) window.closeCreateMenu();
+    }
+  }, true);
+}
 document.addEventListener('DOMContentLoaded', () => {
   // Сначала кнопка «+», чтобы сбой других init её не убил
 
@@ -10437,15 +10669,12 @@ function initCreateMenu() {
     closeCreateMenu();
     try {
       const pubs = await fetchMyPublishers(true);
-      window.__pendingPublishPublishers = pubs;
-      if (!pubs.length) {
-        openNoPubModal();
-        return;
-      }
-      openSubmitRules();
+      window.__pendingPublishPublishers = pubs || [];
     } catch (e) {
-      openSubmitRules();
+      window.__pendingPublishPublishers = [];
     }
+    // издательство опционально — форму публикации открываем всегда
+    openSubmitRules();
   });
   document.querySelectorAll('[data-close-no-pub]').forEach(el => {
     el.addEventListener('click', () => $('#no-pub-modal')?.classList.add('hidden'));
@@ -10702,10 +10931,9 @@ async function fillPublishPublisherSelect(preloaded) {
     || document.getElementById('sg-publisher-id')
     || document.querySelector('select[name="publisher_id"]');
   if (!sel) {
-    console.warn('fillPublishPublisherSelect: #sg-publisher-id не найден');
+    console.warn('[publishers] select #sg-publisher-id не найден в DOM');
     return;
   }
-  // native select only
   try {
     const wrap = sel.closest('.catio-select');
     if (wrap && wrap.parentNode) {
@@ -10713,31 +10941,39 @@ async function fillPublishPublisherSelect(preloaded) {
       wrap.remove();
     }
   } catch (e) {}
-  sel.style.display = '';
-  sel.classList.remove('select-native-hidden', 'hidden');
-  sel.removeAttribute('hidden');
+  sel.hidden = false;
+  sel.style.display = 'block';
+  sel.style.visibility = 'visible';
+  sel.classList.remove('hidden', 'select-native-hidden');
 
-  const cur = sel.value;
-  let pubs = Array.isArray(preloaded) && preloaded.length ? preloaded.slice() : [];
+  const cur = sel.value || '';
+  let pubs = Array.isArray(preloaded) ? preloaded.slice() : [];
 
-  // всегда свежий запрос к БД: publishers + publisher_members
+  const api = (typeof PUB_API !== 'undefined' ? PUB_API : 'api/publishers.php');
+  // 1) mine
   try {
-    const api = (typeof PUB_API !== 'undefined' ? PUB_API : 'api/publishers.php');
-    const data = await fetchJSON(api + '?action=mine&_t=' + Date.now());
-    if (data && data.ok && Array.isArray(data.publishers)) {
-      pubs = data.publishers;
-    } else if (data && Array.isArray(data.publishers)) {
-      pubs = data.publishers;
-    }
-    if (!pubs.length) {
-      const me = window.AUTH_STATE && window.AUTH_STATE.user;
-      if (me && me.id) {
-        const fu = await fetchJSON(api + '?action=for_user&user_id=' + encodeURIComponent(me.id) + '&_t=' + Date.now());
-        if (fu && Array.isArray(fu.publishers)) pubs = fu.publishers;
-      }
-    }
+    const res = await fetch(api + '?action=mine&_t=' + Date.now(), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+    const data = await res.json().catch(() => ({}));
+    console.log('[publishers] mine HTTP', res.status, data);
+    if (Array.isArray(data.publishers)) pubs = data.publishers;
+    else if (data && data.ok === false) console.warn('[publishers] mine error', data.error);
   } catch (e) {
-    console.warn('publishers load', e);
+    console.warn('[publishers] mine exception', e);
+  }
+  // 2) for_user fallback
+  if (!pubs.length) {
+    try {
+      const me = (window.AUTH_STATE && window.AUTH_STATE.user) || {};
+      const uid = me.id || me.user_id;
+      if (uid) {
+        const res = await fetch(api + '?action=for_user&user_id=' + encodeURIComponent(uid) + '&_t=' + Date.now(), { credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({}));
+        console.log('[publishers] for_user', data);
+        if (Array.isArray(data.publishers)) pubs = data.publishers;
+      }
+    } catch (e2) {
+      console.warn('[publishers] for_user exception', e2);
+    }
   }
 
   window.__pendingPublishPublishers = pubs;
@@ -10745,9 +10981,10 @@ async function fillPublishPublisherSelect(preloaded) {
 
   let html = '<option value="">— без издательства —</option>';
   pubs.forEach(p => {
-    html += '<option value="' + String(p.id) + '">' + escapeHtml(p.name || ('#' + p.id)) + '</option>';
+    html += '<option value="' + String(p.id) + '">' + escapeHtml(String(p.name || ('#' + p.id))) + '</option>';
   });
   sel.innerHTML = html;
+
   if (cur && pubs.some(p => String(p.id) === String(cur))) sel.value = String(cur);
   else if (pubs.length === 1) sel.value = String(pubs[0].id);
   else sel.value = '';
@@ -10761,8 +10998,9 @@ async function fillPublishPublisherSelect(preloaded) {
     sync();
     sel.onchange = sync;
   }
-  console.log('[publishers] options=', pubs.length, pubs.map(p => p.name));
+  console.log('[publishers] filled count=', pubs.length, pubs);
 }
+
 
 async function openPublisherPage(id, slug) {
   $$('.view').forEach(v => v.classList.remove('active'));

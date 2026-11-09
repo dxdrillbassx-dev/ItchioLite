@@ -323,6 +323,8 @@ function attachUserState(PDO $pdo, array $row, ?array $user): array {
 
 
 function catioFetchSteamMovies(int $appId): array {
+    return []; /* diploma: no steam network calls */
+
     if ($appId <= 0) return [];
     static $cache = [];
     if (isset($cache[$appId])) return $cache[$appId];
@@ -753,7 +755,25 @@ try {
         ];
         foreach ($dirs as $d) { if (!is_dir($d)) @mkdir($d, 0775, true); }
         $download = function(string $url, string $dir, string $prefix) {
-            if ($url === '' || !preg_match('#^https?://#i', $url)) return null;
+            if ($url === '') return null;
+            $url = trim($url);
+            if (!preg_match('#^https?://#i', $url)) {
+                $rel = ltrim(str_replace('\\', '/', $url), '/');
+                if (strpos($rel, 'uploads/') === 0) {
+                    $src = dirname(__DIR__) . '/' . $rel;
+                    if (!is_file($src)) $src = __DIR__ . '/../' . $rel;
+                    if (is_file($src)) {
+                        $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION) ?: 'jpg');
+                        if ($ext === 'jpeg') $ext = 'jpg';
+                        $ext = preg_replace('/[^a-z0-9]/', '', $ext) ?: 'jpg';
+                        if (!is_dir($dir)) @mkdir($dir, 0775, true);
+                        $name = $prefix . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                        $full = rtrim($dir, "/\\") . '/' . $name;
+                        if (@copy($src, $full)) return 'uploads/games/' . basename($dir) . '/' . $name;
+                    }
+                }
+                return null;
+            }
             $ext = 'jpg';
             $path = parse_url($url, PHP_URL_PATH) ?? '';
             if (preg_match('~\.(png|jpe?g|webp|gif)$~i', $path, $m)) $ext = strtolower($m[1] === 'jpeg' ? 'jpg' : $m[1]);

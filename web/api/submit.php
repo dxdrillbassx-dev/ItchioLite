@@ -13,6 +13,77 @@ $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
+function normalize_video_urls_field(string $raw): string {
+    $raw = trim($raw);
+    if ($raw === '') return '';
+    $list = [];
+    if ($raw[0] === '[') {
+        $j = json_decode($raw, true);
+        if (is_array($j)) {
+            foreach ($j as $item) {
+                if (is_string($item) && trim($item) !== '') $list[] = trim($item);
+                elseif (is_array($item)) {
+                    $u = trim((string)($item['url'] ?? $item['src'] ?? $item['mp4'] ?? ''));
+                    if ($u !== '') $list[] = $u;
+                }
+            }
+        }
+    } else {
+        foreach (preg_split('/\r\n|\r|\n+/', $raw) ?: [] as $line) {
+            $line = trim($line);
+            if ($line !== '') $list[] = $line;
+        }
+        // also allow comma-separated plain urls
+        if (count($list) === 1 && str_contains($list[0], ',') && !str_contains($list[0], 'http')) {
+            // keep as is
+        } elseif (count($list) === 1 && substr_count($list[0], 'http') > 1) {
+            $parts = preg_split('/\s+/', $list[0]) ?: [];
+            $list = array_values(array_filter(array_map('trim', $parts)));
+        }
+    }
+    $list = array_values(array_unique($list));
+    if (!$list) return '';
+    if (count($list) === 1) return $list[0];
+    return json_encode($list, JSON_UNESCAPED_UNICODE);
+}
+
+function insert_trailer_media(PDO $pdo, int $gameId, string $videoField): void {
+    $raw = trim($videoField);
+    if ($raw === '') return;
+    $list = [];
+    if ($raw[0] === '[') {
+        $j = json_decode($raw, true);
+        if (is_array($j)) {
+            foreach ($j as $item) {
+                if (is_string($item) && trim($item) !== '') $list[] = trim($item);
+                elseif (is_array($item)) {
+                    $u = trim((string)($item['url'] ?? $item['src'] ?? ''));
+                    if ($u !== '') $list[] = $u;
+                }
+            }
+        }
+    } else {
+        $list = [$raw];
+    }
+    $list = array_values(array_unique(array_filter($list)));
+    try {
+        $pdo->prepare("DELETE FROM game_media WHERE game_id = ? AND kind IN ('trailer','video','movie')")->execute([$gameId]);
+    } catch (Throwable $e) {}
+    $order = 0;
+    foreach ($list as $u) {
+        try {
+            $pdo->prepare("INSERT INTO game_media (game_id, kind, url, sort_order) VALUES (?, 'trailer', ?, ?)")
+                ->execute([$gameId, $u, $order++]);
+        } catch (Throwable $e) {
+            try {
+                $pdo->prepare("INSERT INTO game_media (game_id, kind, url) VALUES (?, 'trailer', ?)")
+                    ->execute([$gameId, $u]);
+            } catch (Throwable $e2) {}
+        }
+    }
+}
+
+
 function jsonBodyS(): array {
     $b = json_decode(file_get_contents('php://input'), true);
     return is_array($b) ? $b : $_POST;
@@ -82,7 +153,7 @@ try {
                 $chk->execute([$publisherId, (int)$user['id']]);
                 if (!$chk->fetch()) $publisherId = 0;
             }
-            $video = trim($_POST['video_url'] ?? '');
+            $video = normalize_video_urls_field(trim((string)($_POST['video_url'] ?? '')));
             $sysMin = trim($_POST['sys_req_min'] ?? '');
             $sysRec = trim($_POST['sys_req_rec'] ?? '');
             $controllers = trim($_POST['controllers'] ?? ''); // comma: xbox,playstation
@@ -175,6 +246,7 @@ try {
                 (int)$user['id'], $isAdult, $publisherId ?: null,
             ]);
             $gameId = (int)$pdo->lastInsertId();
+            insert_trailer_media($pdo, $gameId, $video);
 
             // trailers from pack (local uploads paths)
             $trailerUrls = trim((string)($_POST['trailer_urls'] ?? ''));
@@ -228,16 +300,16 @@ try {
                         $alt = __DIR__ . '/../' . $su;
                         if (is_file($alt)) $src = $alt;
                     }
-                    $finalUrl = $su;
-                    if (is_file($src)) {
-                        $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION) ?: 'jpg');
-                        if (!in_array($ext, ['jpg','jpeg','png','webp','gif'], true)) $ext = 'jpg';
-                        $name = uniqid('pack_', true) . '.' . $ext;
-                        $dest = $shotDir . '/' . $name;
-                        if (@copy($src, $dest)) {
-                            $finalUrl = 'uploads/games/shots/' . $name;
-                        }
+                    if (!is_file($src)) {
+                        // не сохраняем битую ссылку без файла
+                        continue;
                     }
+                    $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION) ?: 'jpg');
+                    if (!in_array($ext, ['jpg','jpeg','png','webp','gif'], true)) continue;
+                    $name = uniqid('pack_', true) . '.' . $ext;
+                    $dest = $shotDir . '/' . $name;
+                    if (!@copy($src, $dest)) continue;
+                    $finalUrl = 'uploads/games/shots/' . $name;
                     try {
                         $pdo->prepare("INSERT INTO game_media (game_id, kind, url, sort_order) VALUES (?,?,?,?)")
                             ->execute([$gameId, 'screenshot', $finalUrl, $order]);
@@ -356,7 +428,7 @@ try {
                 'short_description' => trim($_POST['short_description'] ?? ''),
                 'description' => trim($_POST['description'] ?? ''),
                 'genre' => trim($_POST['genre'] ?? ''),
-                'video_url' => trim($_POST['video_url'] ?? ''),
+                'video_url' => normalize_video_urls_field(trim((string)($_POST['video_url'] ?? ''))),
                 'sys_req_min' => trim($_POST['sys_req_min'] ?? ''),
                 'sys_req_rec' => trim($_POST['sys_req_rec'] ?? ''),
                 'controllers' => trim($_POST['controllers'] ?? ''),
@@ -492,6 +564,8 @@ try {
                     $pdo->exec("DELETE FROM game_media WHERE game_id = $id AND id IN ($in)");
                 }
             }
+
+            insert_trailer_media($pdo, (int)$id, $fields['video_url'] ?? '');
 
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
             break;

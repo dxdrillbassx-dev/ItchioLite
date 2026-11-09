@@ -1073,10 +1073,7 @@ if ($isAuthorized) {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               Пользователи
             </button>
-            <button type="button" class="settings-nav-btn" data-atab="import">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Загрузка игр
-            </button>
+            <!-- steam import tab removed -->
           </aside>
 
           <div class="settings-main">
@@ -1159,39 +1156,8 @@ if ($isAuthorized) {
                 <div class="loading">Загрузка...</div>
               </div>
             </div>
-            <div class="settings-pane hidden" id="admin-pane-import">
-              <h2 class="settings-title">Загрузка игр</h2>
-              <p class="settings-desc">Вставь ссылку на страницу Steam Store — подтянем название, описание, шапку, обложку, скриншоты и трейлер.</p>
-              <div class="settings-block steam-import-box">
-                <label class="settings-label full">
-                  <span>Ссылка Steam или AppID</span>
-                  <div class="steam-import-row">
-                    <input class="auth-input" id="steam-url-admin" placeholder="https://store.steampowered.com/app/730/..." />
-                    <button type="button" class="auth-submit" id="steam-preview-admin-btn">Проверить</button>
-                  </div>
-                </label>
-                <p class="settings-hint">Примеры: <code>https://store.steampowered.com/app/570</code> или просто <code>570</code>. Оформление (иконка/лого/баннер) — через шестерёнку на странице игры.</p>
-                <div id="steam-import-error" class="gp-comment-error hidden"></div>
-                <div id="steam-preview-admin" class="steam-preview-mini hidden">
-                  <div class="steam-preview-hero">
-                    <img id="steam-preview-admin-banner" src="" alt="" />
-                    <div class="steam-preview-hero-info">
-                      <img id="steam-preview-admin-cover" class="steam-preview-cover" src="" alt="" />
-                      <div>
-                        <h3 id="steam-preview-admin-title"></h3>
-                        <p id="steam-preview-admin-meta" class="settings-hint"></p>
-                      </div>
-                    </div>
-                  </div>
-                  <p id="steam-preview-admin-short" class="steam-preview-short"></p>
-                  <div class="settings-actions" style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-                    <label class="settings-check"><input type="checkbox" id="steam-publish-admin" checked /> Сразу опубликовать</label>
-                    <button type="button" class="auth-submit" id="steam-import-admin-btn">Импортировать в CATio</button>
-                  </div>
-                </div>
-              </div>
+            <!-- admin-pane-import removed -->
             </div>
-          </div>
         </div>
       </section>
       <?php endif; ?>
@@ -2377,7 +2343,7 @@ function socialAuth(provider) {
           <div class="sgdb-pane-title">Основные</div>
           <div class="sgdb-info-grid">
             <div class="sgdb-info-row"><span>Название</span><b id="sgdb-info-title">—</b></div>
-            <div class="sgdb-info-row"><span>Steam AppID</span><b id="sgdb-info-appid">—</b></div>
+            <div class="sgdb-info-row"><span>App ID</span><b id="sgdb-info-appid">—</b></div>
             <div class="sgdb-info-row"><span>ID в CATio</span><b id="sgdb-info-id">—</b></div>
           </div>
           <p class="settings-hint">Ссылку Steam для импорта используй в админке → Загрузка игр. Здесь только оформление уже добавленной игры.</p>
