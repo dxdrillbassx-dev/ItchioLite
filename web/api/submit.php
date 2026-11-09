@@ -153,6 +153,12 @@ try {
                 $chk->execute([$publisherId, (int)$user['id']]);
                 if (!$chk->fetch()) $publisherId = 0;
             }
+            // Для новой игры издательство обязательно
+            if ($publisherId <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Выберите издательство. Сначала создайте его в разделе «Мои издательства».'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
             $video = normalize_video_urls_field(trim((string)($_POST['video_url'] ?? '')));
             $sysMin = trim($_POST['sys_req_min'] ?? '');
             $sysRec = trim($_POST['sys_req_rec'] ?? '');

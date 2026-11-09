@@ -60,7 +60,9 @@ try {
             try {
                 $st = $pdo->prepare("
                   SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id,
-                    COALESCE(pm.role, 'member') AS my_role
+                    COALESCE(pm.role, 'member') AS my_role,
+                    (SELECT COUNT(*) FROM publisher_members pm2 WHERE pm2.publisher_id = p.id) AS members_count,
+                    (SELECT COUNT(*) FROM games g WHERE g.publisher_id = p.id AND g.is_published = 1) AS games_count
                   FROM publisher_members pm
                   INNER JOIN publishers p ON p.id = pm.publisher_id
                   WHERE pm.user_id = ?
@@ -72,7 +74,12 @@ try {
                 jsonOut(['ok' => false, 'error' => 'DB members: ' . $e->getMessage()], 500);
             }
             try {
-                $st2 = $pdo->prepare("SELECT id, name, slug, avatar_url, owner_id FROM publishers WHERE owner_id = ?");
+                $st2 = $pdo->prepare("
+                  SELECT id, name, slug, avatar_url, owner_id,
+                    (SELECT COUNT(*) FROM publisher_members pm2 WHERE pm2.publisher_id = publishers.id) AS members_count,
+                    (SELECT COUNT(*) FROM games g WHERE g.publisher_id = publishers.id AND g.is_published = 1) AS games_count
+                  FROM publishers WHERE owner_id = ?
+                ");
                 $st2->execute([$uid]);
                 foreach ($st2->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
                     $found = false;
@@ -230,7 +237,9 @@ try {
             $uid = (int)($_GET['user_id'] ?? 0);
             if ($uid <= 0) jsonOut(['ok'=>false,'error'=>'user_id'], 400);
             $st = $pdo->prepare("
-                SELECT p.id, p.name, p.slug, p.avatar_url, pm.role
+                SELECT p.id, p.name, p.slug, p.avatar_url, pm.role,
+                  (SELECT COUNT(*) FROM publisher_members pm2 WHERE pm2.publisher_id = p.id) AS members_count,
+                  (SELECT COUNT(*) FROM games g WHERE g.publisher_id = p.id AND g.is_published = 1) AS games_count
                 FROM publisher_members pm
                 JOIN publishers p ON p.id = pm.publisher_id
                 WHERE pm.user_id = ?

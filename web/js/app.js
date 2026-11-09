@@ -10622,7 +10622,34 @@ if (!window.__createMenuDelegated) {
       e.preventDefault();
       e.stopPropagation();
       if (window.closeCreateMenu) window.closeCreateMenu();
-      if (window.openSubmitRules) window.openSubmitRules();
+      (async function() {
+        let pubs = [];
+        try {
+          // сначала локальный кэш (сразу после создания)
+          if (window.__pendingPublishPublishers && window.__pendingPublishPublishers.length) {
+            pubs = window.__pendingPublishPublishers;
+          } else if (window.__myPublishersCache && Array.isArray(window.__myPublishersCache.list) && window.__myPublishersCache.list.length) {
+            pubs = window.__myPublishersCache.list;
+          }
+          if (!pubs.length && typeof fetchMyPublishers === 'function') {
+            pubs = await fetchMyPublishers(true) || [];
+          }
+          window.__pendingPublishPublishers = pubs || [];
+          if (!pubs || !pubs.length) {
+            if (typeof openNoPubModal === 'function') openNoPubModal();
+            else if (window.openNoPubModal) window.openNoPubModal();
+            else alert('Сначала создайте издательство');
+            return;
+          }
+        } catch (err) {
+          console.warn(err);
+          if (!pubs.length) {
+            if (typeof openNoPubModal === 'function') openNoPubModal();
+            return;
+          }
+        }
+        if (window.openSubmitRules) window.openSubmitRules();
+      })();
       return;
     }
     if (t.closest('[data-close-create-menu]')) {
@@ -10667,13 +10694,28 @@ function initCreateMenu() {
   });
   $('#create-menu-game')?.addEventListener('click', async () => {
     closeCreateMenu();
+    let pubs = [];
     try {
-      const pubs = await fetchMyPublishers(true);
+      if (window.__pendingPublishPublishers && window.__pendingPublishPublishers.length) {
+        pubs = window.__pendingPublishPublishers;
+      } else if (window.__myPublishersCache && Array.isArray(window.__myPublishersCache.list) && window.__myPublishersCache.list.length) {
+        pubs = window.__myPublishersCache.list;
+      }
+      if (!pubs.length) {
+        pubs = await fetchMyPublishers(true) || [];
+      }
       window.__pendingPublishPublishers = pubs || [];
+      if (!pubs.length) {
+        openNoPubModal();
+        return;
+      }
     } catch (e) {
-      window.__pendingPublishPublishers = [];
+      if (!pubs.length) {
+        window.__pendingPublishPublishers = [];
+        openNoPubModal();
+        return;
+      }
     }
-    // издательство опционально — форму публикации открываем всегда
     openSubmitRules();
   });
   document.querySelectorAll('[data-close-no-pub]').forEach(el => {
@@ -10728,10 +10770,8 @@ async function openPubsListModal() {
   const list = $('#pubs-list');
   if (!modal || !list) return;
   modal.classList.remove('hidden');
-  list.innerHTML = '<div class="loading">Загрузка...</div>';
-  try {
-    const pubs = await fetchMyPublishers(true);
-    if (!Array.isArray(pubs)) throw new Error('Ошибка');
+
+  const renderList = (pubs) => {
     if (!pubs.length) {
       list.innerHTML = '<div class="friends-empty">Пока нет издательств.<br>Создайте первое — и выбирайте его при публикации.</div>';
       return;
@@ -10750,8 +10790,34 @@ async function openPubsListModal() {
         openPublisherPage(+btn.dataset.id, btn.dataset.slug);
       });
     });
+  };
+
+  // мгновенно из кэша после создания
+  let pubs = [];
+  if (window.__pendingPublishPublishers && window.__pendingPublishPublishers.length) {
+    pubs = window.__pendingPublishPublishers;
+  } else if (window.__myPublishersCache && Array.isArray(window.__myPublishersCache.list) && window.__myPublishersCache.list.length) {
+    pubs = window.__myPublishersCache.list;
+  }
+  if (pubs.length) {
+    renderList(pubs);
+  } else {
+    list.innerHTML = '<div class="loading">Загрузка...</div>';
+  }
+
+  try {
+    const fresh = await fetchMyPublishers(true);
+    if (Array.isArray(fresh)) {
+      pubs = fresh;
+      window.__pendingPublishPublishers = pubs;
+      renderList(pubs);
+    } else if (!pubs.length) {
+      throw new Error('Ошибка');
+    }
   } catch (e) {
-    list.innerHTML = `<div class="friends-empty">${escapeHtml(e.message)}</div>`;
+    if (!pubs.length) {
+      list.innerHTML = `<div class="friends-empty">${escapeHtml(e.message)}</div>`;
+    }
   }
 }
 
@@ -10835,8 +10901,33 @@ async function saveNewPublisher() {
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     toast('Издательство создано');
     $('#pubs-create-modal')?.classList.add('hidden');
-    window.__myPublishersCache = { list: null, ts: 0 };
-    await fillPublishPublisherSelect();
+
+    // Сразу кладём созданное издательство в кэш — можно публиковать без ожидания
+    const created = data.publisher || {};
+    const localPub = {
+      id: created.id,
+      name: created.name || name,
+      slug: created.slug || '',
+      avatar_url: created.avatar_url || null,
+      owner_id: created.owner_id || (window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.id) || 0,
+      my_role: 'owner',
+      members_count: 1 + ((window.__pubMembersSelected || []).length || 0),
+      games_count: 0
+    };
+    const prevList = (window.__myPublishersCache && Array.isArray(window.__myPublishersCache.list))
+      ? window.__myPublishersCache.list.slice()
+      : [];
+    if (!prevList.some(p => String(p.id) === String(localPub.id))) {
+      prevList.unshift(localPub);
+    }
+    window.__myPublishersCache = { list: prevList, ts: Date.now() };
+    window.__pendingPublishPublishers = prevList;
+
+    try {
+      await fillPublishPublisherSelect(prevList);
+    } catch (e) {
+      console.warn(e);
+    }
     try {
       const me = window.AUTH_STATE && window.AUTH_STATE.user;
       if (me && me.id && typeof loadProfilePublishers === 'function') {
