@@ -383,9 +383,10 @@ if ($isAuthorized) {
 
             <!-- 3. Цена -->
             <div class="filter-block filter-block-price">
-              <button type="button" class="filter-block-head">
+              <button type="button" class="filter-block-head" aria-expanded="true">
                 <span class="filter-dot" style="background:#ef5b2c"></span>
-                Цена
+                <span>Цена</span>
+                <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>
               </button>
               <div class="filter-block-body">
                 <div class="filter-price-pills" id="price-pills">
@@ -398,10 +399,11 @@ if ($isAuthorized) {
 
             <!-- 4. Жанры -->
             <div class="filter-block">
-              <button type="button" class="filter-block-head">
+              <button type="button" class="filter-block-head" aria-expanded="true">
                 <span class="filter-dot" style="background:#a78bfa"></span>
-                Жанры
+                <span>Жанры</span>
                 <span class="filter-count" id="genre-count"></span>
+                <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>
               </button>
               <div class="filter-block-body">
                 <input type="text" class="filter-search" id="genre-filter-search" placeholder="Фильтр..." />
@@ -411,10 +413,11 @@ if ($isAuthorized) {
 
             <!-- 5. Разработчики -->
             <div class="filter-block">
-              <button type="button" class="filter-block-head">
+              <button type="button" class="filter-block-head" aria-expanded="true">
                 <span class="filter-dot" style="background:#f472b6"></span>
-                Разработчики
+                <span>Разработчики</span>
                 <span class="filter-count" id="dev-count"></span>
+                <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>
               </button>
               <div class="filter-block-body">
                 <input type="text" class="filter-search" id="dev-filter-search" placeholder="Фильтр..." />
@@ -666,7 +669,11 @@ if ($isAuthorized) {
               <div class="hp-side-card">
                 <div class="hp-side-head">
                   <span>Статистика</span>
-                  <button type="button" class="hp-side-toggle" aria-label="Свернуть">▴</button>
+                  <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
+                    <span class="hp-side-arrow" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+                    </span>
+                  </button>
                 </div>
                 <div class="hp-side-body">
                   <div class="hp-stat">
@@ -700,7 +707,11 @@ if ($isAuthorized) {
               <div class="hp-side-card">
                 <div class="hp-side-head">
                   <span>Недавняя активность</span>
-                  <button type="button" class="hp-side-toggle" aria-label="Свернуть">▴</button>
+                  <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
+                    <span class="hp-side-arrow" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+                    </span>
+                  </button>
                 </div>
                 <div class="hp-side-body" id="hp-activity">
                   <div class="loading">Загрузка...</div>
@@ -710,7 +721,11 @@ if ($isAuthorized) {
               <div class="hp-side-card" id="hp-friends-card">
                 <div class="hp-side-head">
                   <span>Друзья <span class="hp-count" id="hp-friends-count">0</span></span>
-                  <button type="button" class="hp-side-toggle" aria-label="Свернуть">▴</button>
+                  <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
+                    <span class="hp-side-arrow" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+                    </span>
+                  </button>
                 </div>
                 <div class="hp-side-body" id="hp-friends-list">
                   <div class="loading">Загрузка...</div>

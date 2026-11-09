@@ -143,6 +143,126 @@ function formatSize(bytes) {
   return (b / 1024 / 1024 / 1024).toFixed(2) + ' ГБ';
 }
 
+
+// ---------- Accordion (профиль / фильтры / страница игры) ----------
+const HP_SIDE_ARROW = `<span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>`;
+
+/** Оборачивает содержимое body в .acc-inner один раз */
+function ensureAccordionInner(body) {
+  if (!body) return null;
+  if (body.dataset.accInner === '1') {
+    return body.querySelector(':scope > .acc-inner') || body.firstElementChild;
+  }
+  if (body.children.length === 1 && body.firstElementChild && body.firstElementChild.classList.contains('acc-inner')) {
+    body.dataset.accInner = '1';
+    return body.firstElementChild;
+  }
+  const inner = document.createElement('div');
+  inner.className = 'acc-inner';
+  while (body.firstChild) inner.appendChild(body.firstChild);
+  body.appendChild(inner);
+  body.dataset.accInner = '1';
+  body.classList.add('acc-body');
+  return inner;
+}
+
+function setAccordionHTML(body, html) {
+  if (!body) return;
+  const inner = ensureAccordionInner(body);
+  if (inner) inner.innerHTML = html;
+  else body.innerHTML = html;
+}
+
+/**
+ * Высота 0↔scrollHeight: контент клипится сверху вниз / снизу вверх, закрытие до нуля.
+ */
+function animateAccordion(card, body, collapsedClass) {
+  if (!card || !body) return;
+  ensureAccordionInner(body);
+  body.classList.add('acc-body');
+  if (body.dataset.animating === '1') return card.classList.contains(collapsedClass);
+  body.dataset.animating = '1';
+
+  const willCollapse = !card.classList.contains(collapsedClass);
+  const ms = 280;
+  // открытие и закрытие — одна кривая; закрытие = реверс открытия
+  const easeOpen = `height ${ms}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+  const easeClose = `height ${ms}ms cubic-bezier(0.64, 0, 0.78, 0)`;
+
+  let done = false;
+  const finish = (fn) => {
+    if (done) return;
+    done = true;
+    try { fn && fn(); } catch (e) {}
+    body.dataset.animating = '0';
+  };
+
+  if (willCollapse) {
+    // открыт → закрыт = реверс открытия: height full → 0
+    body.style.overflow = 'hidden';
+    body.style.transition = 'none';
+    body.style.height = body.scrollHeight + 'px';
+    body.offsetHeight;
+    card.classList.add(collapsedClass); // стрелка сразу; height анимирует inline
+    body.style.transition = easeClose;
+    body.style.height = '0px';
+    const onEnd = (ev) => {
+      if (ev.target !== body || ev.propertyName !== 'height') return;
+      body.removeEventListener('transitionend', onEnd);
+      finish(() => {
+        body.style.transition = '';
+        body.style.height = ''; // дальше держит CSS height:0
+      });
+    };
+    body.addEventListener('transitionend', onEnd);
+    setTimeout(() => {
+      body.removeEventListener('transitionend', onEnd);
+      finish(() => {
+        body.style.transition = '';
+        body.style.height = '';
+      });
+    }, ms + 60);
+  } else {
+    // закрыт → открыт: height 0 → full
+    card.classList.remove(collapsedClass);
+    body.style.overflow = 'hidden';
+    body.style.transition = 'none';
+    body.style.height = '0px';
+    body.offsetHeight;
+    const target = body.scrollHeight;
+    body.style.transition = easeOpen;
+    body.style.height = target + 'px';
+    const onEnd = (ev) => {
+      if (ev.target !== body || ev.propertyName !== 'height') return;
+      body.removeEventListener('transitionend', onEnd);
+      finish(() => {
+        body.style.transition = 'none';
+        body.style.height = 'auto';
+        body.offsetHeight;
+        body.style.transition = '';
+        body.style.overflow = '';
+      });
+    };
+    body.addEventListener('transitionend', onEnd);
+    setTimeout(() => {
+      body.removeEventListener('transitionend', onEnd);
+      finish(() => {
+        body.style.transition = 'none';
+        body.style.height = 'auto';
+        body.offsetHeight;
+        body.style.transition = '';
+        body.style.overflow = '';
+      });
+    }, ms + 60);
+  }
+  return willCollapse;
+}
+
+function prepareAccordions(root) {
+  const scope = root || document;
+  scope.querySelectorAll('.hp-side-body, .gp-side-body, .filter-block-body:not(.filter-block-body--open)').forEach(ensureAccordionInner);
+}
+
 // ---------- Корзина (localStorage) ----------
 function cartStorageKey() {
   const uid = (window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.id)
@@ -353,13 +473,15 @@ function cartModalRowHtml(item) {
               <option value="friend" ${forVal === 'friend' ? 'selected' : ''}>В подарок другу</option>
             </select>
           </div>
+        </div>
+        <div class="cart-modal-side">
+          <div class="cart-modal-side-price">${renderPriceBlock(pi)}</div>
           <div class="cart-modal-actions">
             <button type="button" class="cart-modal-link add" data-id="${item.id}">Добавить</button>
             <span class="cart-modal-act-sep">|</span>
             <button type="button" class="cart-modal-link remove" data-id="${item.id}">Удалить</button>
           </div>
         </div>
-        <div class="cart-modal-side-price">${renderPriceBlock(pi)}</div>
       </div>`);
   }
   return rows.join('');
@@ -1146,20 +1268,103 @@ function initSideLibrary() {
     });
   }
 
-  // Кнопка фильтров — открывает/закрывает модалку
+  // Кнопка фильтров — модалка у правого края сайдбара, поверх всего, анимация L→R / R→L
   const filtersBtn = $('#side-lib-filters');
   const modal = $('#side-lib-modal');
   if (filtersBtn && modal) {
+    // выносим в body, иначе stacking context сайдбара прячет модалку под контентом
+    if (modal.parentElement !== document.body) {
+      document.body.appendChild(modal);
+    }
+
+    const placeSideLibModal = () => {
+      const sidebar = document.querySelector('.sidebar');
+      const sr = sidebar ? sidebar.getBoundingClientRect() : null;
+      const br = filtersBtn.getBoundingClientRect();
+      // левый край модалки = правый край боковой колонки
+      const left = sr ? Math.round(sr.right) : Math.round(br.right + 8);
+      // верх модалки = верх кнопки (−2px визуально вровень)
+      let top = Math.round(br.top - 2);
+      modal.style.position = 'fixed';
+      modal.style.left = left + 'px';
+      modal.style.top = top + 'px';
+      modal.style.right = 'auto';
+      modal.style.bottom = 'auto';
+      modal.style.zIndex = '10050';
+      requestAnimationFrame(() => {
+        const mr = modal.getBoundingClientRect();
+        if (mr.bottom > window.innerHeight - 8) {
+          modal.style.top = Math.max(8, Math.round(window.innerHeight - mr.height - 8)) + 'px';
+        }
+      });
+    };
+
+    let closingTimer = null;
+    const isSideLibModalOpen = () =>
+      !modal.classList.contains('hidden') && !modal.classList.contains('is-closing');
+
+    const openSideLibModal = () => {
+      if (closingTimer) { clearTimeout(closingTimer); closingTimer = null; }
+      modal.classList.remove('hidden', 'is-closing');
+      placeSideLibModal();
+      modal.classList.remove('is-open');
+      void modal.offsetWidth;
+      modal.classList.add('is-open');
+      filtersBtn.classList.add('active');
+    };
+    const closeSideLibModal = () => {
+      if (modal.classList.contains('hidden') || modal.classList.contains('is-closing')) return;
+      modal.classList.remove('is-open');
+      modal.classList.add('is-closing');
+      filtersBtn.classList.remove('active');
+      closingTimer = setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('is-closing');
+        closingTimer = null;
+      }, 200);
+    };
+
+    // расстояние от точки до прямоугольника (0 = внутри)
+    const distToRect = (x, y, r) => {
+      const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+      const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      return Math.hypot(dx, dy);
+    };
+
     filtersBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      modal.classList.toggle('hidden');
-      filtersBtn.classList.toggle('active', !modal.classList.contains('hidden'));
+      if (modal.classList.contains('hidden') || modal.classList.contains('is-closing')) openSideLibModal();
+      else closeSideLibModal();
     });
     document.addEventListener('click', (e) => {
-      if (!modal.classList.contains('hidden') && !modal.contains(e.target) && e.target !== filtersBtn) {
-        modal.classList.add('hidden');
-        filtersBtn.classList.remove('active');
+      if (
+        isSideLibModalOpen() &&
+        !modal.contains(e.target) &&
+        e.target !== filtersBtn &&
+        !filtersBtn.contains(e.target)
+      ) {
+        closeSideLibModal();
       }
+    });
+    // скролл/колесо вне модалки — закрыть
+    const onScrollOrWheel = (e) => {
+      if (!isSideLibModalOpen()) return;
+      if (e.target && modal.contains(e.target)) return;
+      closeSideLibModal();
+    };
+    window.addEventListener('scroll', onScrollOrWheel, true);
+    document.addEventListener('wheel', onScrollOrWheel, { passive: true, capture: true });
+    // курсор ушёл далеко от модалки и кнопки
+    const LEAVE_PX = 56;
+    document.addEventListener('mousemove', (e) => {
+      if (!isSideLibModalOpen()) return;
+      const mr = modal.getBoundingClientRect();
+      const br = filtersBtn.getBoundingClientRect();
+      const d = Math.min(distToRect(e.clientX, e.clientY, mr), distToRect(e.clientX, e.clientY, br));
+      if (d > LEAVE_PX) closeSideLibModal();
+    });
+    window.addEventListener('resize', () => {
+      if (isSideLibModalOpen()) placeSideLibModal();
     });
 
     $$('.side-lib-opt[data-plat]', modal).forEach(opt => {
@@ -1210,7 +1415,16 @@ function initContentHead() {
       } else if (view === 'home' || view === 'profile') {
         // Steam-style: выпадающий список игр, не фильтр страницы
         clearTimeout(searchTimer);
-        if (!q) { hideHeadSearchDrop(); return; }
+        if (!q) {
+          // пустой ввод — только прячем дроп, фокус в поле оставляем
+          const drop = $('#head-search-drop');
+          if (drop) {
+            drop.hidden = true;
+            drop.innerHTML = '';
+            drop.classList.remove('is-open', 'is-closing');
+          }
+          return;
+        }
         searchTimer = setTimeout(() => updateHeadSearchDrop(q), 160);
       } else if (view === 'library') {
         hideHeadSearchDrop();
@@ -1232,6 +1446,37 @@ function initContentHead() {
     document.addEventListener('click', (e) => {
       if (!e.target.closest('#head-search')) hideHeadSearchDrop();
     });
+
+    const distToRect = (x, y, r) => {
+      const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+      const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      return Math.hypot(dx, dy);
+    };
+    const onSearchAwayScroll = (e) => {
+      const input = $('#head-search-input');
+      const focused = input && document.activeElement === input;
+      if (!isHeadSearchDropOpen() && !focused) return;
+      const drop = $('#head-search-drop');
+      if (e.target && drop && drop.contains(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('#head-search')) return;
+      hideHeadSearchDrop();
+    };
+    window.addEventListener('scroll', onSearchAwayScroll, true);
+    document.addEventListener('wheel', onSearchAwayScroll, { passive: true, capture: true });
+    document.addEventListener('mousemove', (e) => {
+      const wrap = $('#head-search');
+      const input = $('#head-search-input');
+      const drop = $('#head-search-drop');
+      if (!wrap || !input) return;
+      const focused = document.activeElement === input;
+      const dropOpen = isHeadSearchDropOpen();
+      if (!focused && !dropOpen) return;
+      const dWrap = distToRect(e.clientX, e.clientY, wrap.getBoundingClientRect());
+      const dDrop = drop && !drop.hidden
+        ? distToRect(e.clientX, e.clientY, drop.getBoundingClientRect())
+        : Infinity;
+      if (Math.min(dWrap, dDrop) > 56) hideHeadSearchDrop();
+    });
   }
 }
 
@@ -1252,10 +1497,24 @@ async function ensureSearchGames() {
 
 function hideHeadSearchDrop() {
   const drop = $('#head-search-drop');
-  if (!drop) return;
-  drop.hidden = true;
-  drop.innerHTML = '';
+  const input = $('#head-search-input');
+  // деактивация поля поиска
+  if (input && document.activeElement === input) {
+    try { input.blur(); } catch (e) {}
+  }
+  if (!drop || drop.hidden) return;
   drop.classList.remove('is-open');
+  drop.classList.add('is-closing');
+  window.setTimeout(() => {
+    drop.hidden = true;
+    drop.innerHTML = '';
+    drop.classList.remove('is-closing');
+  }, 160);
+}
+
+function isHeadSearchDropOpen() {
+  const drop = $('#head-search-drop');
+  return !!(drop && !drop.hidden && drop.classList.contains('is-open'));
 }
 
 async function updateHeadSearchDrop(q) {
@@ -1791,7 +2050,8 @@ function initStoreControls() {
     clearBtn.addEventListener('click', clearStoreFilters);
   }
 
-  // Сворачивание блоков фильтров (один раз на head)
+  // Сворачивание блоков фильтров (как в профиле)
+  prepareAccordions(document);
   $$('.filter-block-head').forEach(head => {
     if (head.dataset.boundFilterToggle === '1') return;
     head.dataset.boundFilterToggle = '1';
@@ -1801,32 +2061,12 @@ function initStoreControls() {
       const block = head.closest('.filter-block');
       if (!block) return;
       const body = block.querySelector('.filter-block-body');
-      const willCollapse = !block.classList.contains('collapsed');
-      if (body) {
-        if (willCollapse) {
-          body.style.maxHeight = body.scrollHeight + 'px';
-          body.offsetHeight;
-          block.classList.add('collapsed');
-          body.style.maxHeight = '0px';
-          body.style.paddingTop = '0px';
-          body.style.paddingBottom = '0px';
-          body.style.opacity = '0';
-        } else {
-          block.classList.remove('collapsed');
-          body.style.paddingTop = '';
-          body.style.paddingBottom = '';
-          body.style.opacity = '1';
-          body.style.maxHeight = body.scrollHeight + 'px';
-          const onEnd = (ev) => {
-            if (ev.propertyName !== 'max-height') return;
-            body.style.maxHeight = '';
-            body.removeEventListener('transitionend', onEnd);
-          };
-          body.addEventListener('transitionend', onEnd);
-        }
-      } else {
+      if (!body) {
         block.classList.toggle('collapsed');
+        return;
       }
+      const collapsed = animateAccordion(block, body, 'collapsed');
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     });
   });
 
@@ -1881,13 +2121,13 @@ function renderAchSidebar(gameId, gameTitle, data) {
   const list = data.achievements || [];
   const total = data.total || list.length;
   const unlocked = data.unlocked || 0;
-  if (head) head.innerHTML = `Достижения ${unlocked}/${total} <span class="chev">▾</span>`;
+  if (head) head.innerHTML = `Достижения ${unlocked}/${total} <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>`;
   if (!list.length) {
-    body.innerHTML = '<div class="gp-ach-empty">У этой игры нет достижений</div>';
+    setAccordionHTML(body, '<div class="gp-ach-empty">У этой игры нет достижений</div>');
     return;
   }
   const preview = list.filter(a => !+a.is_hidden).slice(0, 5);
-  body.innerHTML = `
+  setAccordionHTML(body, `
     <div class="gp-ach-list">
       ${preview.map(a => {
         const icon = a.icon_gray_url || a.icon_url || '';
@@ -1898,7 +2138,7 @@ function renderAchSidebar(gameId, gameTitle, data) {
         </div>`;
       }).join('')}
     </div>
-    <button type="button" class="gp-side-more" id="gp-ach-all">Просмотреть все достижения</button>`;
+    <button type="button" class="gp-side-more" id="gp-ach-all">Просмотреть все достижения</button>`);
   $('#gp-ach-all')?.addEventListener('click', () => openGameAchievementsPage(gameId, gameTitle || data.title));
 }
 
@@ -1916,7 +2156,7 @@ async function loadGameAchievementsSidebar(gameId, gameTitle) {
     achCache[gameId] = data;
     renderAchSidebar(gameId, gameTitle, data);
   } catch (err) {
-    body.innerHTML = `<div class="gp-ach-empty">${escapeHtml(err.message || 'Не удалось загрузить')}</div>`;
+    setAccordionHTML(body, `<div class="gp-ach-empty">${escapeHtml(err.message || 'Не удалось загрузить')}</div>`);
   }
 }
 
@@ -2265,14 +2505,14 @@ function renderGamePage(wrap, data) {
 
         <aside class="gp-aside">
           <div class="gp-side-card collapsed" id="gp-ach-card" data-game-id="${g.id}">
-            <button type="button" class="gp-side-head" id="gp-ach-head">Достижения <span class="chev">▾</span></button>
+            <button type="button" class="gp-side-head" id="gp-ach-head">Достижения <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span></button>
             <div class="gp-side-body" id="gp-ach-body">
               <div class="gp-ach-empty">В разработке</div>
             </div>
           </div>
 
           <div class="gp-side-card">
-            <button type="button" class="gp-side-head">Статистика <span class="chev">▾</span></button>
+            <button type="button" class="gp-side-head">Статистика <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span></button>
             <div class="gp-side-body gp-stats-body">
               <div class="gp-stat-row"><span class="gp-stat-ico">${iconSvg('download',14)}</span><span>Загрузки</span><b>${formatStatNum(g.download_count)}</b></div>
               <div class="gp-stat-row"><span class="gp-stat-ico">${iconSvg('users',14)}</span><span>Активные игроки</span><b>${formatStatNum(g.players_count ?? g.ratings_count ?? 0)}</b></div>
@@ -2281,7 +2521,7 @@ function renderGamePage(wrap, data) {
           </div>
 
           <div class="gp-side-card">
-            <button type="button" class="gp-side-head">Скриншоты сообщества <span class="chev">▾</span></button>
+            <button type="button" class="gp-side-head">Скриншоты сообщества <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span></button>
             <div class="gp-side-body">
               ${gallery.filter(it => it.type === 'image').length ? `
                 <div class="gp-comm-shots">
@@ -2297,7 +2537,7 @@ function renderGamePage(wrap, data) {
           </div>
 
           <div class="gp-side-card">
-            <button type="button" class="gp-side-head">Поддержка контроллера <span class="chev">▾</span></button>
+            <button type="button" class="gp-side-head">Поддержка контроллера <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span></button>
             <div class="gp-side-body gp-ctrl-body">
               ${renderControllerSupport(g.controllers)}
             </div>
@@ -2355,38 +2595,22 @@ function renderGamePage(wrap, data) {
     }
   }
 
-  // side card collapse
-  // achievements временно отключены (нагрузка)
+  // side card collapse (как в профиле)
+  prepareAccordions(wrap);
   $$('.gp-side-head', wrap).forEach(btn => {
     if (btn.dataset.boundSideAnim === '1') return;
     btn.dataset.boundSideAnim = '1';
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const card = btn.closest('.gp-side-card') || btn.parentElement;
       if (!card) return;
       const body = card.querySelector('.gp-side-body');
-      const willCollapse = !card.classList.contains('collapsed');
-      if (body) {
-        if (willCollapse) {
-          body.style.maxHeight = body.scrollHeight + 'px';
-          body.offsetHeight;
-          card.classList.add('collapsed');
-          body.style.maxHeight = '0px';
-          body.style.opacity = '0';
-        } else {
-          card.classList.remove('collapsed');
-          body.style.opacity = '1';
-          body.style.maxHeight = body.scrollHeight + 'px';
-          const onEnd = (ev) => {
-            if (ev.propertyName !== 'max-height') return;
-            // длинные списки языков — не режем
-            body.style.maxHeight = '';
-            body.removeEventListener('transitionend', onEnd);
-          };
-          body.addEventListener('transitionend', onEnd);
-        }
-      } else {
+      if (!body) {
         card.classList.toggle('collapsed');
+        return;
       }
+      const collapsed = animateAccordion(card, body, 'collapsed');
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     });
   });
 
@@ -4112,10 +4336,10 @@ async function loadProfileActivity() {
     const data = await fetchJSON(`${USER_API}?action=activity`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     if (!data.activity || !data.activity.length) {
-      box.innerHTML = '<div class="hp-empty" style="padding:20px 0">Пока нет активности</div>';
+      setAccordionHTML(box, '<div class="hp-empty" style="padding:20px 0">Пока нет активности</div>');
       return;
     }
-    box.innerHTML = data.activity.slice(0, 8).map(a => {
+    setAccordionHTML(box, data.activity.slice(0, 8).map(a => {
       const title = a.title || a.text || 'Игра';
       const timeLabel = a.playtime_minutes
         ? formatPlaytimeShort(a.playtime_minutes)
@@ -4132,7 +4356,7 @@ async function loadProfileActivity() {
             </div>
           </div>
         </div>`;
-    }).join('');
+    }).join(''));
 
     $$('.hp-activity-item', box).forEach(item => {
       item.addEventListener('click', () => {
@@ -4140,7 +4364,7 @@ async function loadProfileActivity() {
       });
     });
   } catch (err) {
-    box.innerHTML = `<div class="hp-empty" style="padding:20px 0">${escapeHtml(err.message)}</div>`;
+    setAccordionHTML(box, `<div class="hp-empty" style="padding:20px 0">${escapeHtml(err.message)}</div>`);
   }
 }
 
@@ -4290,12 +4514,19 @@ function initProfileControls() {
     });
   }
 
+  prepareAccordions(document);
   $$('.hp-side-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const card = btn.closest('.hp-side-card');
       if (!card) return;
-      const collapsed = card.classList.toggle('is-collapsed');
-      btn.textContent = collapsed ? '▾' : '▴';
+      const body = card.querySelector('.hp-side-body');
+      if (!body) {
+        card.classList.toggle('is-collapsed');
+        btn.setAttribute('aria-expanded', card.classList.contains('is-collapsed') ? 'false' : 'true');
+        return;
+      }
+      const collapsed = animateAccordion(card, body, 'is-collapsed');
       btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     });
   });
@@ -4891,6 +5122,7 @@ document.addEventListener('keydown', (e) => {
     document.querySelectorAll('.catio-select.is-open').forEach(w => {
       w.classList.remove('is-open');
     });
+    if (typeof hideHeadSearchDrop === 'function') hideHeadSearchDrop();
   }
 });
 window.addEventListener('scroll', (e) => {
@@ -5177,6 +5409,8 @@ function initAvatarMenu() {
   if (!btn || !menu) return;
 
   let menuClosing = false;
+  const isMenuOpen = () => !menu.classList.contains('hidden') && !menuClosing && menu.classList.contains('is-open');
+
   function openMenu() {
     menuClosing = false;
     menu.classList.remove('hidden', 'is-closing');
@@ -5198,6 +5432,12 @@ function initAvatarMenu() {
     }, 180);
   }
 
+  const distToRect = (x, y, r) => {
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    return Math.hypot(dx, dy);
+  };
+
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (menu.classList.contains('hidden') || menu.classList.contains('is-closing')) openMenu();
@@ -5205,9 +5445,26 @@ function initAvatarMenu() {
   });
 
   document.addEventListener('click', (e) => {
-    if (!menu.classList.contains('hidden') && !menu.contains(e.target) && e.target !== btn) {
+    if (isMenuOpen() && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
       closeMenu();
     }
+  });
+
+  const onScrollOrWheel = (e) => {
+    if (!isMenuOpen()) return;
+    if (e.target && (menu.contains(e.target) || btn.contains(e.target))) return;
+    closeMenu();
+  };
+  window.addEventListener('scroll', onScrollOrWheel, true);
+  document.addEventListener('wheel', onScrollOrWheel, { passive: true, capture: true });
+
+  const LEAVE_PX = 56;
+  document.addEventListener('mousemove', (e) => {
+    if (!isMenuOpen()) return;
+    const mr = menu.getBoundingClientRect();
+    const br = btn.getBoundingClientRect();
+    const d = Math.min(distToRect(e.clientX, e.clientY, mr), distToRect(e.clientX, e.clientY, br));
+    if (d > LEAVE_PX) closeMenu();
   });
 
   document.addEventListener('keydown', (e) => {
@@ -5294,10 +5551,10 @@ async function loadProfileFriends(userId) {
     const friends = data.friends || [];
     if (countEl) countEl.textContent = friends.length;
     if (!friends.length) {
-      box.innerHTML = '<div class="hp-empty" style="padding:12px 0">Пока нет друзей</div>';
+      setAccordionHTML(box, '<div class="hp-empty" style="padding:12px 0">Пока нет друзей</div>');
       return;
     }
-    box.innerHTML = friends.map(u => `
+    setAccordionHTML(box, friends.map(u => `
       <div class="hp-friend-row" data-id="${u.id}" data-username="${escapeHtml(u.username)}">
         <div class="hp-friend-avatar" style="${friendAvatarStyle(u)}">
           ${friendAvatarText(u)}
@@ -5307,12 +5564,12 @@ async function loadProfileFriends(userId) {
           <div class="hp-friend-name">${escapeHtml(u.username)}</div>
           <div class="hp-friend-status">${u.is_online ? 'В сети' : 'Не в сети'}</div>
         </div>
-      </div>`).join('');
+      </div>`).join(''));
     $$('.hp-friend-row', box).forEach(row => {
       row.addEventListener('click', () => openUserProfile(row.dataset.username, row.dataset.id));
     });
   } catch (err) {
-    box.innerHTML = `<div class="hp-empty" style="padding:12px 0">${escapeHtml(err.message)}</div>`;
+    setAccordionHTML(box, `<div class="hp-empty" style="padding:12px 0">${escapeHtml(err.message)}</div>`);
   }
 }
 
@@ -7018,7 +7275,7 @@ function renderSysReqBlock(minRaw, recRaw) {
   };
   return `
     <div class="gp-side-card" id="game-sysreq">
-      <button type="button" class="gp-side-head">Системные требования <span class="chev">▾</span></button>
+      <button type="button" class="gp-side-head">Системные требования <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span></button>
       <div class="gp-side-body">
         <div class="sysreq-tabs">
           <button type="button" class="sysreq-tab active" data-tab="min">Минимальные</button>
@@ -7040,7 +7297,7 @@ function renderLangBlock(raw) {
     </tr>`).join('');
   return `
     <div class="gp-side-card" id="game-langs">
-      <button type="button" class="gp-side-head">Язык <span class="chev">▾</span></button>
+      <button type="button" class="gp-side-head">Язык <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span></button>
       <div class="gp-side-body">
         <table class="lang-display">
           <thead><tr><th>Язык</th><th>Субтитры</th><th>Аудио</th></tr></thead>

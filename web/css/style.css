@@ -957,7 +957,7 @@ button.avatar:hover {
   border-radius: 10px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   overflow: hidden;
-  z-index: 300;
+  z-index: 10040;
   padding: 4px;
   transform-origin: top right;
   opacity: 0;
@@ -2390,13 +2390,35 @@ body.client.auth-open .bottom-bar {
 .side-lib-modal {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: var(--shadow);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
   padding: 6px;
-  margin-bottom: 6px;
+  margin: 0;
+  width: 220px;
+  max-width: min(220px, calc(100vw - 24px));
+  /* fixed + left/top из JS: левый край = правый край сайдбара */
+  position: fixed;
+  z-index: 10050 !important;
+  /* анимация: открытие слева→направо, закрытие справа→налево */
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.side-lib-modal.hidden { display: none; }
+.side-lib-modal.is-open {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.side-lib-modal.is-closing {
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+}
+
+.side-lib-modal.hidden { display: none !important; }
 
 .side-lib-modal-section {
   font-size: 0.625rem;
@@ -3067,12 +3089,9 @@ body.web .main {
   cursor: pointer;
 }
 .filter-block-head::before {
-  content: '⌃';
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  transition: transform .15s;
+  content: none !important;
+  display: none !important;
 }
-.filter-block.collapsed .filter-block-head::before { transform: rotate(180deg); }
 .filter-block.collapsed .filter-block-body { /* animated via grid */ }
 
 .filter-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -3085,7 +3104,8 @@ body.web .main {
   font-size: 0.72rem;
   font-weight: 400;
 }
-.filter-block-body { padding: 0 12px 12px; }
+.filter-block-body { padding: 0; }
+.filter-block-body--open { padding: 10px 14px 14px; }
 .filter-search {
   width: 100%;
   background: var(--bg-elevated);
@@ -3873,18 +3893,29 @@ body.client .hp-toolbar {
   display: grid;
   grid-template-columns: 1fr 300px;
   gap: 24px;
-  padding: 20px 0 40px;
+  padding: 16px 0 40px;
   align-items: start;
 }
 
 .hp-main { min-width: 0; }
 
+/* Боковые карточки на одном уровне с вкладками «Библиотека» */
+.hp-side {
+  margin-top: 0;
+}
+.hp-body > .hp-side {
+  margin-top: 0;
+}
+
 /* --- Tabs --- */
 .hp-tabs {
   display: flex;
   gap: 4px;
+  align-items: center;
   border-bottom: 1px solid var(--border);
   margin-bottom: 18px;
+  min-height: 42px;
+  box-sizing: border-box;
 }
 
 .hp-tab {
@@ -3898,6 +3929,8 @@ body.client .hp-toolbar {
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: color 0.15s, border-color 0.15s;
+  line-height: 1.2;
+  box-sizing: border-box;
 }
 .hp-tab:hover { color: var(--text-bright); }
 .hp-tab.active {
@@ -4107,12 +4140,50 @@ body.client .hp-toolbar {
   cursor: pointer;
   font-size: 0.9rem;
   padding: 2px 4px;
-  line-height: 1;
+  line-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 .hp-side-toggle:hover { color: var(--text-bright); }
+.hp-side-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: inherit;
+  opacity: 0.7;
+  transition: transform 0.22s ease, opacity 0.15s ease, color 0.15s ease;
+  line-height: 0;
+}
+.hp-side-arrow svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.hp-side-toggle:hover .hp-side-arrow {
+  opacity: 1;
+  color: var(--text-bright);
+}
+/* открыто — стрелка вверх (как у аватара при expanded) */
+.hp-side-card:not(.is-collapsed) .hp-side-arrow,
+.filter-block:not(.collapsed) .hp-side-arrow,
+.gp-side-card:not(.collapsed) .hp-side-arrow,
+.side-card:not(.is-collapsed) .hp-side-arrow {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+.hp-side-card.is-collapsed .hp-side-arrow,
+.filter-block.collapsed .hp-side-arrow,
+.gp-side-card.collapsed .hp-side-arrow,
+.side-card.is-collapsed .hp-side-arrow {
+  transform: rotate(0deg);
+}
 
 .hp-side-body {
-  padding: 10px 14px 14px;
+  padding: 0;
 }
 
 .hp-stat {
@@ -6585,7 +6656,7 @@ button.avatar,
   color: var(--text-bright); font-family: inherit; font-size: 0.9rem; font-weight: 700;
   cursor: pointer; text-align: left;
 }
-.gp-side-body { padding: 0 14px 14px; }
+.gp-side-body { padding: 0; }
 /* collapse via max-height/opacity animation, not display:none */
 .gp-stat-row {
   display: flex; justify-content: space-between; gap: 10px;
@@ -7464,7 +7535,7 @@ button.avatar,
   border-bottom-color: transparent;
 }
 .gp-side-body {
-  padding: 10px 14px 14px !important;
+  padding: 0 !important;
 }
 /* no double card for sys/lang */
 .gp-side-sys,
@@ -8398,7 +8469,7 @@ body.client #view-admin.view.active {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 62%;
+  width: 48%;
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
@@ -8411,8 +8482,8 @@ body.client #view-admin.view.active {
   display: block;
   transform: scale(1);
   transition: transform 0.35s ease, filter 0.2s ease;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.12) 16%, rgba(0,0,0,0.5) 36%, #000 60%);
-  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.12) 16%, rgba(0,0,0,0.5) 36%, #000 60%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.08) 22%, rgba(0,0,0,0.35) 48%, rgba(0,0,0,0.75) 72%, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.08) 22%, rgba(0,0,0,0.35) 48%, rgba(0,0,0,0.75) 72%, #000 100%);
 }
 .notif-item:hover .notif-item-banner img {
   transform: scale(1.07);
@@ -8421,11 +8492,11 @@ body.client #view-admin.view.active {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.2);
+  background: rgba(0,0,0,0.18);
   transition: background 0.15s ease;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.25) 22%, #000 55%);
-  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.25) 22%, #000 55%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.12) 28%, rgba(0,0,0,0.45) 55%, #000 85%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.12) 28%, rgba(0,0,0,0.45) 55%, #000 85%);
 }
 .notif-item:hover .notif-item-banner::after {
   background: rgba(0,0,0,0.05);
@@ -8436,8 +8507,9 @@ body.client #view-admin.view.active {
   z-index: 2;
 }
 .notif-item.has-banner .notif-item-body {
-  max-width: 42%;
-  flex: 0 1 42%;
+  max-width: 58%;
+  flex: 0 1 58%;
+  padding-right: 8px;
 }
 .notif-item-banner.is-deleted img,
 .notif-item.is-deleted .notif-item-banner img {
@@ -8447,8 +8519,8 @@ body.client #view-admin.view.active {
   filter: grayscale(1) brightness(0.8) contrast(0.95);
 }
 @media (max-width: 720px) {
-  .notif-item-banner { width: 55%; }
-  .notif-item.has-banner .notif-item-body { max-width: 48%; flex-basis: 48%; }
+  .notif-item-banner { width: 42%; }
+  .notif-item.has-banner .notif-item-body { max-width: 62%; flex-basis: 62%; }
 }
 .notif-item:hover {
   background: var(--bg-hover);
@@ -8480,6 +8552,9 @@ body.client #view-admin.view.active {
   font-size: 0.85rem;
   color: var(--text);
   line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
 }
 .notif-item-time {
   font-size: 0.75rem;
@@ -9501,6 +9576,7 @@ body.client .content > .main {
   padding-left: 24px !important;
   padding-right: 24px !important;
   padding-top: 16px !important;
+  padding-bottom: 40px !important;
   box-sizing: border-box !important;
 }
 body.client .content-head {
@@ -9709,12 +9785,40 @@ body.client .content-head {
   font-family: inherit !important;
   text-align: left !important;
 }
+/* Заголовок блока светлее строк внутри */
+.hp-side-head,
+.filter-block-head,
+.gp-side-head,
+.side-card-head {
+  background: rgba(255, 255, 255, 0.055) !important;
+}
+.hp-side-card.is-collapsed .hp-side-head,
+.filter-block.collapsed .filter-block-head,
+.gp-side-card.collapsed .gp-side-head,
+.side-card.is-collapsed .side-card-head {
+  border-bottom-color: transparent !important;
+}
+.filter-block-head .hp-side-arrow,
+.gp-side-head .hp-side-arrow {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.filter-block-head .filter-count {
+  margin-left: 0;
+  margin-right: 4px;
+}
+.gp-side-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+}
 
 .hp-side-body,
 .filter-block-body,
 .side-card-body,
 .gp-side-body {
-  padding: 10px 14px 14px !important;
+  padding: 0 !important;
   box-sizing: border-box !important;
 }
 
@@ -9970,13 +10074,14 @@ body.client #view-game .gp-hero {
    ============================================================ */
 body.client #view-store {
   margin: 0 !important;
-  padding: 0 !important;
+  padding: 0 0 32px 0 !important;
   width: 100% !important;
   max-width: 100% !important;
   position: relative !important;
   left: 0 !important;
   box-sizing: border-box !important;
   overflow-x: hidden !important;
+  overflow-y: visible !important;
 }
 body.client #view-store .store-layout {
   display: grid !important;
@@ -10000,6 +10105,8 @@ body.client #view-store .store-filters {
   width: 300px !important;
   max-width: 300px !important;
   margin: 0 !important;
+  padding-right: 0 !important;
+  box-sizing: border-box !important;
 }
 @media (max-width: 1100px) {
   body.client #view-store .store-layout {
@@ -10103,7 +10210,7 @@ body:not(.client) .gp {
    HYDRA CATALOGUE 1:1
    ============================================================ */
 #view-store {
-  padding: 4px 16px 16px !important;
+  padding: 4px 0 40px 0 !important;
   box-sizing: border-box !important;
 }
 #view-store .store-layout {
@@ -10399,23 +10506,20 @@ body:not(.client) .gp {
   display: none !important;
 }
 #view-store .filter-block:not(.filter-block-sort):not(.filter-block-era) .filter-block-head::after {
-  content: '▾' !important;
-  margin-left: auto !important;
-  color: var(--text-muted) !important;
-  font-size: 0.85rem !important;
-  font-weight: 400 !important;
+  content: none !important;
+  display: none !important;
 }
 #view-store .filter-block.collapsed:not(.filter-block-sort):not(.filter-block-era) .filter-block-head {
   border-bottom-color: transparent !important;
 }
-#view-store .filter-block.collapsed:not(.filter-block-sort):not(.filter-block-era) .filter-block-head::after {
-  content: '▸' !important;
+#view-store .filter-block:not(.filter-block-sort):not(.filter-block-era) .filter-block-head {
+  background: rgba(255, 255, 255, 0.055) !important;
 }
 #view-store .filter-block.collapsed .filter-block-body {
   /* grid animation */
 }
 #view-store .filter-block:not(.filter-block-sort):not(.filter-block-era) .filter-block-body {
-  padding: 10px 14px 14px !important;
+  padding: 0 !important;
   background: transparent !important;
 }
 #view-store .filter-dot {
@@ -10463,7 +10567,7 @@ body:not(.client) .gp {
   border-bottom: none !important;
 }
 #view-store .filter-block:not(.filter-block-sort):not(.filter-block-era) .filter-block-body {
-  padding: 8px 12px 10px !important;
+  padding: 0 !important;
 }
 #view-store .filter-search {
   margin-bottom: 6px !important;
@@ -11122,44 +11226,27 @@ select.auth-input {
 }
 
 /* ========== Collapsible blocks animation ========== */
-.hp-side-body,
-.gp-side-body,
-.filter-block-body,
-.game-collapsible-body,
-.side-card-body {
-  overflow: hidden !important;
-  max-height: 2000px;
-  opacity: 1;
-  transition:
-    max-height 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.2s ease,
-    padding 0.22s ease,
-    margin 0.22s ease,
-    border-width 0.22s ease;
+/* Профиль: max-height анимирует JS до точной высоты — без 2000px и без padding-transition (они давали «зависание» в конце) */
+.hp-side-body {
+  /* grid accordion */
 }
-
-.hp-side-card.is-collapsed .hp-side-body,
-.gp-side-card.collapsed .gp-side-body,
-.filter-block.collapsed .filter-block-body,
-.game-collapsible.collapsed .game-collapsible-body,
-.side-card.is-collapsed .side-card-body,
-#view-store .filter-block.collapsed .filter-block-body {
-  max-height: 0 !important;
-  opacity: 0 !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  margin: 0 !important;
-  border-width: 0 !important;
+.hp-side-card.is-collapsed .hp-side-body {
   pointer-events: none !important;
 }
 
-.hp-side-toggle,
+.game-collapsible-body,
+.side-card-body {
+  overflow: hidden !important;
+}
+.game-collapsible.collapsed .game-collapsible-body,
+.side-card.is-collapsed .side-card-body {
+  pointer-events: none !important;
+}
+
 .filter-block-head::after {
   transition: transform 0.2s ease;
 }
-.hp-side-card.is-collapsed .hp-side-toggle {
-  transform: rotate(-90deg);
-}
+/* стрелка профиля крутится через .hp-side-arrow, не весь button */
 
 html[data-theme="light"] .catio-select__menu {
   box-shadow: 0 12px 28px rgba(26,24,20,0.12);
@@ -11222,16 +11309,20 @@ html[data-theme="light"] .catio-select__btn {
 }
 
 
-/* Force collapsed bodies to zero size (override padding !important) */
-.hp-side-card.is-collapsed .hp-side-body,
+/* Force collapsed bodies to zero size (профиль — без !important на max-height, чтобы JS мог анимировать) */
+.hp-side-card.is-collapsed .hp-side-body {
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
 .gp-side-card.collapsed .gp-side-body,
 .filter-block.collapsed .filter-block-body,
 .game-collapsible.collapsed .game-collapsible-body,
 .side-card.is-collapsed .side-card-body {
-  max-height: 0 !important;
   min-height: 0 !important;
-  height: 0 !important;
-  opacity: 0 !important;
   padding: 0 !important;
   margin: 0 !important;
   border: 0 !important;
@@ -11406,30 +11497,21 @@ body:not(.client) {
   border-color: transparent !important;
 }
 
-/* Catalog filter collapse — stronger */
+/* Catalog filter collapse — как профиль (JS max-height, без height:0 / 480px) */
 #view-store .filter-block.collapsed .filter-block-body {
-  max-height: 0 !important;
-  min-height: 0 !important;
-  height: 0 !important;
-  opacity: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  overflow: hidden !important;
-  border: none !important;
+  /* grid 0fr handles collapse */
   pointer-events: none !important;
 }
 #view-store .filter-block:not(.collapsed) .filter-block-body {
-  max-height: 480px !important;
-  opacity: 1 !important;
-  overflow: hidden !important;
-  transition: max-height 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease, padding 0.2s ease !important;
+  /* grid 1fr */
 }
 
-#view-store .filter-block {
-  overflow: visible !important;
-}
-#view-store .filter-block.collapsed {
+#view-store .filter-block:not(.filter-block-sort):not(.filter-block-era) {
   overflow: hidden !important;
+}
+#view-store .filter-block-sort,
+#view-store .filter-block-era {
+  overflow: visible !important;
 }
 #view-store .store-filters {
   overflow: visible !important;
@@ -11491,23 +11573,13 @@ select.select-native-hidden,
   min-width: 0 !important;
 }
 
-/* catalog filter collapse specificity */
+/* catalog filter collapse — как профиль, без height:0 */
 #view-store .filter-block.collapsed:not(.filter-block-sort):not(.filter-block-era) .filter-block-body,
 #view-store .filter-block.collapsed .filter-block-body {
-  max-height: 0 !important;
-  min-height: 0 !important;
-  height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  opacity: 0 !important;
-  overflow: hidden !important;
-  border: none !important;
   pointer-events: none !important;
 }
 #view-store .filter-block:not(.collapsed):not(.filter-block-sort):not(.filter-block-era) .filter-block-body {
-  /* allow JS inline max-height during animation */
   overflow: hidden !important;
-  transition: max-height 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease, padding 0.2s ease !important;
 }
 
 /* segment indicator visible from start */
@@ -11522,7 +11594,7 @@ select.select-native-hidden,
   left: 0;
   right: 0;
   top: calc(100% + 8px);
-  z-index: 80;
+  z-index: 10030;
   background: var(--bg-card, #1c1a17);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -11535,11 +11607,15 @@ select.select-native-hidden,
   pointer-events: none;
   transition: opacity 0.16s ease, transform 0.18s cubic-bezier(0.22,1,0.36,1);
 }
-.head-search-drop.is-open,
-.head-search-drop:not([hidden]) {
+.head-search-drop.is-open {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+}
+.head-search-drop.is-closing {
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
 }
 .head-search-drop[hidden] {
   display: none !important;
@@ -12006,7 +12082,7 @@ select.select-native-hidden,
   width: 100%;
 }
 
-#game-langs .gp-side-body { padding-bottom: 16px !important; }
+#game-langs .gp-side-body > .acc-inner { padding-bottom: 16px !important; }
 #game-langs:not(.collapsed) .gp-side-body,
 #game-sysreq:not(.collapsed) .gp-side-body {
   max-height: none !important;
@@ -12109,7 +12185,7 @@ select.select-native-hidden,
   padding: 2px 6px;
   border-radius: 3px;
   background: rgba(239, 91, 44, 0.22);
-  color: var(--accent, #ef5b2c);
+  color: #fff;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.15;
@@ -12308,20 +12384,36 @@ select.cart-modal-for.select-native-hidden {
   padding: 0;
   font-size: 12px;
   font-family: inherit;
-  color: var(--accent, #ef5b2c);
+  color: var(--text-muted, #8a837c);
   cursor: pointer;
+  text-decoration: none;
+  transition: color .15s ease;
 }
-.cart-modal-link:hover { text-decoration: underline; color: var(--accent-hover, #ff6b3c); }
+.cart-modal-link:hover {
+  text-decoration: none;
+  color: var(--text-bright, #fff);
+}
 .cart-modal-act-sep {
   color: var(--text-muted, #8a837c);
   font-size: 12px;
   opacity: 0.7;
 }
-.cart-modal-side-price {
+.cart-modal-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
   flex-shrink: 0;
   margin-left: auto;
-  align-self: flex-start;
-  padding-top: 2px;
+  min-width: 90px;
+}
+.cart-modal-side-price {
+  flex-shrink: 0;
+  padding-top: 0;
+}
+.cart-modal-side .cart-modal-actions {
+  justify-content: flex-end;
 }
 .cart-modal-foot {
   display: flex;
@@ -12777,7 +12869,7 @@ body.client #view-cart.active {
   padding: 2px 6px;
   border-radius: 3px;
   background: rgba(239, 91, 44, 0.22);
-  color: var(--accent, #ef5b2c);
+  color: #fff;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.15;
@@ -12877,7 +12969,7 @@ body.client #view-cart.active {
   padding: 2px 5px !important;
   border-radius: 3px !important;
   background: rgba(239, 91, 44, 0.22) !important;
-  color: var(--accent, #ef5b2c) !important;
+  color: #fff !important;
   font-size: 11px !important;
   font-weight: 700 !important;
 }
@@ -12957,15 +13049,24 @@ body.client #view-cart.active {
   pointer-events: auto !important;
 }
 
-/* #view-cart height fill */
+/* #view-cart height fill — только корзина/библиотека, каталог должен расти и скроллиться */
 body.client .content > .main {
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-body.client .content > .main > .view.active {
+body.client .content > .main > #view-cart.active,
+body.client .content > .main > #view-library.active {
   flex: 1 1 auto;
   min-height: 0;
+}
+body.client .content > .main > #view-store.active,
+body.client .content > .main > #view-game.active,
+body.client .content > .main > #view-profile.active,
+body.client .content > .main > #view-home.active {
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
 }
 
 /* алерт в модалке покупки */
@@ -13113,4 +13214,81 @@ body.client .content > .main > .view.active {
 }
 .cart-modal-list .catio-select {
   max-width: 220px;
+}
+
+
+
+/* ========== Accordion height: полное схлопывание ========== */
+.acc-body,
+.hp-side-body,
+.gp-side-body,
+.filter-block-body:not(.filter-block-body--open) {
+  display: block !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-sizing: border-box !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+/* Закрыто — height:0 БЕЗ !important, чтобы JS мог анимировать закрытие */
+.hp-side-card.is-collapsed > .hp-side-body,
+.hp-side-card.is-collapsed > .acc-body,
+.gp-side-card.collapsed > .gp-side-body,
+.gp-side-card.collapsed > .acc-body,
+.filter-block.collapsed > .filter-block-body,
+.filter-block.collapsed > .acc-body,
+#view-store .filter-block.collapsed > .filter-block-body,
+#view-store .filter-block.collapsed:not(.filter-block-sort):not(.filter-block-era) .filter-block-body,
+#view-store .filter-block.collapsed .filter-block-body {
+  height: 0;
+  min-height: 0;
+  max-height: none;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+.acc-inner {
+  min-height: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+}
+
+.hp-side-body > .acc-inner,
+.gp-side-body > .acc-inner {
+  padding: 10px 14px 14px !important;
+}
+.filter-block-body:not(.filter-block-body--open) > .acc-inner,
+#view-store .filter-block-body:not(.filter-block-body--open) > .acc-inner {
+  padding: 8px 12px 10px !important;
+}
+
+.filter-block-body--open {
+  display: block !important;
+  height: auto !important;
+  max-height: none !important;
+  padding: 10px 14px 14px !important;
+  overflow: visible !important;
+}
+
+
+/* Профиль: «Статистика» на одном уровне с «Библиотека» */
+.hp-body > .hp-side {
+  margin-top: -2px;
+}
+.hp-body > .hp-side > .hp-side-card:first-child > .hp-side-head {
+  min-height: 42px;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  box-sizing: border-box;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  align-items: center !important;
 }
