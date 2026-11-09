@@ -144,7 +144,6 @@ function formatSize(bytes) {
   return (b / 1024 / 1024 / 1024).toFixed(2) + ' ГБ';
 }
 
-
 // ---------- Accordion (профиль / фильтры / страница игры) ----------
 const HP_SIDE_ARROW = `<span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>`;
 
@@ -429,7 +428,6 @@ async function syncCartPrices() {
   return items;
 }
 
-
 function updateCartBadge() {
   const badge = document.getElementById('cart-badge');
   const btn = document.getElementById('btn-cart');
@@ -592,9 +590,6 @@ function showAddToCartModal(game) {
     if (typeof showView === 'function') showView('cart');
   });
 }
-
-
-
 
 function iconSvg(name, size=16) {
   const s = size;
@@ -874,7 +869,6 @@ function showAdultGate(title, gameId) {
   });
 }
 
-
 // ============================================================
 //  ГЛАВНАЯ (как в Hydra): hero-баннер, подборки, «Удиви меня»
 // ============================================================
@@ -1021,7 +1015,6 @@ function renderHomeGrid() {
   });
 }
 
-
 function initHomeControls() {
   $$('#home-pills .home-pill[data-hsort]').forEach(pill => {
     pill.addEventListener('click', () => {
@@ -1148,7 +1141,6 @@ function sideLibRemoveOptimistic(gameId) {
   // фоновая синхронизация
   try { loadSideLibrary(); } catch (e) {}
 }
-
 
 let steamAchSyncing = false;
 async function syncSteamAchievementsLazy(games) {
@@ -2122,8 +2114,6 @@ async function loadGamePage(id) {
   }
 }
 
-
-
 const achCache = {};
 
 function renderAchSidebar(gameId, gameTitle, data) {
@@ -2266,7 +2256,6 @@ async function openGameAchievementsPage(gameId, gameTitle) {
     wrap.innerHTML = `<div class="hp-empty">${escapeHtml(err.message || 'Ошибка')}</div>`;
   }
 }
-
 
 function renderGamePage(wrap, data) {
   const g = data.game;
@@ -2783,7 +2772,6 @@ function renderControllerSupport(raw) {
     <p class="gp-ctrl-note">${full ? 'Отлично работает с контроллерами Xbox и PlayStation.' : (escapeHtml(raw) || 'Поддержка контроллера заявлена.')}</p>`;
 }
 
-
 function renderCommentsThreaded(comments, viewer, gameId) {
   const box = $('#comments-list');
   if (!box) return;
@@ -3040,7 +3028,6 @@ async function loadSimilarGames(game) {
   }
 }
 
-
 // ---------- Кнопка покупки ----------
 function refreshBuyButton(g) {
   const btn = $('#btn-buy-game');
@@ -3254,7 +3241,6 @@ function createCommentEl(c, viewer) {
   }
   return el;
 }
-
 
 function openAdminGameEditModal(g) {
   let modal = document.getElementById('admin-game-edit-modal');
@@ -3518,7 +3504,6 @@ function openAdminGameEditModal(g) {
   }
 }
 
-
 function bindAdminGameEdit(g, viewer) {
   const btn = $('#gp-admin-edit');
   if (btn && viewer?.is_admin) {
@@ -3604,8 +3589,6 @@ function openGameAssetsModal(g) {
     else document.querySelector('.sgdb-asset-tab[data-asset-type="icons"]')?.click();
   }, 40);
 }
-
-
 
 function initCommentForm(g, viewer) {
   const form = $('#comment-form');
@@ -4184,6 +4167,103 @@ function publisherGameCardHtml(g) {
     </div>`;
 }
 
+// ===== Издательство в профиле =====
+window.__pubLineToken = 0;
+
+function bindPublisherLineClicks(el) {
+  if (!el) return;
+  el.querySelectorAll('.hp-publisher-link').forEach(b => {
+    if (b.dataset.bound === '1') return;
+    b.dataset.bound = '1';
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = +b.dataset.id;
+      if (id) openPublisherPage(id, b.dataset.slug || '');
+    });
+  });
+}
+
+/** Мгновенно рисует/прячет строку издательства (без сети). */
+function renderPublisherLine(el, pubs) {
+  // global-safe
+  if (!el) return;
+  if (!pubs || !pubs.length) {
+    el.innerHTML = '';
+    el.hidden = true;
+    el.setAttribute('hidden', '');
+    el.style.display = 'none';
+    return;
+  }
+  el.innerHTML = pubs.map(p =>
+    '<button type="button" class="hp-publisher-link" data-id="' + p.id + '" data-slug="' + escapeHtml(p.slug || '') + '">' +
+      escapeHtml(p.name) +
+    '</button>'
+  ).join('<span class="hp-publisher-sep">·</span>');
+  el.hidden = false;
+  el.removeAttribute('hidden');
+  el.style.display = 'flex';
+  el.style.visibility = 'visible';
+  el.style.opacity = '1';
+  bindPublisherLineClicks(el);
+}
+
+/**
+ * Загружает издательство для userId.
+ * При смене userId сразу очищает строку, чтобы не светилось чужое.
+ */
+async function loadProfilePublishers(userId, lineEl) {
+  const el = lineEl || document.getElementById('hp-publisher-line');
+  if (!el || !userId) return;
+  const uid = +userId;
+  if (!uid) return;
+
+  const prev = +(el.dataset.forUser || 0);
+  el.dataset.forUser = String(uid);
+  // смена пользователя → сразу убираем чужое/моё, пока не пришёл ответ
+  if (prev && prev !== uid) {
+    renderPublisherLine(el, []);
+  }
+
+  const token = ++window.__pubLineToken;
+
+  try {
+    const data = await fetchJSON(PUB_API + '?action=for_user&user_id=' + uid + '&_t=' + Date.now());
+    if (token !== window.__pubLineToken) return;
+    if (+(el.dataset.forUser || 0) !== uid) return;
+
+    const all = (data && Array.isArray(data.publishers)) ? data.publishers : [];
+    let pref = data ? data.display_publisher_id : null;
+    if (pref === 'hide' || pref === false || pref === '0') pref = 0;
+    if (pref !== null && pref !== undefined && pref !== '') pref = Number(pref);
+
+    let show = [];
+    if (pref === 0) {
+      show = [];
+    } else if (pref > 0) {
+      const one = all.find(p => +p.id === +pref);
+      show = one ? [one] : [];
+    } else {
+      show = all.length ? [all[0]] : [];
+    }
+    renderPublisherLine(el, show);
+  } catch (e) {
+    console.warn('loadProfilePublishers', e);
+  }
+}
+
+/** Скрыть/показать боковую карточку целиком */
+function setSideCardVisible(bodyEl, visible) {
+  if (!bodyEl) return;
+  const card = bodyEl.closest ? bodyEl.closest('.hp-side-card') : null;
+  if (!card) return;
+  card.style.display = visible ? '' : 'none';
+}
+window.renderPublisherLine = renderPublisherLine;
+window.loadProfilePublishers = loadProfilePublishers;
+window.setSideCardVisible = setSideCardVisible;
+window.bindPublisherLineClicks = bindPublisherLineClicks;
+
 function gameCardHtml(g, { showPin = true } = {}) {
   const mins = parseInt(g.playtime_minutes, 10) || 0;
   const timeLabel = formatPlaytimeShort(mins);
@@ -4254,7 +4334,6 @@ function bindFriendCodeButtons(root) {
     });
   });
 }
-
 
 function renderProfileFriendCode(code) {
   const name = $('#hp-username');
@@ -4360,9 +4439,9 @@ async function loadProfile() {
       if (line) line.dataset.forUser = String(me2.id);
       // если в AUTH уже 0 — сразу прячем, потом сверим с API
       if (me2.display_publisher_id === 0 || me2.display_publisher_id === '0') {
-        renderPublisherLine(line, []);
+        (window.renderPublisherLine || renderPublisherLine)(line, []);
       }
-      await loadProfilePublishers(me2.id);
+      await (window.loadProfilePublishers || loadProfilePublishers)(me2.id);
     }
   } catch (e) {}
 }
@@ -4948,8 +5027,6 @@ function applyUserBanner(url, pos, zoom) {
   }
 }
 
-
-
 // ---------- Вкладка настроек ----------
 
 // ---------- Тема (тёмная / светлая) ----------
@@ -4971,7 +5048,6 @@ function applyTheme(theme) {
     btn.classList.toggle('active', btn.dataset.theme === t);
   });
 }
-
 
 // ---------- Custom select (красивые выпадающие списки) ----------
 
@@ -5022,7 +5098,6 @@ function selectOptionIcon(value, label) {
 }
 
 const CATIO_SELECT_CHEVRON = '<svg class="catio-select__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
-
 
 function openAnimatedModal(modal) {
   if (!modal) return;
@@ -5216,7 +5291,6 @@ document.addEventListener('wheel', (e) => {
   }
 }, true);
 
-
 function moveSegIndicator(groupEl) {
   if (!groupEl) return;
   let ind = groupEl.querySelector('.seg-indicator');
@@ -5279,7 +5353,6 @@ function initThemePicker() {
     });
   });
 }
-
 
 function openProfileEditModal() {
   const modal = $('#hp-edit-modal');
@@ -5506,15 +5579,16 @@ function initSettingsView() {
         // оптимистично: сразу прячем или ставим выбранное
         if (me && me.id && line) {
           line.dataset.forUser = String(me.id);
+          const rpl = window.renderPublisherLine || renderPublisherLine;
           if (hide) {
-            renderPublisherLine(line, []);
+            rpl(line, []);
             if (window.AUTH_STATE.user) window.AUTH_STATE.user.display_publisher_id = 0;
           } else {
             const opt = sel?.selectedOptions && sel.selectedOptions[0];
             const name = (opt && opt.textContent) ? opt.textContent.trim() : '';
             const pid = Number(v) || 0;
             if (pid && name) {
-              renderPublisherLine(line, [{ id: pid, name: name, slug: '' }]);
+              rpl(line, [{ id: pid, name: name, slug: '' }]);
             }
             if (window.AUTH_STATE.user) window.AUTH_STATE.user.display_publisher_id = pid;
           }
@@ -5686,7 +5760,6 @@ function initClientNav() {
 
 // ---------- Init ----------
 
-
 // ============================================================
 //  ДРУЗЬЯ + ЧУЖИЕ ПРОФИЛИ
 // ============================================================
@@ -5705,7 +5778,6 @@ function friendAvatarText(u) {
   if (u.avatar) return escapeHtml(u.avatar);
   return escapeHtml((u.username || '?').slice(0, 1).toUpperCase());
 }
-
 
 async function loadProfileFriends(userId) {
   const box = $('#hp-friends-list');
@@ -6067,7 +6139,6 @@ function initFriendsUI() {
 // ---------- Просмотр чужого профиля ----------
 let viewingUserId = null;
 
-
 function renderForeignLibraryOnly(library) {
   profileLibraryCache = library || [];
   const pinned = profileLibraryCache.filter(g => +g.is_pinned);
@@ -6202,9 +6273,10 @@ async function openUserProfile(username, id) {
       }
     }, 50);
   } catch (err) {
-    setProfileLoadingShell(false);
     viewingUserId = null;
     toast(err.message || 'Не удалось открыть профиль');
+  } finally {
+    setProfileLoadingShell(false);
   }
 }
 
@@ -6390,8 +6462,6 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
   loadProfileReviews(p.id);
   renderForeignLibraryOnly(library);
 }
-
-
 
 // ============================================================
 //  ЛИЧНЫЕ СООБЩЕНИЯ
@@ -6589,8 +6659,6 @@ function renderChatMessages(messages) {
 }
 let silentRenderGuard = false;
 
-
-
 async function sendChatMessage() {
   const input = $('#chat-input');
   if (!input || !chatPeerId) return;
@@ -6642,7 +6710,6 @@ function initChatUI() {
     });
   }
 }
-
 
 // ============================================================
 //  УВЕДОМЛЕНИЯ + РАСШИРЕННЫЙ ЧАТ
@@ -7037,7 +7104,6 @@ async function openGamePicker() {
     list.innerHTML = `<div class="friends-empty">${escapeHtml(err.message)}</div>`;
   }
 }
-
 
 // ============================================================
 //  ЗАГРУЗКА ИГР + АДМИН-МОДЕРАЦИЯ
@@ -7685,7 +7751,6 @@ function initGameCollapsibles(wrap) {
   });
 }
 
-
 let adminDeleteMedia = [];
 
 function initSubmitGame() {
@@ -7769,7 +7834,6 @@ function initSubmitGame() {
     send.addEventListener('click', submitGameForm);
   }
 }
-
 
 async function fillSubmitFromSteam() {
   const input = $('#sg-steam-url');
@@ -7961,7 +8025,6 @@ async function submitGameForm() {
   }
 }
 
-
 function initAdminUI() {
   const view = $('#view-admin');
   if (!view || view.dataset.boundAdmin === '1') return;
@@ -7998,7 +8061,6 @@ function initAdminUI() {
   window.loadSgdbAssetsGlobal = (t) => loadSgdbAssets(t || 'icons');
   window.openSteamModal = openSteamModal;
   window.closeSteamModal = closeSteamModal;
-
 
   function openSteamModal() {
     if (typeof resetSteamModalToImportMode === 'function') resetSteamModalToImportMode();
@@ -8553,7 +8615,6 @@ async function openAdminGame(id) {
       }
     } catch (e) { console.warn(e); }
 
-
     // Сброс файлов и превью от предыдущей игры
     const coverInput = $('#admin-cover');
     const bannerInput = $('#admin-banner');
@@ -8597,7 +8658,6 @@ async function openAdminGame(id) {
     toast(err.message);
   }
 }
-
 
 async function loadAdminUsers() {
   const list = $('#admin-users-list');
@@ -9719,11 +9779,8 @@ function initCartUI() {
   });
 }
 
-
-
 document.addEventListener('DOMContentLoaded', () => {
   // Сначала кнопка «+», чтобы сбой других init её не убил
-
 
 /* ===== Издательства / меню создания ===== */
 window.__pubMembersSelected = [];
@@ -10259,99 +10316,6 @@ async function openPublisherPage(id, slug) {
   }
 }
 window.openPublisherPage = openPublisherPage;
-
-// ===== Издательство в профиле =====
-window.__pubLineToken = 0;
-
-function bindPublisherLineClicks(el) {
-  if (!el) return;
-  el.querySelectorAll('.hp-publisher-link').forEach(b => {
-    if (b.dataset.bound === '1') return;
-    b.dataset.bound = '1';
-    b.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const id = +b.dataset.id;
-      if (id) openPublisherPage(id, b.dataset.slug || '');
-    });
-  });
-}
-
-/** Мгновенно рисует/прячет строку издательства (без сети). */
-function renderPublisherLine(el, pubs) {
-  if (!el) return;
-  if (!pubs || !pubs.length) {
-    el.innerHTML = '';
-    el.hidden = true;
-    el.setAttribute('hidden', '');
-    el.style.display = 'none';
-    return;
-  }
-  el.innerHTML = pubs.map(p =>
-    '<button type="button" class="hp-publisher-link" data-id="' + p.id + '" data-slug="' + escapeHtml(p.slug || '') + '">' +
-      escapeHtml(p.name) +
-    '</button>'
-  ).join('<span class="hp-publisher-sep">·</span>');
-  el.hidden = false;
-  el.removeAttribute('hidden');
-  el.style.display = 'flex';
-  el.style.visibility = 'visible';
-  el.style.opacity = '1';
-  bindPublisherLineClicks(el);
-}
-
-/**
- * Загружает издательство для userId.
- * При смене userId сразу очищает строку, чтобы не светилось чужое.
- */
-async function loadProfilePublishers(userId, lineEl) {
-  const el = lineEl || document.getElementById('hp-publisher-line');
-  if (!el || !userId) return;
-  const uid = +userId;
-  if (!uid) return;
-
-  const prev = +(el.dataset.forUser || 0);
-  el.dataset.forUser = String(uid);
-  // смена пользователя → сразу убираем чужое/моё, пока не пришёл ответ
-  if (prev && prev !== uid) {
-    renderPublisherLine(el, []);
-  }
-
-  const token = ++window.__pubLineToken;
-
-  try {
-    const data = await fetchJSON(PUB_API + '?action=for_user&user_id=' + uid + '&_t=' + Date.now());
-    if (token !== window.__pubLineToken) return;
-    if (+(el.dataset.forUser || 0) !== uid) return;
-
-    const all = (data && Array.isArray(data.publishers)) ? data.publishers : [];
-    let pref = data ? data.display_publisher_id : null;
-    if (pref === 'hide' || pref === false || pref === '0') pref = 0;
-    if (pref !== null && pref !== undefined && pref !== '') pref = Number(pref);
-
-    let show = [];
-    if (pref === 0) {
-      show = [];
-    } else if (pref > 0) {
-      const one = all.find(p => +p.id === +pref);
-      show = one ? [one] : [];
-    } else {
-      show = all.length ? [all[0]] : [];
-    }
-    renderPublisherLine(el, show);
-  } catch (e) {
-    console.warn('loadProfilePublishers', e);
-  }
-}
-
-/** Скрыть/показать боковую карточку целиком */
-function setSideCardVisible(bodyEl, visible) {
-  if (!bodyEl) return;
-  const card = bodyEl.closest ? bodyEl.closest('.hp-side-card') : null;
-  if (!card) return;
-  card.style.display = visible ? '' : 'none';
-}
-
 
   try { initSubmitGame(); } catch (e) { console.error('initSubmitGame', e); }
   try { initCreateMenu(); } catch (e) { console.error('initCreateMenu', e); }
