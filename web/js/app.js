@@ -2405,6 +2405,17 @@ function renderGamePage(wrap, data) {
               <span>Облачное сохранение</span>
             </button>`;
 
+  const meUser = window.AUTH_STATE && window.AUTH_STATE.user;
+  const isGameOwner = !!(meUser && g && (
+    +g.submitted_by === +meUser.id || +g.user_id === +meUser.id || g.is_owner === true || g.is_owner === 1
+  ));
+  const updateChip = isGameOwner
+    ? `<button type="button" class="gp-hero-chip" id="gp-game-update" title="Обновить версию">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg>
+      </button>`
+    : '';
+
+
   const inCart = !g.owned && isInCart(g.id);
 
   // Единый модуль «цена + кнопка» как в Steam
@@ -2456,8 +2467,9 @@ function renderGamePage(wrap, data) {
           ${g.logo_url ? `<img class="gp-hero-logo" src="${escapeHtml(g.logo_url)}" alt="" onerror="this.style.display='none'" />` : ''}
         </div>
         <div class="gp-hero-bottom">
-          ${(!isWebBrowser || adminEditBtn || cloudChip) ? `<div class="gp-hero-tools">
+          ${(!isWebBrowser || adminEditBtn || updateChip || cloudChip) ? `<div class="gp-hero-tools">
             ${adminEditBtn || ''}
+            ${updateChip || ''}
             ${cloudChip || ''}
           </div>` : ''}
           <div class="gp-actionbar">
@@ -3608,6 +3620,10 @@ function ensurePublishAdminFooter(formModal, opts, g) {
   left.appendChild(importInput);
 
   const mode = opts.moderate ? 'moderate' : ((opts.adminEdit || opts.publisherEdit) ? 'adminEdit' : 'submit');
+  // убрать устаревшую кнопку «Обновить» из футера
+  const oldUpd = document.getElementById('sg-admin-update');
+  if (oldUpd) try { oldUpd.remove(); } catch (e) {}
+
   if (mode === 'submit') {
     importBtn.style.display = '';
     importBtn.textContent = 'Импорт';
@@ -3615,40 +3631,14 @@ function ensurePublishAdminFooter(formModal, opts, g) {
     exportBtn.style.display = 'none';
     delBtn.style.display = 'none';
   } else if (mode === 'adminEdit') {
-    // Редактирование: Экспорт | Обновить | Удалить
+    // админ чужой игры: Экспорт | Удалить
     importBtn.style.display = 'none';
     exportBtn.style.display = '';
     delBtn.style.display = '';
     left.appendChild(exportBtn);
-    let updBtn = document.getElementById('sg-admin-update');
-    if (!updBtn) {
-      updBtn = document.createElement('button');
-      updBtn.type = 'button';
-      updBtn.className = 'hp-btn-edit';
-      updBtn.id = 'sg-admin-update';
-      updBtn.textContent = 'Обновить';
-    }
-    updBtn.style.display = '';
-    left.appendChild(updBtn);
     left.appendChild(delBtn);
-    updBtn.onclick = () => {
-      // режим обновления: пользователь добавляет сборку с новой версией и сохраняет через send
-      const sendBtn = document.getElementById('submit-game-send');
-      if (sendBtn) {
-        sendBtn.textContent = 'Отправить обновление на модерацию';
-        sendBtn.dataset.updateMode = '1';
-      }
-      toast('Добавьте новую сборку с новой версией и нажмите «Отправить обновление»');
-      const sec = document.getElementById('sg-builds-section');
-      if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      const ver = document.getElementById('sg-build-version');
-      if (ver) {
-        ver.focus();
-        ver.classList.add('field-changed');
-      }
-    };
   } else {
-    // Модерация: без удалить/отклонить/импорт/экспорт в этой модалке
+    // publisherEdit / moderate — без импорта/экспорта/удаления
     importBtn.style.display = 'none';
     exportBtn.style.display = 'none';
     delBtn.style.display = 'none';
@@ -3964,22 +3954,119 @@ function isGamePublisherOf(g) {
 
 function openAdminGameEditModal(g) {
   if (!g) return;
-  // Админ + публикатор этой игры → карточка публикатора (без админского «Отклонить»)
-  if (isGamePublisherOf(g)) {
-    openPublishFormForGame(g, { publisherEdit: true, adminEdit: false });
-  } else {
-    openPublishFormForGame(g, { adminEdit: true });
-  }
+  // Только админское редактирование карточки (не обновление версии)
+  openPublishFormForGame(g, { adminEdit: true });
   const rej = document.getElementById('submit-admin-reject');
   if (rej) { try { rej.remove(); } catch (e) { rej.classList.add('hidden'); rej.style.display = 'none'; } }
 }
 
 function bindAdminGameEdit(g, viewer) {
-  const btn = $('#gp-admin-edit');
+  const btn = document.getElementById('gp-admin-edit');
   if (btn && viewer?.is_admin) {
-    btn.addEventListener('click', () => openAdminGameEditModal(g));
+    btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openAdminGameEditModal(g); };
+  }
+  const upd = document.getElementById('gp-game-update');
+  if (upd) {
+    upd.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openGameUpdateModal(g); };
   }
 }
+
+function openGameUpdateModal(g) {
+  if (!g || !g.id) { toast('Нет игры'); return; }
+  let modal = document.getElementById('game-update-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'game-update-modal';
+    modal.className = 'submit-modal';
+    modal.innerHTML = `
+      <div class="submit-modal-backdrop" data-close-upd></div>
+      <div class="submit-modal-box" style="max-width:440px">
+        <div class="submit-modal-head">
+          <h2>Обновить версию</h2>
+          <button type="button" class="friends-modal-close" data-close-upd aria-label="Закрыть">×</button>
+        </div>
+        <div class="submit-modal-body" style="display:flex;flex-direction:column;gap:12px">
+          <p class="settings-hint" style="margin:0">Новый файл уйдёт на проверку. После одобрения появится в списке сборок.</p>
+          <label class="ws-ff"><span>Версия *</span>
+            <input type="text" class="auth-input" id="upd-version" placeholder="1.0.1" maxlength="32" />
+          </label>
+          <label class="ws-ff"><span>Что нового *</span>
+            <textarea class="auth-input" id="upd-changelog" rows="3" placeholder="Кратко об изменениях…" maxlength="1000" style="resize:vertical"></textarea>
+          </label>
+          <div class="ws-ff">
+            <span>Файл сборки *</span>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+              <label class="pub-file-btn" for="upd-file">Выбрать файл</label>
+              <input type="file" id="upd-file" accept=".exe,.zip,.7z,.rar,.msi,.dmg,.appimage,.tar,.gz" hidden />
+              <span class="settings-hint" id="upd-file-name">ZIP / EXE / 7z…</span>
+            </div>
+          </div>
+        </div>
+        <div class="submit-modal-foot" style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" class="hp-btn-edit" data-close-upd>Отмена</button>
+          <button type="button" class="hp-btn-edit" id="upd-send" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Отправить на проверку</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close-upd]')) modal.classList.add('hidden');
+    });
+    const fileInput = modal.querySelector('#upd-file');
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files && fileInput.files[0];
+      const nameEl = modal.querySelector('#upd-file-name');
+      if (!nameEl) return;
+      if (f) {
+        const sz = (typeof formatBytes === 'function') ? formatBytes(f.size) : ((f.size / 1048576).toFixed(1) + ' МБ');
+        nameEl.textContent = f.name + ' · ' + sz;
+        nameEl.style.color = 'var(--text-bright)';
+        nameEl.style.fontWeight = '600';
+      } else {
+        nameEl.textContent = 'ZIP / EXE / 7z…';
+        nameEl.style.fontWeight = '';
+      }
+    });
+  }
+  // bind send to current game
+  const sendBtn = modal.querySelector('#upd-send');
+  const fileInput = modal.querySelector('#upd-file');
+  sendBtn.onclick = async () => {
+    const version = (modal.querySelector('#upd-version')?.value || '').trim();
+    const changelog = (modal.querySelector('#upd-changelog')?.value || '').trim();
+    const file = fileInput.files && fileInput.files[0];
+    if (!version) { toast('Укажите версию'); return; }
+    if (!changelog) { toast('Укажите, что нового'); return; }
+    if (!file) { toast('Прикрепите файл'); return; }
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Отправка…';
+    try {
+      const fd = new FormData();
+      fd.append('csrf_token', window.CSRF_TOKEN || '');
+      fd.append('game_id', String(g.id));
+      fd.append('version', version);
+      fd.append('changelog', changelog);
+      fd.append('build_file', file, file.name);
+      const res = await fetch((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=submit_update', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Ошибка');
+      toast('Обновление отправлено на проверку');
+      modal.classList.add('hidden');
+    } catch (err) {
+      toast(err.message || 'Не удалось отправить');
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Отправить на проверку';
+    }
+  };
+  modal.querySelector('#upd-version').value = '';
+  modal.querySelector('#upd-changelog').value = '';
+  fileInput.value = '';
+  const n = modal.querySelector('#upd-file-name');
+  if (n) { n.textContent = 'ZIP / EXE / 7z…'; n.style.fontWeight = ''; }
+  modal.classList.remove('hidden');
+}
+window.openGameUpdateModal = openGameUpdateModal;
+
 
 async function loadSgdbAssetsForName(name) {
   // онлайн поиск отключён — только локальные/ZIP ассеты
@@ -8928,6 +9015,11 @@ async function submitGameForm() {
   try {
     // Публикатор обновляет свою игру → на модерацию (нужны версия + новый файл)
     if (isPublisherEdit) {
+      const g = window.__currentGamePage || { id: window.__publishEditGameId };
+      openGameUpdateModal(g);
+      return;
+    }
+    if (false && isPublisherEdit) {
       const id = (window.__publishEditGameId || window.__adminModeratingId || 0);
       if (!id) throw new Error('Нет id игры');
       const ver = (document.getElementById('sg-build-version')?.value || '').trim();
@@ -9639,6 +9731,10 @@ async function refreshAdminPendingBadge() {
       const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending&_t=' + Date.now());
       if (ws && ws.ok) total += (ws.mods || []).length + (ws.media || []).length;
     } catch (e) {}
+    try {
+      const bd = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=pending_builds&_t=' + Date.now());
+      if (bd && bd.ok) total += (bd.builds || []).length;
+    } catch (e) {}
     updateAdminPendingBadge(total);
   } catch (e) {}
 }
@@ -9657,7 +9753,7 @@ async function loadAdminPending() {
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     const games = data.games || [];
 
-    let mods = [], media = [];
+    let mods = [], media = [], builds = [];
     try {
       const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending');
       if (ws && ws.ok) {
@@ -9665,8 +9761,12 @@ async function loadAdminPending() {
         media = ws.media || [];
       }
     } catch (e) {}
+    try {
+      const bd = await fetchJSON(`${SUBMIT_API}?action=pending_builds`);
+      if (bd && bd.ok) builds = bd.builds || [];
+    } catch (e) {}
 
-    const total = games.length + mods.length + media.length;
+    const total = games.length + mods.length + media.length + builds.length;
     updateAdminPendingBadge(total);
     if (!total) {
       list.innerHTML = '<div class="friends-empty">Нет заявок на модерации</div>';
@@ -9684,6 +9784,22 @@ async function loadAdminPending() {
             <div class="s">${escapeHtml(g.submitter || '—')} · ${escapeHtml(g.genre || '')}</div>
           </div>
         </button>`).join(''));
+    }
+    if (builds.length) {
+      parts.push('<div class="admin-pending-section">Обновления версий</div>');
+      parts.push(builds.map(b => `
+        <div class="admin-pending-item admin-pending-build" data-kind="build" data-id="${b.id}">
+          <img src="${escapeHtml(b.cover_url ? bustUrl(b.cover_url) : '')}" alt="" onerror="this.style.display='none'" />
+          <div style="flex:1;min-width:0">
+            <div class="t">${escapeHtml(b.game_title || 'Игра')} <span style="opacity:.75;font-weight:500">v${escapeHtml(b.version || '')}</span></div>
+            <div class="s">${escapeHtml(b.submitter || b.author_name || '—')} · ${escapeHtml(String(b.changelog || '').slice(0, 80))}</div>
+            <div class="s">${escapeHtml(b.file_name || '')}${b.file_size_bytes ? ' · ' + (typeof formatBytes === 'function' ? formatBytes(b.file_size_bytes) : '') : ''}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button type="button" class="hp-btn-edit" data-approve-build="${b.id}" style="background:var(--accent);color:#12110e;border-color:var(--accent);font-size:12px;padding:4px 8px">Одобрить</button>
+            <button type="button" class="hp-btn-edit" data-reject-build="${b.id}" style="color:#f66;font-size:12px;padding:4px 8px">Отклонить</button>
+          </div>
+        </div>`).join(''));
     }
     if (mods.length) {
       parts.push('<div class="admin-pending-section">Моды</div>');
@@ -9716,6 +9832,29 @@ async function loadAdminPending() {
         if (kind === 'game') openAdminGame(id);
         else if (kind === 'mod') openAdminWorkshopItem('mod', id);
         else if (kind === 'media') openAdminWorkshopItem('media', id);
+      });
+    });
+    $$('[data-approve-build]', list).forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const res = await postJSON(SUBMIT_API + '?action=approve_build', { csrf_token: window.CSRF_TOKEN || '', id: +btn.dataset.approveBuild });
+          if (!res.ok) throw new Error(res.error || 'Ошибка');
+          toast('Версия опубликована');
+          loadAdminPending();
+        } catch (err) { toast(err.message || 'Ошибка'); }
+      });
+    });
+    $$('[data-reject-build]', list).forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Отклонить и удалить эту сборку?')) return;
+        try {
+          const res = await postJSON(SUBMIT_API + '?action=reject_build', { csrf_token: window.CSRF_TOKEN || '', id: +btn.dataset.rejectBuild });
+          if (!res.ok) throw new Error(res.error || 'Ошибка');
+          toast('Отклонено');
+          loadAdminPending();
+        } catch (err) { toast(err.message || 'Ошибка'); }
       });
     });
   } catch (err) {

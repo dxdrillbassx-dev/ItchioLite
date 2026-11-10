@@ -527,7 +527,8 @@ try {
 
 
         // ===== ПУБЛИКАТОР: обновление карточки + новая сборка на модерацию =====
-        case 'publisher_update': {
+        // ===== ПРОСТОЕ ОБНОВЛЕНИЕ ВЕРСИИ (только файл, без правки карточки) =====
+        case 'submit_update': {
             if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false]); break; }
             $user = requireUserS();
             if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
@@ -535,13 +536,30 @@ try {
                 echo json_encode(['ok'=>false,'error'=>'CSRF'], JSON_UNESCAPED_UNICODE);
                 break;
             }
-            $id = (int)($_POST['id'] ?? 0);
-            $st = $pdo->prepare("SELECT * FROM games WHERE id = ?");
+            $id = (int)($_POST['game_id'] ?? $_POST['id'] ?? 0);
+            $version = trim((string)($_POST['version'] ?? ''));
+            $changelog = trim((string)($_POST['changelog'] ?? ''));
+            if ($id <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Нет id игры'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            if ($version === '') {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Укажите версию'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            if ($changelog === '') {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Укажите, что нового'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $st = $pdo->prepare("SELECT id, title, submitted_by FROM games WHERE id = ?");
             $st->execute([$id]);
             $game = $st->fetch(PDO::FETCH_ASSOC);
             if (!$game) {
                 http_response_code(404);
-                echo json_encode(['ok'=>false,'error'=>'Не найдено'], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['ok'=>false,'error'=>'Игра не найдена'], JSON_UNESCAPED_UNICODE);
                 break;
             }
             $uid = (int)$user['id'];
@@ -552,38 +570,39 @@ try {
                 echo json_encode(['ok'=>false,'error'=>'Нет доступа'], JSON_UNESCAPED_UNICODE);
                 break;
             }
-            // поля карточки (как admin_save, урезанно)
-            $title = trim($_POST['title'] ?? $game['title'] ?? '');
-            $short = trim($_POST['short_description'] ?? $game['short_description'] ?? '');
-            $desc = trim($_POST['description'] ?? $game['description'] ?? '');
-            $genre = trim($_POST['genre'] ?? $game['genre'] ?? '');
-            $video = normalize_video_urls_field(trim((string)($_POST['video_url'] ?? $game['video_url'] ?? '')));
-            $price = (float)($_POST['price'] ?? $game['price'] ?? 0);
-            $developer = trim($_POST['developer'] ?? $game['developer'] ?? '');
-            $pdo->prepare("UPDATE games SET title=?, short_description=?, description=?, genre=?, video_url=?, price=?, developer=?, developer_name=COALESCE(NULLIF(?,''), developer_name) WHERE id=?")
-                ->execute([$title, $short, $desc, $genre, $video, $price, $developer, $developer, $id]);
-
-            // сборка строго pending
-            $GLOBALS['__build_status_override'] = 'pending';
-            $GLOBALS['__build_submitted_by'] = $uid;
-            try { save_builds_from_request($pdo, $id); } catch (Throwable $e) {}
-            $bc = $pdo->prepare("SELECT COUNT(*) FROM game_builds WHERE game_id = ? AND status = 'pending'");
-            $bc->execute([$id]);
-            if ((int)$bc->fetchColumn() < 1) {
+            $file = $_FILES['build_file'] ?? $_FILES['file'] ?? null;
+            if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($file['tmp_name'] ?? '')) {
                 http_response_code(400);
-                echo json_encode(['ok'=>false,'error'=>'Не удалось сохранить файл сборки. Укажите версию и прикрепите файл.'], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['ok'=>false,'error'=>'Прикрепите файл сборки'], JSON_UNESCAPED_UNICODE);
                 break;
             }
-            // уведомить админов
+            ensure_game_builds_table($pdo);
+            $root = dirname(__DIR__) . '/uploads/games/builds/' . $id;
+            if (!is_dir($root)) @mkdir($root, 0755, true);
+            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION) ?: 'bin');
+            $safe = preg_replace('/[^a-zA-Z0-9._-]+/', '_', pathinfo($file['name'], PATHINFO_FILENAME));
+            $fname = $safe . '-' . substr(uniqid(), -6) . '.' . $ext;
+            $dest = $root . '/' . $fname;
+            if (!move_uploaded_file($file['tmp_name'], $dest)) {
+                http_response_code(500);
+                echo json_encode(['ok'=>false,'error'=>'Не удалось сохранить файл'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $rel = 'uploads/games/builds/' . $id . '/' . $fname;
+            $size = (int)($file['size'] ?? filesize($dest) ?: 0);
+            $pdo->prepare("INSERT INTO game_builds (game_id, platform, version, changelog, file_url, file_name, file_size_bytes, status, submitted_by)
+                VALUES (?,?,?,?,?,?,?,'pending',?)")
+                ->execute([$id, 'windows', $version, $changelog, $rel, $file['name'] ?: $fname, $size, $uid]);
+            $buildId = (int)$pdo->lastInsertId();
             try {
                 $admins = $pdo->query("SELECT id FROM users WHERE role = 'admin'")->fetchAll(PDO::FETCH_COLUMN);
                 $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)");
-                $meta = json_encode(['game_id' => $id], JSON_UNESCAPED_UNICODE);
+                $meta = json_encode(['game_id' => $id, 'build_id' => $buildId, 'version' => $version], JSON_UNESCAPED_UNICODE);
                 foreach ($admins as $aid) {
-                    $ins->execute([(int)$aid, 'game_update_pending', 'Обновление игры на модерации', '«' . $title . '» — новая версия/сборка', $meta]);
+                    $ins->execute([(int)$aid, 'build_pending', 'Новая версия на модерации', '«' . $game['title'] . '» v' . $version, $meta]);
                 }
             } catch (Throwable $e) {}
-            echo json_encode(['ok' => true, 'pending' => true], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['ok' => true, 'build_id' => $buildId, 'pending' => true], JSON_UNESCAPED_UNICODE);
             break;
         }
 
