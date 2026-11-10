@@ -579,10 +579,18 @@ try {
             $screenshots = [$game['cover_url']];
         }
 
-        $stmt = $pdo->prepare("SELECT id, platform, version, file_size_bytes, created_at
-            FROM game_builds WHERE game_id = ? ORDER BY platform, created_at");
-        $stmt->execute([$id]);
-        $builds = $stmt->fetchAll();
+        try {
+            $stmt = $pdo->prepare("SELECT id, platform, version, changelog, file_size_bytes, file_name, status, created_at
+                FROM game_builds WHERE game_id = ? AND (status = 'published' OR status IS NULL OR status = '')
+                ORDER BY created_at DESC");
+            $stmt->execute([$id]);
+            $builds = $stmt->fetchAll();
+        } catch (Throwable $e) {
+            $stmt = $pdo->prepare("SELECT id, platform, version, file_size_bytes, created_at
+                FROM game_builds WHERE game_id = ? ORDER BY created_at DESC");
+            $stmt->execute([$id]);
+            $builds = $stmt->fetchAll();
+        }
 
         $stmt = $pdo->prepare("
             SELECT c.id, c.body, c.created_at, c.parent_id, c.likes,
@@ -1285,12 +1293,13 @@ try {
     // ===== СБОРКИ ИГРЫ (файлы для скачивания) =====
     if ($method === 'GET' && $action === 'builds' && isset($_GET['game_id'])) {
         $gid = (int)$_GET['game_id'];
-        $stmt = $pdo->prepare("
-            SELECT id, platform, version, file_url, file_size_bytes, created_at
-            FROM game_builds
-            WHERE game_id = ?
-            ORDER BY created_at DESC
-        ");
+        $user = getCurrentUser();
+        $isAdmin = $user && (($user['role'] ?? '') === 'admin');
+        $sql = "SELECT id, platform, version, changelog, file_url, file_name, file_size_bytes, status, created_at
+            FROM game_builds WHERE game_id = ?";
+        if (!$isAdmin) $sql .= " AND (status = 'published' OR status IS NULL OR status = '')";
+        $sql .= " ORDER BY created_at DESC";
+        $stmt = $pdo->prepare($sql);
         $stmt->execute([$gid]);
         echo json_encode(['ok' => true, 'builds' => $stmt->fetchAll()], JSON_UNESCAPED_UNICODE);
         exit;
@@ -1317,8 +1326,19 @@ try {
             exit;
         }
 
-        // Платное — только владельцам (и админу)
+        // Платное — только владельцам (и админу). Pending — только админу (предзагрузка).
         $isAdmin = $user['role'] === 'admin';
+        $bStatus = (string)($build['status'] ?? 'published');
+        if ($bStatus === 'pending' && !$isAdmin) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Сборка на модерации'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($bStatus === 'rejected') {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Сборка недоступна'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         if ((float)$build['price'] > 0 && !$isAdmin && !ownsGame($pdo, (int)$user['id'], (int)$build['game_id'])) {
             http_response_code(403);
             echo json_encode(['ok' => false, 'error' => 'Сначала купи игру — потом скачивай'], JSON_UNESCAPED_UNICODE);

@@ -183,7 +183,6 @@ if ($isAuthorized) {
           <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
           <button type="button" class="user-menu-item" id="menu-notifications"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Уведомления <span class="menu-badge notif-menu-badge hidden">0</span></button>
           <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
-          <button type="button" class="user-menu-item" id="menu-downloads"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Загрузки</button>
           <button type="button" class="user-menu-item" id="menu-settings"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Настройки</button>
           <div class="user-menu-sep" role="separator"></div>
           <button type="button" class="user-menu-item danger" id="menu-logout"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
@@ -237,6 +236,7 @@ if ($isAuthorized) {
       <nav class="nav">
         <button class="nav-btn <?php echo $currentView === 'home' ? 'active' : ''; ?>" data-view="home">Главная</button>
         <button class="nav-btn <?php echo $currentView === 'store' ? 'active' : ''; ?>" data-view="store">Каталог</button>
+        <button class="nav-btn <?php echo $currentView === 'workshop' ? 'active' : ''; ?>" data-view="workshop">Мастерская</button>
         <?php if ($isAuthorized): ?>
         <button class="nav-btn <?php echo $currentView === 'profile' ? 'active' : ''; ?>" data-view="profile"><?php echo htmlspecialchars(strtoupper($user['username'])); ?></button>
         <?php endif; ?>
@@ -258,7 +258,6 @@ if ($isAuthorized) {
             <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
             <button type="button" class="user-menu-item menu-notifications-btn" id="menu-notifications"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Уведомления <span class="menu-badge notif-menu-badge hidden">0</span></button>
             <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
-            <button type="button" class="user-menu-item" id="menu-downloads"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Загрузки</button>
             <button type="button" class="user-menu-item" id="menu-settings"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Настройки</button>
             <div class="user-menu-sep" role="separator"></div>
             <button type="button" class="user-menu-item danger" id="menu-logout"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
@@ -472,83 +471,129 @@ if ($isAuthorized) {
       <!-- ===== МАСТЕРСКАЯ ===== -->
       <section id="view-workshop" class="view <?php echo $currentView === 'workshop' ? 'active' : ''; ?>">
         <div class="profile-page hydra-profile ws-page">
-          <div class="hp-hero ws-hero" id="ws-hero">
+          <div class="hp-hero" id="ws-hero">
             <div class="hp-hero-bg" id="ws-hero-bg"></div>
-            <div class="ws-hero-overlay">
-              <div class="ws-hero-left">
-                <h1 class="ws-hero-title">Модификации</h1>
-                <p class="ws-hero-desc">Благодаря мастерской модифицировать игры можно в один клик — ставьте моды, делитесь своими и открывайте новые грани любимых игр.</p>
+            <div class="hp-banner" id="ws-banner">
+              <div class="ws-hero-overlay">
+                <img class="ws-hero-logo" src="logo.ico" alt="CATio" />
+                <div class="ws-hero-left">
+                  <h1 class="ws-hero-title">Модификации</h1>
+                  <p class="ws-hero-desc">Благодаря мастерской модифицировать игры можно в один клик — ставьте моды, делитесь своими и открывайте новые грани любимых игр.</p>
+                </div>
+                <div class="ws-hero-stats" id="ws-hero-stats">
+                  <div class="ws-stat">
+                    <div class="ws-stat-val" id="ws-stat-downloads">0</div>
+                    <div class="ws-stat-lbl">Скачиваний</div>
+                  </div>
+                  <div class="ws-stat">
+                    <div class="ws-stat-val" id="ws-stat-mods">0</div>
+                    <div class="ws-stat-lbl">Модификаций</div>
+                  </div>
+                  <div class="ws-stat">
+                    <div class="ws-stat-val" id="ws-stat-users">0</div>
+                    <div class="ws-stat-lbl">Пользователей</div>
+                  </div>
+                  <div class="ws-stat-note">Это только начало вы что хотели</div>
+                </div>
               </div>
-              <div class="ws-hero-stats" id="ws-hero-stats">
-                <div class="ws-stat">
-                  <div class="ws-stat-val" id="ws-stat-downloads">0</div>
-                  <div class="ws-stat-lbl">Скачиваний</div>
-                </div>
-                <div class="ws-stat">
-                  <div class="ws-stat-val" id="ws-stat-mods">0</div>
-                  <div class="ws-stat-lbl">Модификаций</div>
-                </div>
-                <div class="ws-stat">
-                  <div class="ws-stat-val" id="ws-stat-users">0</div>
-                  <div class="ws-stat-lbl">Пользователей</div>
-                </div>
-                <div class="ws-stat-note">Это только начало вы что хотели</div>
+            </div>
+            <div class="hp-toolbar" id="ws-toolbar">
+              <div class="hp-tabs ws-tabs" id="ws-tabs">
+                <button type="button" class="hp-btn-edit ws-tab-btn active" data-ws-tab="games">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></svg>
+                  Игры
+                </button>
+                <button type="button" class="hp-btn-edit ws-tab-btn" data-ws-tab="mods">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                  Моды
+                </button>
+                <button type="button" class="hp-btn-edit ws-tab-btn" data-ws-tab="media">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                  Медиа
+                </button>
               </div>
+              <div class="hp-toolbar-spacer"></div>
+              <button type="button" class="hp-btn-logout" id="ws-filters-btn" title="Фильтры">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                Фильтры
+              </button>
             </div>
           </div>
 
-          <div class="hp-body ws-body">
+          <div class="hp-body ws-body ws-body--full">
             <div class="hp-main ws-main">
-              <div class="hp-tabs ws-tabs" id="ws-tabs">
-                <button type="button" class="hp-tab active" data-ws-tab="games">Игры</button>
-                <button type="button" class="hp-tab" data-ws-tab="mods">Моды</button>
-                <button type="button" class="hp-tab" data-ws-tab="media">Медиа</button>
-              </div>
               <div class="ws-sub" id="ws-sub">Выберите из 0 игр для модификации</div>
-
               <div class="ws-grid" id="ws-grid">
                 <div class="loading">Загрузка мастерской…</div>
               </div>
             </div>
-
-            <aside class="hp-side ws-side" id="ws-side">
-              <!-- filters injected by JS per tab -->
-            </aside>
           </div>
         </div>
       </section>
 
-      
       <!-- ===== МАСТЕРСКАЯ: страница игры ===== -->
       <section id="view-workshop-game" class="view">
         <div class="profile-page hydra-profile ws-page">
-          <button type="button" class="wsg-back" id="wsg-back">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-            Назад в мастерскую
-          </button>
-          <div class="wsg-head" id="wsg-head">
-            <div class="wsg-cover" id="wsg-cover"></div>
-            <div class="wsg-head-info">
-              <h1 class="wsg-title" id="wsg-title">Игра</h1>
-              <p class="wsg-desc" id="wsg-desc"></p>
-              <div class="wsg-meta" id="wsg-meta"></div>
+          <div class="hp-hero" id="wsg-hero">
+            <div class="hp-hero-bg" id="wsg-hero-bg"></div>
+            <div class="hp-banner" id="wsg-banner">
+              <div class="ws-hero-overlay wsg-hero-overlay">
+                <div class="wsg-cover" id="wsg-cover"></div>
+                <div class="wsg-head-info">
+                  <h1 class="wsg-title" id="wsg-title">Игра</h1>
+                  <p class="wsg-desc" id="wsg-desc"></p>
+                  <div class="wsg-meta" id="wsg-meta"></div>
+                </div>
+              </div>
+            </div>
+            <div class="hp-toolbar" id="wsg-toolbar">
+              <div class="hp-tabs ws-tabs" id="wsg-tabs">
+                <button type="button" class="hp-btn-edit ws-tab-btn active" data-wsg-tab="mods">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                  Моды
+                </button>
+                <button type="button" class="hp-btn-edit ws-tab-btn" data-wsg-tab="media">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                  Медиа
+                </button>
+              </div>
+              <div class="hp-toolbar-spacer"></div>
+              <button type="button" class="hp-btn-logout" id="wsg-filters-btn" title="Фильтры">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                Фильтры
+              </button>
             </div>
           </div>
-          <div class="hp-body ws-body">
+          <div class="hp-body ws-body ws-body--full">
             <div class="hp-main ws-main">
-              <div class="hp-tabs ws-tabs" id="wsg-tabs">
-                <button type="button" class="hp-tab active" data-wsg-tab="mods">Моды</button>
-                <button type="button" class="hp-tab" data-wsg-tab="media">Медиа</button>
-              </div>
               <div class="ws-sub" id="wsg-sub">Моды этой игры</div>
               <div class="ws-grid is-mods" id="wsg-grid">
                 <div class="loading">Загрузка…</div>
               </div>
             </div>
-            <aside class="hp-side ws-side" id="wsg-side"></aside>
           </div>
         </div>
       </section>
+
+      <!-- ===== Модалка фильтров мастерской ===== -->
+      <div class="submit-modal hidden" id="ws-filters-modal">
+        <div class="submit-modal-backdrop" data-close-ws-filters></div>
+        <div class="submit-modal-box" style="max-width:440px;max-height:86vh;overflow:auto">
+          <div class="submit-modal-head">
+            <h2>Фильтры</h2>
+            <button type="button" class="pub-modal-close" data-close-ws-filters aria-label="Закрыть">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="submit-modal-body">
+            <div class="ws-side ws-filters-modal-body" id="ws-filters-body"></div>
+          </div>
+          <div class="submit-modal-foot">
+            <button type="button" class="hp-btn-edit" id="ws-filters-reset">Сбросить</button>
+            <button type="button" class="hp-btn-edit" id="ws-filters-apply" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Применить</button>
+          </div>
+        </div>
+      </div>
 
 <section id="view-downloads" class="view <?php echo $currentView === 'downloads' ? 'active' : ''; ?>">
         <div class="downloads-page">
@@ -1167,16 +1212,16 @@ if ($isAuthorized) {
           <div class="settings-main">
             <div class="settings-pane" id="admin-pane-moderation">
               <h2 class="settings-title">Модерация</h2>
-              <p class="settings-desc">Игры, отправленные пользователями на проверку.</p>
-              <div class="admin-layout">
-                <div class="admin-list-panel">
+              <p class="settings-desc">Игры, моды и медиа на проверке. Нажмите карточку — откроется модалка.</p>
+              <div class="admin-layout admin-layout--list-only">
+                <div class="admin-list-panel" style="grid-column: 1 / -1">
                   <div id="admin-pending-list" class="admin-pending-list">
                     <div class="loading">Загрузка...</div>
                   </div>
                 </div>
-                <div class="admin-edit-panel" id="admin-edit-panel">
-                  <div class="admin-placeholder" id="admin-empty">
-                    <p>Выберите игру слева</p>
+                <div class="admin-edit-panel hidden" id="admin-edit-panel" style="display:none !important" aria-hidden="true">
+                  <div class="admin-placeholder hidden" id="admin-empty">
+                    <p class="hidden">Выберите игру слева</p>
                   </div>
                   <form class="submit-form hidden" id="admin-game-form">
                     <input type="hidden" id="admin-game-id" value="" />
@@ -1825,11 +1870,11 @@ function socialAuth(provider) {
           </span>
           <span class="create-menu-txt"><strong>Добавить игру</strong><em>Карточка на модерацию</em></span>
         </button>
-        <button type="button" class="create-menu-item is-disabled" id="create-menu-workshop" disabled title="Скоро">
+        <button type="button" class="create-menu-item" id="create-menu-workshop">
           <span class="create-menu-ico" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
           </span>
-          <span class="create-menu-txt"><strong>Мастерская</strong><em>Скоро будет доступно</em></span>
+          <span class="create-menu-txt"><strong>Мастерская</strong><em>Мод или медиа на модерацию</em></span>
         </button>
         <button type="button" class="create-menu-item" id="create-menu-pubs">
           <span class="create-menu-ico" aria-hidden="true">
@@ -1837,6 +1882,218 @@ function socialAuth(provider) {
           </span>
           <span class="create-menu-txt"><strong>Мои издательства</strong><em>Студии и бренды</em></span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Мастерская: выбор типа ===== -->
+  <div class="submit-modal hidden" id="ws-type-modal">
+    <div class="submit-modal-backdrop" data-close-ws-type></div>
+    <div class="submit-modal-box" style="max-width:420px">
+      <div class="submit-modal-head">
+        <h2>Мастерская</h2>
+        <button type="button" class="pub-modal-close" data-close-ws-type aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body create-menu-body">
+        <button type="button" class="create-menu-item" id="ws-type-mod">
+          <span class="create-menu-ico" aria-hidden="true">🧩</span>
+          <span class="create-menu-txt"><strong>Загрузить мод</strong><em>Файлы, описание, скриншоты</em></span>
+        </button>
+        <button type="button" class="create-menu-item" id="ws-type-media">
+          <span class="create-menu-ico" aria-hidden="true">🖼</span>
+          <span class="create-menu-txt"><strong>Загрузить медиа</strong><em>Скриншоты для игры</em></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Мастерская: форма медиа ===== -->
+  <div class="submit-modal hidden" id="ws-media-form-modal">
+    <div class="submit-modal-backdrop" data-close-ws-media-form></div>
+    <div class="submit-modal-box" style="max-width:520px">
+      <div class="submit-modal-head">
+        <h2>Загрузка медиа</h2>
+        <button type="button" class="pub-modal-close" data-close-ws-media-form aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body">
+        <form id="ws-media-form" class="ws-pub-form">
+          <label class="ws-field"><span>Название</span>
+            <input type="text" name="title" class="auth-input" required maxlength="255" placeholder="Название набора скриншотов" />
+          </label>
+          <label class="ws-field"><span>Игра</span>
+            <select name="game_id" id="ws-media-game" class="settings-select" required>
+              <option value="">Загрузка списка…</option>
+            </select>
+          </label>
+          <label class="ws-field"><span>Описание</span>
+            <textarea name="description" class="auth-input" rows="3" placeholder="Кратко о скриншотах"></textarea>
+          </label>
+          <label class="ws-field"><span>Изображения</span>
+            <input type="file" name="images[]" id="ws-media-files" accept="image/*" multiple required />
+            <div class="ws-file-hint" id="ws-media-files-hint">Можно выбрать несколько</div>
+          </label>
+        </form>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close-ws-media-form>Отмена</button>
+        <button type="button" class="hp-btn-edit" id="ws-media-submit" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Отправить на модерацию</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Мастерская: форма мода ===== -->
+  <div class="submit-modal hidden" id="ws-mod-form-modal">
+    <div class="submit-modal-backdrop" data-close-ws-mod-form></div>
+    <div class="submit-modal-box" style="max-width:640px;max-height:90vh;overflow:auto">
+      <div class="submit-modal-head">
+        <h2>Загрузка мода</h2>
+        <button type="button" class="pub-modal-close" data-close-ws-mod-form aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body">
+        <form id="ws-mod-form" class="ws-pub-form">
+          <label class="ws-field"><span>Название</span>
+            <input type="text" name="title" class="auth-input" required maxlength="255" />
+          </label>
+          <label class="ws-field"><span>Игра</span>
+            <select name="game_id" id="ws-mod-game" class="settings-select" required>
+              <option value="">Загрузка списка…</option>
+            </select>
+          </label>
+          <label class="ws-field"><span>Краткое описание</span>
+            <input type="text" name="short_description" class="auth-input" maxlength="500" placeholder="Одна строка для карточки" />
+          </label>
+          <label class="ws-field"><span>Об этом моде</span>
+            <textarea name="about" class="auth-input" rows="3"></textarea>
+          </label>
+          <label class="ws-field"><span>Описание</span>
+            <textarea name="description" class="auth-input" rows="4"></textarea>
+          </label>
+          <label class="ws-field"><span>Инструкция по установке</span>
+            <textarea name="install_instructions" class="auth-input" rows="3"></textarea>
+          </label>
+          <label class="ws-field"><span>Основные характеристики</span>
+            <textarea name="features" class="auth-input" rows="2" placeholder="По одному пункту на строку"></textarea>
+          </label>
+          <label class="ws-field"><span>Зависимости</span>
+            <textarea name="dependencies" class="auth-input" rows="2"></textarea>
+          </label>
+          <label class="ws-field"><span>Путь установки файлов</span>
+            <input type="text" name="install_path" class="auth-input" placeholder="например Data/Meshes/..." />
+          </label>
+          <label class="ws-field"><span>Теги</span>
+            <input type="text" name="tags" class="auth-input" placeholder="через запятую" />
+          </label>
+          <div class="ws-field-row">
+            <label class="ws-field"><span>Обложка</span>
+              <input type="file" name="cover" accept="image/*" />
+            </label>
+            <label class="ws-field"><span>Баннер</span>
+              <input type="file" name="banner" accept="image/*" />
+            </label>
+          </div>
+          <label class="ws-field"><span>Скриншоты</span>
+            <input type="file" name="screenshots[]" accept="image/*" multiple />
+          </label>
+          <label class="ws-field"><span>Файл мода</span>
+            <input type="file" name="mod_file" accept=".zip,.rar,.7z,.pak,.mod,application/zip" required />
+          </label>
+        </form>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close-ws-mod-form>Отмена</button>
+        <button type="button" class="hp-btn-edit" id="ws-mod-submit" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Отправить на модерацию</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Просмотр медиа ===== -->
+  <div class="submit-modal hidden" id="ws-media-view-modal">
+    <div class="submit-modal-backdrop" data-close-ws-media-view></div>
+    <div class="submit-modal-box ws-view-box" style="max-width:720px">
+      <div class="submit-modal-head">
+        <h2 id="ws-mv-title">Медиа</h2>
+        <button type="button" class="pub-modal-close" data-close-ws-media-view aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body">
+        <div class="ws-mv-stage">
+          <button type="button" class="ws-mv-nav prev" id="ws-mv-prev" hidden>‹</button>
+          <img id="ws-mv-img" alt="" />
+          <button type="button" class="ws-mv-nav next" id="ws-mv-next" hidden>›</button>
+        </div>
+        <div class="ws-mv-counter" id="ws-mv-counter"></div>
+        <div class="ws-mv-meta">
+          <span id="ws-mv-date"></span>
+          <span id="ws-mv-author"></span>
+          <span id="ws-mv-views"></span>
+          <button type="button" class="ws-like-btn" id="ws-mv-like">♥ <span>0</span></button>
+        </div>
+        <p class="ws-mv-desc" id="ws-mv-desc"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Просмотр мода (Nexus-like) ===== -->
+  <div class="submit-modal hidden" id="ws-mod-view-modal">
+    <div class="submit-modal-backdrop" data-close-ws-mod-view></div>
+    <div class="submit-modal-box ws-view-box ws-mod-view-box" style="max-width:860px;max-height:92vh;overflow:auto">
+      <div class="ws-modv-hero" id="ws-modv-hero">
+        <div class="ws-modv-hero-bg" id="ws-modv-bg"></div>
+        <div class="ws-modv-hero-inner">
+          <div class="ws-modv-top">
+            <div class="ws-modv-left">
+              <h2 class="ws-modv-title" id="ws-modv-title">Мод</h2>
+              <div class="ws-modv-stats">
+                <span id="ws-modv-views">👁 0</span>
+                <span id="ws-modv-dls">⬇ 0</span>
+                <span id="ws-modv-likes">♥ 0</span>
+              </div>
+            </div>
+            <button type="button" class="ws-modv-install" id="ws-modv-install">Установить</button>
+          </div>
+        </div>
+        <button type="button" class="pub-modal-close ws-modv-close" data-close-ws-mod-view aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body">
+        <div class="ws-modv-carousel" id="ws-modv-carousel">
+          <button type="button" class="ws-mv-nav prev" id="ws-modv-prev" hidden>‹</button>
+          <div class="ws-modv-shots" id="ws-modv-shots"></div>
+          <button type="button" class="ws-mv-nav next" id="ws-modv-next" hidden>›</button>
+        </div>
+        <div class="ws-modv-section">
+          <h3>Описание</h3>
+          <div class="ws-modv-text" id="ws-modv-desc"></div>
+        </div>
+        <div class="ws-modv-section" id="ws-modv-about-wrap">
+          <h3>Об этом моде</h3>
+          <div class="ws-modv-text" id="ws-modv-about"></div>
+        </div>
+        <div class="ws-modv-section" id="ws-modv-install-wrap">
+          <h3>Инструкция по установке</h3>
+          <div class="ws-modv-text" id="ws-modv-install-txt"></div>
+        </div>
+        <div class="ws-modv-section" id="ws-modv-feat-wrap">
+          <h3>Основные характеристики</h3>
+          <div class="ws-modv-text" id="ws-modv-feat"></div>
+        </div>
+        <div class="ws-modv-section" id="ws-modv-deps-wrap">
+          <h3>Зависимости</h3>
+          <div class="ws-modv-text" id="ws-modv-deps"></div>
+        </div>
+        <div class="ws-modv-meta-row">
+          <span id="ws-modv-author"></span>
+          <span id="ws-modv-game"></span>
+          <button type="button" class="ws-like-btn" id="ws-modv-like">♥ <span>0</span></button>
+        </div>
       </div>
     </div>
   </div>
@@ -2004,7 +2261,7 @@ function socialAuth(provider) {
               <label class="settings-label"><span>Разработчик</span><input class="auth-input" name="developer" id="sg-developer" maxlength="120" placeholder="Студия или автор" /></label>
               <label class="settings-label"><span>Издательство</span>
                 <select class="settings-select" id="sg-publisher-id" name="publisher_id">
-                  <option value="">— без издательства —</option>
+                  <option value="">— выберите издательство —</option>
                 </select>
               </label>
               <input type="hidden" name="publisher" id="sg-publisher" value="" />
@@ -2173,6 +2430,41 @@ function socialAuth(provider) {
                 <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
               </div>
             </div>
+          </section>
+
+          <section class="pub-section" id="sg-builds-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+              <h3>Сборки и файлы</h3>
+            </div>
+            <p class="pub-hint">Загрузите exe / zip / 7z и укажите версию. Без файла и версии игра не уйдёт на модерацию.</p>
+            <div class="ws-ff" style="margin-bottom:10px">
+              <span>Версия *</span>
+              <input type="text" class="auth-input" id="sg-build-version" placeholder="1.0.0" maxlength="32" />
+            </div>
+            <div class="ws-ff" style="margin-bottom:10px">
+              <span>Платформа</span>
+              <select class="settings-select" id="sg-build-platform" style="width:100%">
+                <option value="windows">Windows</option>
+                <option value="linux">Linux</option>
+                <option value="mac">macOS</option>
+              </select>
+            </div>
+            <div class="ws-ff" style="margin-bottom:10px">
+              <span>Описание изменений</span>
+              <input type="text" class="auth-input" id="sg-build-changelog" placeholder="Что нового в этой версии…" maxlength="500" />
+            </div>
+            <div class="ws-ff" style="margin-bottom:10px">
+              <span>Файл сборки *</span>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <label class="pub-file-btn" for="sg-build-file">Выбрать файл</label>
+                <input type="file" id="sg-build-file" accept=".exe,.zip,.7z,.rar,.msi,.dmg,.appimage,.tar,.gz" hidden />
+                <span class="settings-hint" id="sg-build-file-name">ZIP / EXE / 7z / DMG…</span>
+              </div>
+            </div>
+            <button type="button" class="hp-btn-edit" id="sg-build-add" style="margin-bottom:12px">+ Добавить сборку</button>
+            <input type="hidden" id="sg-builds-json" name="builds_meta" value="[]" />
+            <div id="sg-builds-list"></div>
           </section>
 
           <section class="pub-section">
@@ -2492,6 +2784,36 @@ function socialAuth(provider) {
   </div>
 </div>
 
+<!-- ===== Модалка установки игры ===== -->
+<div class="submit-modal hidden" id="install-modal">
+  <div class="submit-modal-backdrop" data-close-install></div>
+  <div class="submit-modal-box" style="max-width:440px">
+    <div class="submit-modal-head">
+      <h2>Установить</h2>
+      <button type="button" class="pub-modal-close" data-close-install aria-label="Закрыть">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="submit-modal-body">
+      <div class="install-game-row">
+        <div class="install-game-cover" id="install-cover"></div>
+        <div class="install-game-meta">
+          <div class="install-game-title" id="install-title">Игра</div>
+          <div class="install-game-size" id="install-size">—</div>
+        </div>
+      </div>
+      <label class="ws-ff" style="margin-top:14px">
+        <span>Версия</span>
+        <select class="settings-select" id="install-version" style="width:100%"></select>
+      </label>
+      <p class="settings-hint" style="margin-top:10px">Файлы: AppData\Roaming\CATio\games\…</p>
+    </div>
+    <div class="submit-modal-foot">
+      <button type="button" class="hp-btn-edit" data-close-install>Отмена</button>
+      <button type="button" class="hp-btn-edit" id="install-confirm" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Установить</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

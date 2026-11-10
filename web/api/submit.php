@@ -24,10 +24,18 @@ function ensure_game_builds_table(PDO $pdo): void {
             file_url VARCHAR(512) NOT NULL DEFAULT '',
             file_name VARCHAR(255) NOT NULL DEFAULT '',
             file_size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            status VARCHAR(16) NOT NULL DEFAULT 'published',
+            submitted_by INT UNSIGNED NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_game (game_id)
+            INDEX idx_game (game_id),
+            INDEX idx_status (status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (Throwable $e) {}
+    // migrate older tables
+    try { $pdo->exec("ALTER TABLE game_builds ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'published'"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE game_builds ADD COLUMN submitted_by INT UNSIGNED NULL"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE game_builds ADD COLUMN changelog TEXT NULL"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE game_builds ADD COLUMN file_name VARCHAR(255) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
 }
 
 function save_builds_from_request(PDO $pdo, int $gameId): void {
@@ -64,16 +72,20 @@ function save_builds_from_request(PDO $pdo, int $gameId): void {
         }
     }
 
-    $ins = $pdo->prepare("INSERT INTO game_builds (game_id, platform, version, changelog, file_url, file_name, file_size_bytes) VALUES (?,?,?,?,?,?,?)");
-    foreach ($meta as $item) {
+    $status = !empty($GLOBALS['__build_status_override'])
+        ? (string)$GLOBALS['__build_status_override']
+        : 'pending';
+    $uid = isset($GLOBALS['__build_submitted_by']) ? (int)$GLOBALS['__build_submitted_by'] : null;
+    $ins = $pdo->prepare("INSERT INTO game_builds (game_id, platform, version, changelog, file_url, file_name, file_size_bytes, status, submitted_by) VALUES (?,?,?,?,?,?,?,?,?)");
+    foreach ($meta as $i => $item) {
         if (!is_array($item)) continue;
-        $idx = (string)($item['i'] ?? $item['idx'] ?? '');
+        $idx = (string)($item['i'] ?? $item['idx'] ?? $i);
         $version = trim((string)($item['version'] ?? '1.0')) ?: '1.0';
         $platform = trim((string)($item['platform'] ?? 'windows')) ?: 'windows';
         $changelog = trim((string)($item['changelog'] ?? ''));
         $existingId = (int)($item['id'] ?? 0);
         // already on server — skip re-upload
-        if ($existingId > 0 && empty($item['has_file'])) continue;
+        if ($existingId > 0 && empty($item['has_file']) && empty($filesBag[$idx])) continue;
 
         $file = $filesBag[$idx] ?? null;
         if (!$file) continue;
@@ -85,7 +97,8 @@ function save_builds_from_request(PDO $pdo, int $gameId): void {
         $rel = 'uploads/games/builds/' . $gameId . '/' . $safe;
         $ins->execute([
             $gameId, $platform, $version, $changelog,
-            $rel, $file['name'], (int)$file['size']
+            $rel, $file['name'], (int)$file['size'],
+            $status, $uid
         ]);
     }
 }
@@ -736,6 +749,10 @@ try {
             $adminId = (int)($user['id'] ?? 0);
             if ($action === 'publish') {
                 $pdo->prepare("UPDATE games SET status='published', is_published=1, category=IF(category='' OR category IS NULL,'game',category) WHERE id=?")->execute([$id]);
+                try {
+                    ensure_game_builds_table($pdo);
+                    $pdo->prepare("UPDATE game_builds SET status='published' WHERE game_id=? AND (status='pending' OR status IS NULL OR status='')")->execute([$id]);
+                } catch (Throwable $e) {}
                 $type = 'game_published';
                 $titleN = 'Ваша игра опубликована';
                 $bodyN = 'Игра «' . $g['title'] . '» прошла модерацию. Рассмотрел: ' . $adminName;
@@ -920,9 +937,101 @@ try {
             ensure_game_builds_table($pdo);
             $id = (int)($_GET['game_id'] ?? 0);
             if ($id <= 0) { echo json_encode(['ok'=>false,'error'=>'game_id']); break; }
-            $st = $pdo->prepare("SELECT id, game_id, platform, version, changelog, file_url, file_name, file_size_bytes, created_at FROM game_builds WHERE game_id = ? ORDER BY id DESC");
+            $user = getCurrentUser();
+            $isAdmin = $user && (($user['role'] ?? '') === 'admin');
+            $sql = "SELECT id, game_id, platform, version, changelog, file_url, file_name, file_size_bytes, status, created_at FROM game_builds WHERE game_id = ?";
+            if (!$isAdmin) $sql .= " AND (status = 'published' OR status IS NULL OR status = '')";
+            $sql .= " ORDER BY id DESC";
+            $st = $pdo->prepare($sql);
             $st->execute([$id]);
             echo json_encode(['ok'=>true, 'builds'=>$st->fetchAll(PDO::FETCH_ASSOC)], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        case 'pending_builds': {
+            $user = requireUserS();
+            if (($user['role'] ?? '') !== 'admin') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'Нет доступа']); break; }
+            ensure_game_builds_table($pdo);
+            $st = $pdo->query("SELECT b.*, g.title AS game_title, g.cover_url, g.banner_url, g.icon_url,
+                u.username AS author_name
+                FROM game_builds b
+                JOIN games g ON g.id = b.game_id
+                LEFT JOIN users u ON u.id = b.submitted_by
+                WHERE b.status = 'pending'
+                ORDER BY b.created_at ASC
+                LIMIT 100");
+            echo json_encode(['ok'=>true, 'builds'=>$st->fetchAll(PDO::FETCH_ASSOC)], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        case 'approve_build':
+        case 'reject_build': {
+            if ($method !== 'POST') { echo json_encode(['ok'=>false]); break; }
+            $user = requireUserS();
+            if (($user['role'] ?? '') !== 'admin') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'Нет доступа']); break; }
+            $body = json_decode(file_get_contents('php://input'), true);
+            if (!is_array($body)) $body = $_POST;
+            if (!verifyCsrfToken($body['csrf_token'] ?? '')) { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'CSRF']); break; }
+            ensure_game_builds_table($pdo);
+            $bid = (int)($body['id'] ?? 0);
+            if ($bid <= 0) { echo json_encode(['ok'=>false,'error'=>'id']); break; }
+            $st = $pdo->prepare("SELECT b.*, g.title AS game_title, g.id AS gid FROM game_builds b JOIN games g ON g.id = b.game_id WHERE b.id = ?");
+            $st->execute([$bid]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$row) { echo json_encode(['ok'=>false,'error'=>'Не найдено']); break; }
+
+            if ($action === 'approve_build') {
+                $pdo->prepare("UPDATE game_builds SET status = 'published' WHERE id = ?")->execute([$bid]);
+                // notify publisher
+                if (!empty($row['submitted_by'])) {
+                    try {
+                        $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)")
+                            ->execute([
+                                (int)$row['submitted_by'], 'build_approved',
+                                'Обновление одобрено',
+                                'Версия ' . $row['version'] . ' для «' . $row['game_title'] . '» опубликована',
+                                json_encode(['game_id'=>(int)$row['gid'], 'build_id'=>$bid, 'version'=>$row['version']], JSON_UNESCAPED_UNICODE)
+                            ]);
+                    } catch (Throwable $e) {}
+                }
+                // notify publisher subscribers
+                try {
+                    $subs = $pdo->prepare("SELECT DISTINCT ps.user_id FROM publisher_subscriptions ps
+                        JOIN publisher_members pm ON pm.publisher_id = ps.publisher_id
+                        JOIN games g ON g.submitted_by = pm.user_id OR g.publisher_id = ps.publisher_id
+                        WHERE g.id = ?");
+                    $subs->execute([(int)$row['gid']]);
+                    $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)");
+                    foreach ($subs->fetchAll(PDO::FETCH_ASSOC) as $s) {
+                        $ins->execute([
+                            (int)$s['user_id'], 'game_update',
+                            'Обновление: ' . $row['game_title'],
+                            'Вышла версия ' . $row['version'] . (!empty($row['changelog']) ? ' — ' . mb_substr($row['changelog'], 0, 120) : ''),
+                            json_encode(['game_id'=>(int)$row['gid'], 'build_id'=>$bid, 'version'=>$row['version']], JSON_UNESCAPED_UNICODE)
+                        ]);
+                    }
+                } catch (Throwable $e) {}
+                echo json_encode(['ok'=>true, 'status'=>'published']);
+            } else {
+                // reject — delete file and row so page stays without new build
+                if (!empty($row['file_url'])) {
+                    $path = dirname(__DIR__) . '/' . ltrim($row['file_url'], '/');
+                    if (is_file($path)) @unlink($path);
+                }
+                $pdo->prepare("DELETE FROM game_builds WHERE id = ?")->execute([$bid]);
+                if (!empty($row['submitted_by'])) {
+                    try {
+                        $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)")
+                            ->execute([
+                                (int)$row['submitted_by'], 'build_rejected',
+                                'Обновление отклонено',
+                                'Версия ' . $row['version'] . ' для «' . $row['game_title'] . '» отклонена модератором',
+                                json_encode(['game_id'=>(int)$row['gid'], 'version'=>$row['version']], JSON_UNESCAPED_UNICODE)
+                            ]);
+                    } catch (Throwable $e) {}
+                }
+                echo json_encode(['ok'=>true, 'status'=>'rejected']);
+            }
             break;
         }
 

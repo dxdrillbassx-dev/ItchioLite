@@ -418,14 +418,22 @@ function getDB() {
             slug VARCHAR(255) NOT NULL DEFAULT '',
             short_description VARCHAR(512) DEFAULT NULL,
             description TEXT,
+            about TEXT,
+            install_instructions TEXT,
+            features TEXT,
+            dependencies TEXT,
+            install_path VARCHAR(512) DEFAULT NULL,
             cover_url VARCHAR(512) DEFAULT NULL,
+            banner_url VARCHAR(512) DEFAULT NULL,
+            screenshots TEXT,
             file_url VARCHAR(512) DEFAULT NULL,
             file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
             downloads INT UNSIGNED NOT NULL DEFAULT 0,
             likes INT UNSIGNED NOT NULL DEFAULT 0,
+            views INT UNSIGNED NOT NULL DEFAULT 0,
             tags VARCHAR(512) NOT NULL DEFAULT '',
             languages VARCHAR(255) NOT NULL DEFAULT '',
-            status ENUM('draft','pending','published','rejected') NOT NULL DEFAULT 'published',
+            status ENUM('draft','pending','published','rejected') NOT NULL DEFAULT 'pending',
             last_download_at TIMESTAMP NULL DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -436,19 +444,59 @@ function getDB() {
             INDEX idx_wm_likes (likes)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+        // миграции колонок для уже существующих таблиц
+        try {
+            $cols = [
+                'about' => 'TEXT',
+                'install_instructions' => 'TEXT',
+                'features' => 'TEXT',
+                'dependencies' => 'TEXT',
+                'install_path' => 'VARCHAR(512) DEFAULT NULL',
+                'banner_url' => 'VARCHAR(512) DEFAULT NULL',
+                'screenshots' => 'TEXT',
+                'views' => 'INT UNSIGNED NOT NULL DEFAULT 0',
+            ];
+            foreach ($cols as $col => $def) {
+                $chk = $pdo->query("SHOW COLUMNS FROM workshop_mods LIKE " . $pdo->quote($col))->fetch();
+                if (!$chk) $pdo->exec("ALTER TABLE workshop_mods ADD COLUMN `$col` $def");
+            }
+        } catch (Throwable $e) {}
+
         $pdo->exec("CREATE TABLE IF NOT EXISTS workshop_media (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             game_id INT UNSIGNED NOT NULL,
             user_id INT UNSIGNED NOT NULL,
             title VARCHAR(255) NOT NULL DEFAULT '',
-            image_url VARCHAR(512) NOT NULL,
+            description TEXT,
+            image_url VARCHAR(512) NOT NULL DEFAULT '',
+            images TEXT,
             likes INT UNSIGNED NOT NULL DEFAULT 0,
             views INT UNSIGNED NOT NULL DEFAULT 0,
-            status ENUM('draft','pending','published','rejected') NOT NULL DEFAULT 'published',
+            status ENUM('draft','pending','published','rejected') NOT NULL DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_wmed_game (game_id),
             INDEX idx_wmed_user (user_id),
             INDEX idx_wmed_status_created (status, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        try {
+            $cols = [
+                'description' => 'TEXT',
+                'images' => 'TEXT',
+            ];
+            foreach ($cols as $col => $def) {
+                $chk = $pdo->query("SHOW COLUMNS FROM workshop_media LIKE " . $pdo->quote($col))->fetch();
+                if (!$chk) $pdo->exec("ALTER TABLE workshop_media ADD COLUMN `$col` $def");
+            }
+        } catch (Throwable $e) {}
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS workshop_likes (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            target_type ENUM('mod','media') NOT NULL,
+            target_id INT UNSIGNED NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_ws_like (user_id, target_type, target_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         return $pdo;

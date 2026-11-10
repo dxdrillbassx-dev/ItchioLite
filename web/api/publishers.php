@@ -13,6 +13,10 @@ function jsonOut($data, $code = 200) {
 
 function requireUserP() {
     $u = getCurrentUser();
+    // снять lock сессии — иначе GET mine может висеть пока открыт другой запрос
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        @session_write_close();
+    }
     if (!$u) jsonOut(['ok' => false, 'error' => 'Войдите в аккаунт'], 401);
     return $u;
 }
@@ -57,64 +61,28 @@ try {
             $user = requireUserP();
             $uid = (int)$user['id'];
 
-            // Починить membership для всех своих owner-издательств
+            // heal: owner без записи в members
             try {
-                $own = $pdo->prepare("SELECT id FROM publishers WHERE owner_id = ?");
-                $own->execute([$uid]);
-                $ins = $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')");
-                foreach ($own->fetchAll(PDO::FETCH_COLUMN) ?: [] as $pid) {
-                    $ins->execute([(int)$pid, $uid]);
-                }
+                $pdo->prepare("
+                    INSERT IGNORE INTO publisher_members (publisher_id, user_id, role)
+                    SELECT id, ?, 'owner' FROM publishers WHERE owner_id = ?
+                ")->execute([$uid, $uid]);
             } catch (Throwable $e) {}
 
-            // Прямой запрос: membership UNION owner
-            $sql = "
-              SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id, pm.role AS my_role
-              FROM publisher_members pm
-              INNER JOIN publishers p ON p.id = pm.publisher_id
-              WHERE pm.user_id = ?
-              UNION
-              SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id, 'owner' AS my_role
-              FROM publishers p
-              WHERE p.owner_id = ?
-              ORDER BY name ASC
-            ";
-            $st = $pdo->prepare($sql);
-            $st->execute([$uid, $uid]);
-            $raw = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-            // unique by id
-            $byId = [];
-            foreach ($raw as $r) {
-                $id = (int)$r['id'];
-                if (!isset($byId[$id])) $byId[$id] = $r;
-            }
-            $rows = array_values($byId);
-
-            foreach ($rows as &$r) {
-                $pid = (int)$r['id'];
-                $r['id'] = $pid;
-                $r['members_count'] = 1;
-                $r['games_count'] = 0;
-                try {
-                    $c = $pdo->prepare("SELECT COUNT(*) FROM publisher_members WHERE publisher_id = ?");
-                    $c->execute([$pid]);
-                    $r['members_count'] = (int)$c->fetchColumn();
-                } catch (Throwable $e) {}
-                try {
-                    $c = $pdo->prepare("SELECT COUNT(*) FROM games WHERE publisher_id = ?");
-                    $c->execute([$pid]);
-                    $r['games_count'] = (int)$c->fetchColumn();
-                } catch (Throwable $e) {}
-            }
+            // один запрос — мои издательства
+            $st = $pdo->prepare("
+                SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id, pm.role AS my_role
+                FROM publisher_members pm
+                INNER JOIN publishers p ON p.id = pm.publisher_id
+                WHERE pm.user_id = ?
+                ORDER BY p.name ASC
+            ");
+            $st->execute([$uid]);
+            $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($rows as &$r) { $r['id'] = (int)$r['id']; }
             unset($r);
 
-            jsonOut([
-                'ok' => true,
-                'publishers' => $rows,
-                'user_id' => $uid,
-                'count' => count($rows),
-            ]);
+            jsonOut(['ok' => true, 'publishers' => $rows, 'user_id' => $uid, 'count' => count($rows)]);
         }
 
         case 'get': {
@@ -265,14 +233,30 @@ try {
         case 'for_user': {
             $uid = (int)($_GET['user_id'] ?? 0);
             if ($uid <= 0) jsonOut(['ok'=>false,'error'=>'user_id'], 400);
-            $st = $pdo->prepare("
-                SELECT p.id, p.name, p.slug, p.avatar_url, pm.role
-                FROM publisher_members pm
-                JOIN publishers p ON p.id = pm.publisher_id
-                WHERE pm.user_id = ?
-                ORDER BY pm.role = 'owner' DESC, p.name ASC
-            ");
-            $st->execute([$uid]);
+            $rows = [];
+            try {
+                $st = $pdo->prepare("
+                    SELECT p.id, p.name, p.slug, p.avatar_url, pm.role
+                    FROM publisher_members pm
+                    JOIN publishers p ON p.id = pm.publisher_id
+                    WHERE pm.user_id = ?
+                    ORDER BY pm.role = 'owner' DESC, p.name ASC
+                ");
+                $st->execute([$uid]);
+                $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable $e) {}
+            // owner_id fallback
+            try {
+                $st2 = $pdo->prepare("SELECT id, name, slug, avatar_url, 'owner' AS role FROM publishers WHERE owner_id = ?");
+                $st2->execute([$uid]);
+                foreach ($st2->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                    $found = false;
+                    foreach ($rows as $ex) {
+                        if ((int)$ex['id'] === (int)$r['id']) { $found = true; break; }
+                    }
+                    if (!$found) $rows[] = $r;
+                }
+            } catch (Throwable $e) {}
             $display = null;
             try {
                 $d = $pdo->prepare("SELECT display_publisher_id FROM users WHERE id = ?");
@@ -283,7 +267,7 @@ try {
                     if ($display !== null) $display = (int)$display;
                 }
             } catch (Throwable $e) {}
-            jsonOut(['ok'=>true, 'publishers'=>$st->fetchAll(), 'display_publisher_id'=>$display]);
+            jsonOut(['ok'=>true, 'publishers'=>$rows, 'display_publisher_id'=>$display]);
         }
 
         case 'set_display': {
