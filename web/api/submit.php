@@ -9,6 +9,88 @@ set_exception_handler(function ($e) {
     exit;
 });
 
+
+function ensure_game_builds_table(PDO $pdo): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS game_builds (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            game_id INT UNSIGNED NOT NULL,
+            platform VARCHAR(32) NOT NULL DEFAULT 'windows',
+            version VARCHAR(64) NOT NULL DEFAULT '1.0',
+            changelog TEXT NULL,
+            file_url VARCHAR(512) NOT NULL DEFAULT '',
+            file_name VARCHAR(255) NOT NULL DEFAULT '',
+            file_size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_game (game_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) {}
+}
+
+function save_builds_from_request(PDO $pdo, int $gameId): void {
+    ensure_game_builds_table($pdo);
+    $metaRaw = trim((string)($_POST['builds_meta'] ?? ''));
+    $meta = [];
+    if ($metaRaw !== '') {
+        $j = json_decode($metaRaw, true);
+        if (is_array($j)) $meta = $j;
+    }
+    $root = dirname(__DIR__) . '/uploads/games/builds/' . $gameId;
+    if (!is_dir($root)) @mkdir($root, 0755, true);
+
+    // PHP may parse builds[0] as $_FILES['builds'] with nested name/tmp_name arrays
+    $filesBag = [];
+    if (!empty($_FILES['builds']) && is_array($_FILES['builds']['name'] ?? null)) {
+        foreach ($_FILES['builds']['name'] as $k => $name) {
+            if (($_FILES['builds']['error'][$k] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+            $filesBag[(string)$k] = [
+                'name' => $name,
+                'tmp_name' => $_FILES['builds']['tmp_name'][$k],
+                'size' => (int)($_FILES['builds']['size'][$k] ?? 0),
+                'error' => (int)$_FILES['builds']['error'][$k],
+            ];
+        }
+    } else {
+        // builds[0], builds[1] as separate fields
+        foreach ($_FILES as $key => $f) {
+            if (preg_match('/^builds_(\d+)$/', $key, $m) || preg_match('/^builds\[(\d+)\]$/', $key, $m)) {
+                if (($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+                    $filesBag[$m[1]] = $f;
+                }
+            }
+        }
+    }
+
+    $ins = $pdo->prepare("INSERT INTO game_builds (game_id, platform, version, changelog, file_url, file_name, file_size_bytes) VALUES (?,?,?,?,?,?,?)");
+    foreach ($meta as $item) {
+        if (!is_array($item)) continue;
+        $idx = (string)($item['i'] ?? $item['idx'] ?? '');
+        $version = trim((string)($item['version'] ?? '1.0')) ?: '1.0';
+        $platform = trim((string)($item['platform'] ?? 'windows')) ?: 'windows';
+        $changelog = trim((string)($item['changelog'] ?? ''));
+        $existingId = (int)($item['id'] ?? 0);
+        // already on server — skip re-upload
+        if ($existingId > 0 && empty($item['has_file'])) continue;
+
+        $file = $filesBag[$idx] ?? null;
+        if (!$file) continue;
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if ($ext === '') $ext = 'bin';
+        $safe = bin2hex(random_bytes(8)) . '.' . preg_replace('/[^a-z0-9]+/i', '', $ext);
+        $dest = $root . '/' . $safe;
+        if (!move_uploaded_file($file['tmp_name'], $dest)) continue;
+        $rel = 'uploads/games/builds/' . $gameId . '/' . $safe;
+        $ins->execute([
+            $gameId, $platform, $version, $changelog,
+            $rel, $file['name'], (int)$file['size']
+        ]);
+    }
+}
+
+
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
@@ -253,6 +335,7 @@ try {
             ]);
             $gameId = (int)$pdo->lastInsertId();
             insert_trailer_media($pdo, $gameId, $video);
+            try { save_builds_from_request($pdo, (int)$gameId); } catch (Throwable $e) {}
 
             // trailers from pack (local uploads paths)
             $trailerUrls = trim((string)($_POST['trailer_urls'] ?? ''));
@@ -406,7 +489,59 @@ try {
             }
             $media = $pdo->prepare("SELECT id, kind, url, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order");
             $media->execute([$id]);
-            $g['media'] = $media->fetchAll();
+            $g['media'] = $media->fetchAll() ?: [];
+            // скриншоты из game_screenshots, если не попали в game_media
+            $shotUrls = [];
+            foreach ($g['media'] as $m) {
+                $k = strtolower((string)($m['kind'] ?? ''));
+                if (in_array($k, ['screenshot', 'shot', 'screen'], true) && !empty($m['url'])) {
+                    $shotUrls[] = $m['url'];
+                }
+            }
+            try {
+                $ss = $pdo->prepare("SELECT image_url AS url FROM game_screenshots WHERE game_id = ? ORDER BY sort ASC, id ASC");
+                $ss->execute([$id]);
+                foreach ($ss->fetchAll() ?: [] as $row) {
+                    $u = trim((string)($row['url'] ?? ''));
+                    if ($u !== '' && !in_array($u, $shotUrls, true)) {
+                        $shotUrls[] = $u;
+                        $g['media'][] = ['id' => 0, 'kind' => 'screenshot', 'url' => $u, 'sort_order' => 0];
+                    }
+                }
+            } catch (Throwable $e) {}
+            $g['screenshots'] = $shotUrls;
+            // трейлеры из media, если video_url один/пустой
+            $trailerUrls = [];
+            $rawV = trim((string)($g['video_url'] ?? ''));
+            if ($rawV !== '') {
+                if ($rawV[0] === '[') {
+                    $j = json_decode($rawV, true);
+                    if (is_array($j)) {
+                        foreach ($j as $item) {
+                            if (is_string($item) && trim($item) !== '') $trailerUrls[] = trim($item);
+                            elseif (is_array($item)) {
+                                $u = trim((string)($item['url'] ?? $item['src'] ?? ''));
+                                if ($u !== '') $trailerUrls[] = $u;
+                            }
+                        }
+                    }
+                } else {
+                    $trailerUrls[] = $rawV;
+                }
+            }
+            foreach ($g['media'] as $m) {
+                $k = strtolower((string)($m['kind'] ?? ''));
+                if (in_array($k, ['trailer', 'video', 'movie'], true) && !empty($m['url'])) {
+                    $u = trim($m['url']);
+                    if ($u !== '' && !in_array($u, $trailerUrls, true)) $trailerUrls[] = $u;
+                }
+            }
+            if (count($trailerUrls) > 1) {
+                $g['video_url'] = json_encode(array_values($trailerUrls), JSON_UNESCAPED_UNICODE);
+            } elseif (count($trailerUrls) === 1) {
+                $g['video_url'] = $trailerUrls[0];
+            }
+            $g['videos'] = array_map(function ($u) { return ['url' => $u]; }, $trailerUrls);
             echo json_encode(['ok' => true, 'game' => $g], JSON_UNESCAPED_UNICODE);
             break;
 
@@ -572,6 +707,7 @@ try {
             }
 
             insert_trailer_media($pdo, (int)$id, $fields['video_url'] ?? '');
+            try { save_builds_from_request($pdo, (int)$id); } catch (Throwable $e) {}
 
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
             break;
@@ -778,6 +914,43 @@ try {
 
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
             break;
+
+        
+        case 'list_builds': {
+            ensure_game_builds_table($pdo);
+            $id = (int)($_GET['game_id'] ?? 0);
+            if ($id <= 0) { echo json_encode(['ok'=>false,'error'=>'game_id']); break; }
+            $st = $pdo->prepare("SELECT id, game_id, platform, version, changelog, file_url, file_name, file_size_bytes, created_at FROM game_builds WHERE game_id = ? ORDER BY id DESC");
+            $st->execute([$id]);
+            echo json_encode(['ok'=>true, 'builds'=>$st->fetchAll(PDO::FETCH_ASSOC)], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        case 'delete_build': {
+            if ($method !== 'POST') { echo json_encode(['ok'=>false]); break; }
+            $user = requireUserS();
+            $body = json_decode(file_get_contents('php://input'), true);
+            if (!is_array($body)) $body = $_POST;
+            if (!verifyCsrfToken($body['csrf_token'] ?? '')) { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'CSRF']); break; }
+            ensure_game_builds_table($pdo);
+            $bid = (int)($body['id'] ?? 0);
+            if ($bid <= 0) { echo json_encode(['ok'=>false,'error'=>'id']); break; }
+            $st = $pdo->prepare("SELECT b.*, g.submitted_by FROM game_builds b LEFT JOIN games g ON g.id = b.game_id WHERE b.id = ?");
+            $st->execute([$bid]);
+            $row = $st->fetch();
+            if (!$row) { echo json_encode(['ok'=>false,'error'=>'Не найдено']); break; }
+            $isAdmin = (($user['role'] ?? '') === 'admin');
+            $isOwner = ((int)($row['submitted_by'] ?? 0) === (int)$user['id']);
+            if (!$isAdmin && !$isOwner) { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'Нет доступа']); break; }
+            if (!empty($row['file_url'])) {
+                $path = dirname(__DIR__) . '/' . ltrim($row['file_url'], '/');
+                if (is_file($path)) @unlink($path);
+            }
+            $pdo->prepare("DELETE FROM game_builds WHERE id = ?")->execute([$bid]);
+            echo json_encode(['ok'=>true]);
+            break;
+        }
+
 
         default:
             http_response_code(400);

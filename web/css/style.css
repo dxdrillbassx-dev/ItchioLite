@@ -1305,7 +1305,7 @@ button.avatar:hover {
   opacity: 0;
   pointer-events: none;
   transition: opacity .2s ease, transform .2s ease;
-  z-index: 400;
+  z-index: 2147483646 !important;
   max-width: min(90vw, 480px);
   text-align: center;
 }
@@ -8989,8 +8989,8 @@ body.client #view-admin.view.active {
   position: relative;
   width: min(920px, 94vw);
   height: min(640px, 88vh);
-  background: #1b1b1b;
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
@@ -9000,8 +9000,9 @@ body.client #view-admin.view.active {
 .sgdb-modal-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  background: var(--bg-elevated);
 }
 .sgdb-modal-head h3 {
   margin: 0; font-size: 0.95rem; font-weight: 600; color: #eee;
@@ -9016,8 +9017,8 @@ body.client #view-admin.view.active {
 }
 .sgdb-nav {
   width: 200px; flex-shrink: 0;
-  background: #151515;
-  border-right: 1px solid rgba(255,255,255,0.06);
+  background: var(--bg);
+  border-right: 1px solid var(--border);
   padding: 10px 8px;
   display: flex; flex-direction: column; gap: 2px;
   overflow-y: auto;
@@ -9048,7 +9049,7 @@ body.client #view-admin.view.active {
   min-height: 0;
   padding: 0;
   overflow: hidden;
-  background: #1b1b1b;
+  background: var(--bg-elevated);
   display: flex;
   flex-direction: column;
 }
@@ -11737,7 +11738,7 @@ select.select-native-hidden,
 }
 
 /* Publish game modal */
-.pub-modal-box { max-width: 720px !important; }
+.pub-modal-box { max-width: min(920px, 94vw); }
 .pub-modal-head h2 { margin: 0; }
 .pub-modal-sub {
   margin: 4px 0 0;
@@ -11745,7 +11746,7 @@ select.select-native-hidden,
   color: var(--text-muted);
   font-weight: 400;
 }
-.pub-modal-body { max-height: min(70vh, 640px); }
+.pub-modal-body { max-height: none; }
 .pub-section {
   padding: 14px 0;
   border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -12029,8 +12030,8 @@ select.select-native-hidden,
 }
 
 /* Admin edit modal — как публикация */
-#admin-game-edit-modal .pub-modal-box { max-width: 720px !important; }
-#admin-game-edit-modal .pub-modal-body { max-height: min(70vh, 640px); }
+#admin-game-edit-modal .pub-modal-box { max-width: min(920px, 94vw); }
+#admin-game-edit-modal .pub-modal-body { max-height: none; }
 #admin-game-edit-modal .admin-edit-foot {
   display: flex;
   align-items: center;
@@ -14043,3 +14044,536 @@ body.client .content > .main > #view-home.active {
   #view-admin .admin-layout { grid-template-columns: 1fr; }
 }
 
+
+
+/* ===== Кнопка админки в шапке (между поиском и корзиной) ===== */
+.head-admin {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.head-admin:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+  color: var(--text-bright);
+}
+.head-admin .admin-badge,
+.admin-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
+}
+.head-admin .admin-badge.hidden,
+.admin-badge.hidden { display: none !important; }
+.settings-nav-btn .admin-mod-count {
+  margin-left: 8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.settings-nav-btn .admin-mod-count:empty,
+.settings-nav-btn .admin-mod-count.hidden { display: none !important; }
+
+/* readonly developer/publisher on moderation */
+#sg-developer.is-readonly,
+#sg-publisher-id.is-readonly {
+  opacity: 0.85;
+  pointer-events: none;
+  background: var(--bg-elevated);
+  cursor: default;
+}
+
+
+
+}
+
+/* ===== Публикация/редактирование — 1 в 1 как sgdb-modal (настройки игры) ===== */
+#submit-form-modal.submit-modal {
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#submit-form-modal.hidden { display: none !important; }
+#submit-form-modal .submit-modal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(2px);
+}
+#submit-form-modal .submit-modal-box.pub-modal-box,
+#submit-form-modal .submit-modal-wide {
+  position: relative;
+  width: min(920px, 94vw) !important;
+  max-width: min(920px, 94vw) !important;
+  height: min(640px, 88vh) !important;
+  max-height: min(640px, 88vh) !important;
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-shadow: var(--shadow);
+  padding: 0 !important;
+  margin: 0 !important;
+}
+#submit-form-modal .sgdb-like-head,
+#submit-form-modal .pub-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+}
+#submit-form-modal .pub-modal-head h2,
+#submit-form-modal .sgdb-like-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #eee;
+}
+#submit-form-modal .pub-modal-sub { display: none !important; }
+#submit-form-modal .pub-modal-close {
+  background: none; border: none; color: #999;
+  font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+#submit-form-modal .pub-modal-close:hover { color: #fff; }
+
+#submit-form-modal .submit-modal-body.pub-modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#submit-form-modal #submit-game-form.pub-form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+#submit-form-modal .pub-form-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  border: none !important;
+  border-radius: 0 !important;
+  overflow: hidden;
+  background: transparent !important;
+  max-height: none !important;
+}
+#submit-form-modal .pub-form-nav {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+#submit-form-modal .pub-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #b8b0a6;
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+#submit-form-modal .pub-nav-btn svg { flex-shrink: 0; opacity: 0.85; }
+#submit-form-modal .pub-nav-btn:hover { background: rgba(255,255,255,0.05); color: #eee; }
+#submit-form-modal .pub-nav-btn.active {
+  background: rgba(239, 91, 44, 0.18);
+  color: #fff;
+  font-weight: 600;
+}
+#submit-form-modal .pub-form-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+}
+#submit-form-modal .pub-pane {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px;
+  overflow-y: auto;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+}
+#submit-form-modal .pub-pane.active { display: block; }
+#submit-form-modal .pub-pane-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 14px;
+}
+#submit-form-modal .pub-section-head,
+#submit-form-modal .pub-section-ico { display: none !important; }
+
+/* горизонтальные табы медиа — как Иконка/Логотип/Баннер/Обложка */
+#submit-form-modal .pub-media-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin: 0 0 16px;
+  flex-shrink: 0;
+}
+#submit-form-modal .pub-media-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #999;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: -1px;
+}
+#submit-form-modal .pub-media-tab:hover { color: #ddd; }
+#submit-form-modal .pub-media-tab.active {
+  color: #fff;
+  border-bottom-color: #ef5b2c;
+}
+
+#submit-form-modal .submit-modal-foot {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: 12px 18px;
+  background: var(--bg-elevated);
+  margin: 0 !important;
+}
+
+/* убрать «карточки в карточке» у полей */
+#submit-form-modal .pub-pane .settings-label span {
+  color: #9a948c;
+  font-size: 0.8rem;
+}
+#submit-form-modal .auth-input,
+#submit-form-modal .settings-select {
+  background: #141414;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+}
+#submit-form-modal .pub-file-preview,
+#submit-form-modal .pub-file-preview--icon {
+  border: 1px dashed rgba(255,255,255,0.15);
+  background: repeating-conic-gradient(#2a2a2a 0% 25%, #222 0% 50%) 50% / 16px 16px;
+}
+
+@media (max-width: 720px) {
+  #submit-form-modal .pub-form-layout { flex-direction: column; }
+  #submit-form-modal .pub-form-nav {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+}
+
+#submit-form-modal [data-pub-pane="media"] .pub-files-row,
+#submit-form-modal [data-pub-pane="media"] .pub-media-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+#submit-form-modal [data-media-panel] {
+  /* visibility controlled by JS */
+}
+#submit-form-modal .pub-file-card {
+  border: none;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  max-width: 280px;
+}
+
+/* статус разделов публикации */
+#submit-form-modal .pub-nav-btn {
+  position: relative;
+  padding-right: 28px;
+}
+#submit-form-modal .pub-nav-label { flex: 1; }
+#submit-form-modal .pub-nav-status {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #c45c4a;
+  width: 16px;
+  text-align: center;
+}
+#submit-form-modal .pub-nav-status.is-ok { color: #6fdf8b; }
+#submit-form-modal .pub-nav-status.is-bad { color: #c45c4a; }
+#submit-form-modal .pub-nav-btn { color: var(--text-muted); }
+#submit-form-modal .pub-nav-btn:hover { color: var(--text-bright); background: var(--bg-hover); }
+#submit-form-modal .pub-nav-btn.active {
+  background: rgba(239, 91, 44, 0.18);
+  color: var(--text-bright);
+}
+#submit-form-modal #submit-game-send:disabled,
+#submit-form-modal #submit-game-send.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+#submit-form-modal .pub-pane-title { color: var(--text-muted); }
+#submit-form-modal .auth-input,
+#submit-form-modal .settings-select {
+  background: var(--bg) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-bright);
+}
+#submit-form-modal .pub-rte-editor {
+  min-height: 280px !important;
+  max-height: none !important;
+  background: var(--bg) !important;
+}
+#submit-form-modal [data-pub-pane="desc"] .pub-rte {
+  min-height: 320px;
+}
+.sgdb-nav-btn { color: var(--text-muted); }
+.sgdb-nav-btn:hover { color: var(--text-bright); background: var(--bg-hover); }
+.sgdb-nav-btn.active {
+  background: rgba(239, 91, 44, 0.18);
+  color: var(--text-bright);
+}
+.sgdb-modal-head h3 { color: var(--text-bright); }
+.sgdb-asset-tab { color: var(--text-muted); }
+.sgdb-asset-tab.active { color: var(--text-bright); border-bottom-color: var(--accent); }
+
+
+
+
+
+/* ===== submit-form-modal = sgdb-modal (те же классы) ===== */
+#submit-form-modal.sgdb-modal:not(.hidden) {
+  display: flex !important;
+  z-index: 10050 !important;
+}
+#submit-form-modal .sgdb-modal-card {
+  background: var(--bg-elevated, #1a1814) !important;
+  border-color: var(--border) !important;
+}
+#submit-form-modal .sgdb-nav {
+  background: var(--bg, #12110e) !important;
+  border-color: var(--border) !important;
+}
+#submit-form-modal .sgdb-content {
+  background: var(--bg-elevated, #1a1814) !important;
+  position: relative;
+  overflow: hidden;
+}
+#submit-form-modal .sgdb-pane {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+#submit-form-modal .sgdb-pane.active {
+  display: block;
+}
+#submit-form-modal .sgdb-nav-btn {
+  position: relative;
+  padding-right: 28px;
+}
+#submit-form-modal .pub-nav-status {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #c45c4a;
+  pointer-events: none;
+}
+#submit-form-modal .pub-nav-status.is-ok { color: #6fdf8b; }
+
+/* footer bar like asset savebar */
+.sgdb-modal-foot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border, rgba(255,255,255,0.08));
+  background: var(--bg-elevated, #1a1814);
+}
+.sgdb-foot-left, .sgdb-foot-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sgdb-foot-right { margin-left: auto; }
+
+#submit-form-modal .sgdb-modal-head {
+  background: var(--bg-elevated, #1a1814);
+  border-color: var(--border);
+}
+#submit-form-modal .sgdb-modal-head h3 {
+  color: var(--text-bright, #eee);
+}
+#submit-form-modal .auth-input,
+#submit-form-modal .settings-select {
+  background: var(--bg, #12110e);
+  border-color: var(--border);
+  color: var(--text-bright);
+}
+#submit-form-modal .pub-rte-editor {
+  min-height: 260px;
+  background: var(--bg, #12110e);
+}
+#submit-form-modal .pub-media-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 14px;
+}
+#submit-form-modal .pub-media-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+#submit-form-modal .pub-media-tab.active {
+  color: var(--text-bright);
+  border-bottom-color: var(--accent, #ef5b2c);
+}
+#submit-form-modal #submit-game-send:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+#submit-form-modal .sysreq-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+#submit-form-modal .submit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+#submit-form-modal .settings-label.full {
+  grid-column: 1 / -1;
+}
+
+/* theme for steam settings modal too */
+.sgdb-modal-card {
+  background: var(--bg-elevated, #1a1814) !important;
+  border: 1px solid var(--border) !important;
+}
+.sgdb-nav {
+  background: var(--bg, #12110e) !important;
+  border-right: 1px solid var(--border) !important;
+}
+.sgdb-content {
+  background: var(--bg-elevated, #1a1814) !important;
+}
+.sgdb-modal-head {
+  background: var(--bg-elevated, #1a1814);
+  border-bottom: 1px solid var(--border);
+}
+
+
+/* CRITICAL: only one publish pane visible */
+#submit-form-modal form.sgdb-content,
+#submit-form-modal .sgdb-content {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  background: var(--bg-elevated, #1a1814) !important;
+}
+#submit-form-modal .sgdb-pane,
+#submit-form-modal [data-pub-pane] {
+  display: none !important;
+  visibility: hidden !important;
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+#submit-form-modal .sgdb-pane.active,
+#submit-form-modal [data-pub-pane].active {
+  display: block !important;
+  visibility: visible !important;
+  position: relative !important;
+  left: auto !important;
+  width: auto !important;
+  height: auto !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  padding: 16px 20px !important;
+  pointer-events: auto !important;
+}

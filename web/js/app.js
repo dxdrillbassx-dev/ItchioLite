@@ -5,6 +5,16 @@
 const API_BASE = 'api/games.php';
 const USER_API = 'api/user.php';
 const PUB_API = 'api/publishers.php';
+
+// stubs — чтобы клики до парсинга низа файла не падали
+if (typeof window.fetchMyPublishers !== 'function') {
+  window.fetchMyPublishers = async function() {
+    throw new Error('publishers module ещё не загружен, обновите страницу (Ctrl+F5)');
+  };
+}
+if (typeof window.fillPublishPublisherSelect !== 'function') {
+  window.fillPublishPublisherSelect = async function() { return []; };
+}
 const FETCH_TIMEOUT = 6000;
 const FETCH_TIMEOUT_LONG = 120000; // импорт Steam, публикация, тяжёлые загрузки
 
@@ -3480,7 +3490,7 @@ async function openPublishFormForGame(g, opts) {
   window.__publishFormMode = opts.moderate ? 'moderate' : (opts.adminEdit ? 'adminEdit' : 'submit');
 
   // заголовок ТОЛЬКО в этой модалке
-  const head = formModal.querySelector('.submit-modal-head h2') || formModal.querySelector('h2');
+  const head = formModal.querySelector('#submit-form-title') || formModal.querySelector('.sgdb-modal-head h3') || formModal.querySelector('h2, h3');
   if (head) {
     head.textContent = opts.moderate ? 'Модерация заявки' : (opts.adminEdit ? 'Редактирование карточки' : 'Публикация игры');
   }
@@ -3564,16 +3574,61 @@ async function openPublishFormForGame(g, opts) {
     if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(g.icon_url) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
   }
 
-  // trailers multi
+  // trailers multi — video_url + game_media trailers
   const trailers = parseTrailerList(g.video_url);
-  // also from g.videos / media
   if (Array.isArray(g.videos)) {
     g.videos.forEach(v => {
       const u = v && (v.url || v.src);
       if (u && !trailers.includes(u)) trailers.push(u);
     });
   }
+  if (Array.isArray(g.media)) {
+    g.media.forEach(m => {
+      const kind = String(m.kind || m.type || '').toLowerCase();
+      if (['trailer', 'video', 'movie'].includes(kind)) {
+        const u = (m.url || m.src || '').trim();
+        if (u && !trailers.includes(u)) trailers.push(u);
+      }
+    });
+  }
+  try { ensureTrailersEditorUi(); } catch (e) {}
   renderTrailersEditor(trailers.length ? trailers : ['']);
+
+  // screenshots preview from media
+  try {
+    const shotUrls = [];
+    if (Array.isArray(g.screenshots)) {
+      g.screenshots.forEach(s => {
+        const u = typeof s === 'string' ? s : (s && (s.url || s.image_url));
+        if (u) shotUrls.push(u);
+      });
+    }
+    if (Array.isArray(g.media)) {
+      g.media.forEach(m => {
+        const kind = String(m.kind || m.type || '').toLowerCase();
+        if (kind === 'screenshot' || kind === 'shot' || kind === 'screen') {
+          const u = (m.url || '').trim();
+          if (u && !shotUrls.includes(u)) shotUrls.push(u);
+        }
+      });
+    }
+    const urlsField = document.getElementById('sg-screenshots-urls');
+    if (urlsField && shotUrls.length) urlsField.value = shotUrls.join('\n');
+    const prevBox = document.getElementById('sg-shots-preview');
+    if (prevBox) {
+      if (shotUrls.length) {
+        prevBox.innerHTML = shotUrls.map(u =>
+          `<img src="${String(u).replace(/"/g, '&quot;')}" alt="" style="width:72px;height:48px;object-fit:cover;border-radius:6px;margin:4px" />`
+        ).join('');
+        prevBox.classList.remove('hidden');
+        prevBox.style.display = 'flex';
+        prevBox.style.flexWrap = 'wrap';
+        prevBox.style.gap = '6px';
+      } else {
+        prevBox.innerHTML = '';
+      }
+    }
+  } catch (e) { console.warn('shots preview', e); }
 
   // publishers
   try {
@@ -3581,10 +3636,57 @@ async function openPublishFormForGame(g, opts) {
     await fillPublishPublisherSelect(null);
     if (g.publisher_id) {
       const sel = document.getElementById('sg-publisher-id');
-      if (sel) sel.value = String(g.publisher_id);
+      if (sel) {
+        // ensure option exists even if not in "mine"
+        if (![...sel.options].some(o => o.value === String(g.publisher_id))) {
+          const opt = document.createElement('option');
+          opt.value = String(g.publisher_id);
+          opt.textContent = g.developer_name || g.publisher_name || ('Издательство #' + g.publisher_id);
+          sel.appendChild(opt);
+        }
+        sel.value = String(g.publisher_id);
+      }
+      const hid = document.getElementById('sg-publisher');
+      if (hid && (g.developer_name || g.publisher_name)) hid.value = g.developer_name || g.publisher_name;
     }
   } catch (e) {}
 
+  // На модерации: разработчик и издательство только для просмотра
+  try {
+    const dev = document.getElementById('sg-developer');
+    const pub = document.getElementById('sg-publisher-id');
+    const isMod = !!(opts.moderate || opts.adminEdit);
+    if (dev) {
+      if (isMod) {
+        dev.readOnly = true;
+        dev.classList.add('is-readonly');
+        dev.title = 'Только просмотр';
+      } else {
+        dev.readOnly = false;
+        dev.classList.remove('is-readonly');
+        dev.title = '';
+      }
+    }
+    if (pub) {
+      if (isMod) {
+        pub.disabled = true;
+        pub.classList.add('is-readonly');
+        pub.title = 'Только просмотр';
+      } else {
+        pub.disabled = false;
+        pub.classList.remove('is-readonly');
+        pub.title = '';
+      }
+    }
+  } catch (e) {}
+
+  try { initPubFormTabs(); initPubMediaTabs(); initBuildsUi(); bindPublishValidationWatchers(); updatePublishSectionStatus(); } catch (e) {}
+  if (g && g.id) {
+    try { await loadGameBuildsIntoForm(g.id); } catch (e) {}
+  } else {
+    window.__pendingBuilds = [];
+    try { renderPendingBuilds(); } catch (e) {}
+  }
   formModal.classList.remove('hidden');
 }
 
@@ -4823,21 +4925,32 @@ function initProfileControls() {
     });
   });
 
-  // --- Edit profile modal ---
+  // --- Edit profile modal (делегирование — кнопка пересоздаётся после чужого профиля) ---
   const modal = $('#hp-edit-modal');
-  const openEdit = () => openAnimatedModal(modal);
-  const closeEdit = () => closeAnimatedModal(modal);
+  const openEdit = () => { if (modal) openAnimatedModal(modal); };
+  const closeEdit = () => { if (modal) closeAnimatedModal(modal); };
+  window.openProfileEditModal = openEdit;
 
-  const editBtn = $('#btn-edit-profile');
-  if (editBtn) editBtn.addEventListener('click', openEdit);
-  // keep old settings button working too if present
-  const oldSettings = $('#btn-settings-open');
-  if (oldSettings) oldSettings.addEventListener('click', openEdit);
+  if (!window.__profileEditDelegated) {
+    window.__profileEditDelegated = true;
+    document.addEventListener('click', (e) => {
+      const t = e.target && e.target.closest && e.target.closest('#btn-edit-profile, #btn-settings-open, #settings-open-profile-edit');
+      if (!t) return;
+      e.preventDefault();
+      openEdit();
+    });
+  }
 
   const closeBtn = $('#hp-edit-close');
-  if (closeBtn) closeBtn.addEventListener('click', closeEdit);
+  if (closeBtn && !closeBtn.dataset.bound) {
+    closeBtn.dataset.bound = '1';
+    closeBtn.addEventListener('click', closeEdit);
+  }
   const backdrop = $('#hp-edit-backdrop');
-  if (backdrop) backdrop.addEventListener('click', closeEdit);
+  if (backdrop && !backdrop.dataset.bound) {
+    backdrop.dataset.bound = '1';
+    backdrop.addEventListener('click', closeEdit);
+  }
 
   // Avatar upload
   const avatarBtn = $('#hp-avatar-upload');
@@ -7380,7 +7493,7 @@ function ensurePubModalAlive() {
   formModal.style.visibility = 'visible';
   formModal.style.pointerEvents = 'auto';
   formModal.style.display = 'flex';
-  const box = formModal.querySelector('.submit-modal-box');
+  const box = formModal.querySelector('.sgdb-modal-card, .submit-modal-box');
   if (box) {
     box.style.opacity = '1';
     box.style.visibility = 'visible';
@@ -8071,6 +8184,21 @@ function applyGamePackToSubmitForm(data) {
   if (files.icon) {
     set('sg-icon-url', files.icon);
     setPreview('sg-icon-preview', files.icon, 'sg-icon-name', 'иконка из пакета');
+  } else {
+    // нет своей иконки — берём первую из SGDB в пакете
+    try {
+      const sg = (files && files.sgdb) || (data.manifest && data.manifest.files && data.manifest.files.sgdb) || {};
+      const icons = sg.icons || [];
+      let firstIcon = '';
+      if (Array.isArray(icons) && icons.length) {
+        const it = icons[0];
+        firstIcon = typeof it === 'string' ? it : (it && (it.url || it.path || it.file || '')) || '';
+      }
+      if (firstIcon) {
+        set('sg-icon-url', firstIcon);
+        setPreview('sg-icon-preview', firstIcon, 'sg-icon-name', 'иконка SGDB');
+      }
+    } catch (e) { console.warn('sgdb icon fallback', e); }
   }
 
   // скриншоты
@@ -8392,8 +8520,15 @@ function initSubmitGame() {
         }
         try { initPublishFilePreviews(formModal); initPublishPriceInput(); initPublishRte(); ensureTrailersEditorUi(); renderTrailersEditor(['']); } catch (e) {}
         try {
+          initPubFormTabs();
+          initPubMediaTabs();
+          initBuildsUi();
+          bindPublishValidationWatchers();
+          updatePublishSectionStatus();
+          window.__pendingBuilds = [];
+          renderPendingBuilds();
           window.__myPublishersCache = { list: null, ts: 0 };
-          fillPublishPublisherSelect(null).then(() => {
+          (window.fillPublishPublisherSelect || fillPublishPublisherSelect)(null).then(() => {
             try { initCatioSelects(formModal); } catch (e2) {}
           }).catch((err) => {
             console.warn(err);
@@ -8554,6 +8689,17 @@ async function submitGameForm() {
     if (icon) fd.append('icon', icon);
     const shots = $('#sg-shots')?.files;
     if (shots) for (let i = 0; i < shots.length; i++) fd.append('screenshots[]', shots[i]);
+    // сборки
+    const builds = window.__pendingBuilds || [];
+    const buildsMeta = builds.map((b, i) => ({
+      i, version: b.version || '1.0', platform: b.platform || 'windows',
+      changelog: b.changelog || '', file_name: b.file_name || (b.file && b.file.name) || '',
+      id: b.id || null, file_url: b.file_url || null, has_file: !!(b.file)
+    }));
+    fd.append('builds_meta', JSON.stringify(buildsMeta));
+    builds.forEach((b, i) => {
+      if (b.file) fd.append('builds[' + i + ']', b.file, b.file.name || ('build-' + i));
+    });
     const flags = $$('.sg-content-flag').filter(c => c.checked).map(c => c.value);
     fd.append('content_flags', flags.join(','));
     fd.append('is_adult', flags.includes('adult') ? '1' : '0');
@@ -8567,6 +8713,7 @@ async function submitGameForm() {
       throw new Error('Сервер вернул не JSON. Обнови api/submit.php');
     }
     if (!data.ok) throw new Error(data.error || 'Ошибка');
+    try { refreshAdminPendingBadge(); } catch (e) {}
     $('#submit-form-modal')?.classList.add('hidden');
     $('#submit-game-form')?.reset();
     const ed = $('#sg-desc-editor');
@@ -9068,6 +9215,29 @@ if (!data.ok) throw new Error(data.error || 'Ошибка импорта');
   });
 }
 
+
+function updateAdminPendingBadge(count) {
+  const n = Math.max(0, parseInt(count, 10) || 0);
+  const badge = document.getElementById('admin-badge');
+  if (badge) {
+    badge.textContent = n > 99 ? '99+' : String(n);
+    badge.classList.toggle('hidden', n <= 0);
+  }
+  const modCount = document.getElementById('admin-mod-count');
+  if (modCount) {
+    modCount.textContent = n > 0 ? String(n) : '';
+    modCount.classList.toggle('hidden', n <= 0);
+  }
+}
+async function refreshAdminPendingBadge() {
+  try {
+    const me = window.AUTH_STATE && window.AUTH_STATE.user;
+    if (!me || me.role !== 'admin') return;
+    const data = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=pending&_t=' + Date.now());
+    if (data && data.ok) updateAdminPendingBadge((data.games || []).length);
+  } catch (e) {}
+}
+
 async function loadAdminPending() {
   try { initAdminUI(); } catch (e) {}
 
@@ -9078,6 +9248,7 @@ async function loadAdminPending() {
     const data = await fetchJSON(`${SUBMIT_API}?action=pending`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     const games = data.games || [];
+    updateAdminPendingBadge(games.length);
     if (!games.length) {
       list.innerHTML = '<div class="friends-empty">Нет игр на модерации</div>';
       return;
@@ -10625,28 +10796,16 @@ if (!window.__createMenuDelegated) {
       (async function() {
         let pubs = [];
         try {
-          // сначала локальный кэш (сразу после создания)
-          if (window.__pendingPublishPublishers && window.__pendingPublishPublishers.length) {
-            pubs = window.__pendingPublishPublishers;
-          } else if (window.__myPublishersCache && Array.isArray(window.__myPublishersCache.list) && window.__myPublishersCache.list.length) {
-            pubs = window.__myPublishersCache.list;
-          }
-          if (!pubs.length && typeof fetchMyPublishers === 'function') {
-            pubs = await fetchMyPublishers(true) || [];
-          }
-          window.__pendingPublishPublishers = pubs || [];
-          if (!pubs || !pubs.length) {
-            if (typeof openNoPubModal === 'function') openNoPubModal();
-            else if (window.openNoPubModal) window.openNoPubModal();
-            else alert('Сначала создайте издательство');
-            return;
-          }
+          pubs = await window.fetchMyPublishers(true);
         } catch (err) {
           console.warn(err);
-          if (!pubs.length) {
-            if (typeof openNoPubModal === 'function') openNoPubModal();
-            return;
-          }
+          toast(err.message || 'Ошибка загрузки издательств');
+          return;
+        }
+        if (!pubs.length) {
+          if (typeof openNoPubModal === 'function') openNoPubModal();
+          else alert('Сначала создайте издательство');
+          return;
         }
         if (window.openSubmitRules) window.openSubmitRules();
       })();
@@ -10669,7 +10828,7 @@ function openCreateMenu() {
   if (!m) { openSubmitRules(); return; }
   m.classList.remove('hidden');
 }
-function openNoPubModal() {
+window.openNoPubModal = function openNoPubModal() {
   const m = $('#no-pub-modal');
   if (m) m.classList.remove('hidden');
   else toast('Сначала создайте издательство');
@@ -10694,27 +10853,15 @@ function initCreateMenu() {
   });
   $('#create-menu-game')?.addEventListener('click', async () => {
     closeCreateMenu();
-    let pubs = [];
     try {
-      if (window.__pendingPublishPublishers && window.__pendingPublishPublishers.length) {
-        pubs = window.__pendingPublishPublishers;
-      } else if (window.__myPublishersCache && Array.isArray(window.__myPublishersCache.list) && window.__myPublishersCache.list.length) {
-        pubs = window.__myPublishersCache.list;
-      }
-      if (!pubs.length) {
-        pubs = await fetchMyPublishers(true) || [];
-      }
-      window.__pendingPublishPublishers = pubs || [];
+      const pubs = await window.fetchMyPublishers(true);
       if (!pubs.length) {
         openNoPubModal();
         return;
       }
     } catch (e) {
-      if (!pubs.length) {
-        window.__pendingPublishPublishers = [];
-        openNoPubModal();
-        return;
-      }
+      toast(e.message || 'Ошибка загрузки издательств');
+      return;
     }
     openSubmitRules();
   });
@@ -10765,7 +10912,7 @@ function initCreateMenu() {
   window.openCreateMenu = openCreateMenu;
 }
 
-async function openPubsListModal() {
+window.openPubsListModal = async function openPubsListModal() {
   const modal = $('#pubs-list-modal');
   const list = $('#pubs-list');
   if (!modal || !list) return;
@@ -10806,7 +10953,7 @@ async function openPubsListModal() {
   }
 
   try {
-    const fresh = await fetchMyPublishers(true);
+    const fresh = await window.fetchMyPublishers(true);
     if (Array.isArray(fresh)) {
       pubs = fresh;
       window.__pendingPublishPublishers = pubs;
@@ -10881,7 +11028,7 @@ function renderPubMemberChips() {
   });
 }
 
-async function saveNewPublisher() {
+window.saveNewPublisher = async function saveNewPublisher() {
   const btn = $('#pub-create-save');
   const name = ($('#pub-name')?.value || '').trim();
   if (name.length < 2) { toast('Укажите название'); return; }
@@ -10942,155 +11089,373 @@ async function saveNewPublisher() {
   }
 }
 
-/** Кэш издательств текущего пользователя */
+
+/* ===== Публикация: вкладки формы + сборки ===== */
+window.__pendingBuilds = window.__pendingBuilds || [];
+
+
+function initPubMediaTabs() {
+  const tabs = document.getElementById('pub-media-tabs');
+  if (!tabs || tabs.dataset.bound) return;
+  tabs.dataset.bound = '1';
+  const show = (name) => {
+    tabs.querySelectorAll('.pub-media-tab').forEach(b => b.classList.toggle('active', b.dataset.mediaTab === name));
+    const pane = document.querySelector('#submit-game-form [data-pub-pane="media"]');
+    if (!pane) return;
+    pane.querySelectorAll('[data-media-panel]').forEach(el => {
+      el.style.display = (el.dataset.mediaPanel === name) ? '' : 'none';
+    });
+  };
+  tabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pub-media-tab');
+    if (!btn) return;
+    show(btn.dataset.mediaTab);
+  });
+  show('cover');
+}
+
+function switchPubTab(tab) {
+  if (!tab) return;
+  console.log('[pub] switch tab', tab);
+  const modal = document.getElementById('submit-form-modal');
+  if (!modal) return;
+  modal.querySelectorAll('.pub-nav-btn').forEach(b => {
+    const t = b.getAttribute('data-pub-tab');
+    b.classList.toggle('active', t === tab);
+  });
+  modal.querySelectorAll('.pub-pane').forEach(p => {
+    const on = p.getAttribute('data-pub-pane') === tab;
+    p.classList.toggle('active', on);
+    // clear inline styles from older code
+    p.style.display = '';
+  });
+  if (tab === 'media') {
+    try { initPubMediaTabs(); } catch (e) {}
+  }
+  try { updatePublishSectionStatus(); } catch (e) {}
+}
+window.switchPubTab = switchPubTab;
+
+function initPubFormTabs() {
+  if (window.__pubTabsDelegated) return;
+  window.__pubTabsDelegated = true;
+  document.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('#pub-form-nav .pub-nav-btn, .pub-nav-btn[data-pub-tab]');
+    if (!btn || !btn.closest('#submit-form-modal')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const tab = btn.getAttribute('data-pub-tab') || btn.dataset.pubTab;
+    switchPubTab(tab);
+  }, true);
+  // initial
+  try { switchPubTab('main'); } catch (e) {}
+}
+
+function getPublishSectionStatus() {
+  const title = ($('#sg-title')?.value || '').trim();
+  const genres = $$('.sg-genre').filter(c => c.checked);
+  const pubId = ($('#sg-publisher-id')?.value || '').trim();
+  // description
+  try { if (typeof syncPublishDescription === 'function') syncPublishDescription(); } catch (e) {}
+  let desc = ($('#sg-desc')?.value || '').trim();
+  if (!desc) {
+    const ed = $('#sg-desc-editor');
+    if (ed) desc = (ed.innerText || ed.textContent || '').trim();
+  }
+  const coverFile = $('#sg-cover')?.files?.[0];
+  const coverUrl = ($('#sg-cover-url')?.value || '').trim();
+  const hasCover = !!(coverFile || coverUrl);
+  const builds = (window.__pendingBuilds || []).length > 0;
+
+  return {
+    main: !!(title && genres.length && pubId),
+    desc: desc.length >= 10,
+    media: hasCover,
+    sys: true,
+    lang: true,
+    builds: builds,
+    content: true
+  };
+}
+
+function updatePublishSectionStatus() {
+  const st = getPublishSectionStatus();
+  Object.keys(st).forEach(key => {
+    const el = document.querySelector('#pub-form-nav [data-status-for="' + key + '"]');
+    if (!el) return;
+    const ok = !!st[key];
+    el.textContent = ok ? '✓' : '✕';
+    el.classList.toggle('is-ok', ok);
+    el.classList.toggle('is-bad', !ok);
+  });
+  const allOk = Object.values(st).every(Boolean);
+  const send = document.getElementById('submit-game-send');
+  if (send) {
+    const isAdmin = !!(send.dataset.adminPublish || send.dataset.adminSave);
+    // для обычной публикации — блок до заполнения; админ может сохранять
+    if (!isAdmin) {
+      send.disabled = !allOk;
+      send.classList.toggle('is-disabled', !allOk);
+      send.title = allOk ? '' : 'Заполните все обязательные разделы (галочки слева)';
+    } else {
+      send.disabled = false;
+      send.classList.remove('is-disabled');
+      send.title = '';
+    }
+  }
+  return allOk;
+}
+window.updatePublishSectionStatus = updatePublishSectionStatus;
+
+function bindPublishValidationWatchers() {
+  if (window.__pubValidateBound) return;
+  window.__pubValidateBound = true;
+  const form = document.getElementById('submit-game-form');
+  if (!form) return;
+  form.addEventListener('input', () => updatePublishSectionStatus());
+  form.addEventListener('change', () => updatePublishSectionStatus());
+  document.addEventListener('input', (e) => {
+    if (e.target && (e.target.id === 'sg-desc-editor' || e.target.closest?.('#sg-desc-editor'))) {
+      updatePublishSectionStatus();
+    }
+  });
+}
+
+
+function formatBytes(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' Б';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' КБ';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' МБ';
+  return (n / 1073741824).toFixed(2) + ' ГБ';
+}
+
+function renderPendingBuilds() {
+  const box = document.getElementById('sg-builds-list');
+  const hid = document.getElementById('sg-builds-json');
+  if (!box) return;
+  const list = window.__pendingBuilds || [];
+  if (hid) {
+    hid.value = JSON.stringify(list.map(b => ({
+      version: b.version, platform: b.platform, changelog: b.changelog || '',
+      file_name: b.file_name || (b.file && b.file.name) || '', file_size: b.file_size || (b.file && b.file.size) || 0,
+      id: b.id || null, file_url: b.file_url || null
+    })));
+  }
+  if (!list.length) {
+    box.innerHTML = '<div class="settings-hint">Пока нет сборок — добавьте файл выше. При отправке игры они загрузятся вместе с карточкой.</div>';
+    return;
+  }
+  box.innerHTML = list.map((b, i) => `
+    <div class="build-item" data-idx="${i}">
+      <div class="bi-meta">
+        <div class="bi-title">${escapeHtml(b.version || '1.0')} · ${escapeHtml(b.platform || 'windows')}</div>
+        <div class="bi-sub">${escapeHtml(b.file_name || (b.file && b.file.name) || b.file_url || 'файл')} · ${formatBytes(b.file_size || (b.file && b.file.size) || 0)}${b.changelog ? ' · ' + escapeHtml(String(b.changelog).slice(0, 80)) : ''}</div>
+      </div>
+      <button type="button" class="bi-del" data-del-build="${i}" title="Убрать">×</button>
+    </div>`).join('');
+  box.querySelectorAll('[data-del-build]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const i = +btn.dataset.delBuild;
+      const item = window.__pendingBuilds[i];
+      if (item && item.id) {
+        try {
+          await postJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=delete_build', {
+            csrf_token: window.CSRF_TOKEN || '', id: item.id
+          });
+        } catch (e) {
+          toast(e.message || 'Не удалось удалить сборку');
+          return;
+        }
+      }
+      window.__pendingBuilds.splice(i, 1);
+      renderPendingBuilds();
+    });
+  });
+}
+
+function initBuildsUi() {
+  if (window.__buildsUiBound) return;
+  window.__buildsUiBound = true;
+  const addBtn = document.getElementById('sg-build-add');
+  const fileInput = document.getElementById('sg-build-file');
+  const nameEl = document.getElementById('sg-build-file-name');
+  fileInput?.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (nameEl) nameEl.textContent = f ? `${f.name} (${formatBytes(f.size)})` : 'ZIP / EXE / 7z / DMG…';
+  });
+  addBtn?.addEventListener('click', () => {
+    const f = fileInput && fileInput.files && fileInput.files[0];
+    const version = (document.getElementById('sg-build-version')?.value || '').trim() || '1.0.0';
+    const platform = document.getElementById('sg-build-platform')?.value || 'windows';
+    const changelog = (document.getElementById('sg-build-changelog')?.value || '').trim();
+    if (!f && !window.__adminModeratingId) {
+      toast('Выберите файл сборки');
+      return;
+    }
+    if (!f) {
+      toast('Выберите файл сборки');
+      return;
+    }
+    window.__pendingBuilds.push({
+      version, platform, changelog, file: f, file_name: f.name, file_size: f.size
+    });
+    if (fileInput) fileInput.value = '';
+    if (nameEl) nameEl.textContent = 'ZIP / EXE / 7z / DMG…';
+    const ver = document.getElementById('sg-build-version');
+    if (ver) {
+      // auto bump patch
+      const m = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
+      if (m) ver.value = `${m[1]}.${m[2]}.${+m[3] + 1}`;
+    }
+    renderPendingBuilds();
+    toast('Сборка добавлена в список');
+    try { updatePublishSectionStatus(); } catch (e) {}
+  });
+}
+
+async function loadGameBuildsIntoForm(gameId) {
+  if (!gameId) return;
+  try {
+    const data = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=list_builds&game_id=' + encodeURIComponent(gameId));
+    if (!data.ok) return;
+    const existing = (data.builds || []).map(b => ({
+      id: b.id,
+      version: b.version,
+      platform: b.platform,
+      changelog: b.changelog || '',
+      file_name: b.file_name || b.file_url,
+      file_size: b.file_size_bytes || 0,
+      file_url: b.file_url,
+      file: null
+    }));
+    // keep newly added local files
+    const local = (window.__pendingBuilds || []).filter(b => b.file);
+    window.__pendingBuilds = existing.concat(local);
+    renderPendingBuilds();
+  } catch (e) {
+    console.warn('list_builds', e);
+  }
+}
+
+
+/** Издательства: только прямой запрос к API/БД, без сложного кэша */
 window.__myPublishersCache = window.__myPublishersCache || { list: null, ts: 0 };
 window.__pendingPublishPublishers = null;
 
-async function fetchMyPublishers(force) {
-  const now = Date.now();
-  if (!force && Array.isArray(window.__myPublishersCache.list) && window.__myPublishersCache.list.length && (now - window.__myPublishersCache.ts) < 15000) {
-    return window.__myPublishersCache.list;
-  }
-  let pubs = [];
+window.fetchMyPublishers = async function fetchMyPublishers(force) {
   const api = (typeof PUB_API !== 'undefined' ? PUB_API : 'api/publishers.php');
+  const url = api + '?action=mine&_t=' + Date.now();
+  const res = await fetch(url, {
+    method: 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { 'Accept': 'application/json' }
+  });
+  const text = await res.text();
+  let data;
   try {
-    const data = await fetchJSON(api + '?action=mine&_t=' + now);
-    console.log('[publishers] mine', data);
-    if (data && data.ok === false) console.warn('mine error', data.error);
-    pubs = (data && Array.isArray(data.publishers)) ? data.publishers : [];
+    const s = text.indexOf('{');
+    data = JSON.parse(s >= 0 ? text.slice(s) : text);
   } catch (e) {
-    console.warn('fetchMyPublishers mine', e);
+    console.error('[publishers] bad JSON', text.slice(0, 300));
+    throw new Error('Ответ publishers не JSON');
   }
-  if (!pubs.length) {
-    try {
-      const me = window.AUTH_STATE && window.AUTH_STATE.user;
-      if (me && me.id) {
-        const fu = await fetchJSON(api + '?action=for_user&user_id=' + me.id + '&_t=' + now);
-        console.log('[publishers] for_user', fu);
-        pubs = (fu && Array.isArray(fu.publishers)) ? fu.publishers : [];
-      }
-    } catch (e2) {
-      console.warn('fetchMyPublishers for_user', e2);
-    }
+  if (!data || data.ok === false) {
+    throw new Error((data && data.error) || ('HTTP ' + res.status));
   }
-  window.__myPublishersCache = { list: pubs, ts: now };
+  const pubs = Array.isArray(data.publishers) ? data.publishers : [];
+  console.log('[publishers] mine ok', pubs.length, pubs);
+  window.__myPublishersCache = { list: pubs, ts: Date.now() };
+  window.__pendingPublishPublishers = pubs;
   return pubs;
 }
 
-function applyPublisherOptionsToSelect(sel, pubs, prefer) {
+window.applyPublisherOptionsToSelect = function applyPublisherOptionsToSelect(sel, pubs, prefer) {
   if (!sel) return;
-  // снять catio
-  const oldWrap = sel.closest('.catio-select');
-  if (oldWrap && oldWrap.parentNode) {
-    oldWrap.parentNode.insertBefore(sel, oldWrap);
-    oldWrap.remove();
-  }
+  try {
+    const oldWrap = sel.closest('.catio-select');
+    if (oldWrap && oldWrap.parentNode) {
+      oldWrap.parentNode.insertBefore(sel, oldWrap);
+      oldWrap.remove();
+    }
+  } catch (e) {}
   delete sel.dataset.catioEnhanced;
   sel.classList.add('settings-select');
-  sel.classList.remove('select-native-hidden');
+  sel.classList.remove('select-native-hidden', 'hidden');
+  sel.hidden = false;
+  sel.style.cssText = 'display:block;visibility:visible;';
   sel.removeAttribute('aria-hidden');
   sel.removeAttribute('tabindex');
-  sel.style.cssText = '';
 
-  let html = '<option value="">— без издательства —</option>';
-  (pubs || []).forEach(p => {
-    html += '<option value="' + p.id + '">' + escapeHtml(p.name || ('#' + p.id)) + '</option>';
-  });
+  const list = Array.isArray(pubs) ? pubs : [];
+  let html = '';
+  // без «пустого» если есть издательства — первая опция = реальное издательство
+  if (!list.length) {
+    html = '<option value="">— без издательства —</option>';
+  } else {
+    html = list.map(p =>
+      '<option value="' + String(p.id) + '">' + escapeHtml(String(p.name || ('#' + p.id))) + '</option>'
+    ).join('');
+  }
   sel.innerHTML = html;
 
-  const pref = prefer != null ? String(prefer) : '';
-  if (pref && (pubs || []).some(p => String(p.id) === pref)) {
+  const pref = prefer != null && prefer !== '' ? String(prefer) : '';
+  if (pref && list.some(p => String(p.id) === pref)) {
     sel.value = pref;
-  } else if ((pubs || []).length === 1) {
-    sel.value = String(pubs[0].id);
+  } else if (list.length) {
+    sel.value = String(list[0].id);
   } else {
     sel.value = '';
   }
 
   const hid = document.getElementById('sg-publisher');
   const syncHid = () => {
-    const c = (pubs || []).find(p => String(p.id) === String(sel.value));
+    const c = list.find(p => String(p.id) === String(sel.value));
     if (hid) hid.value = c ? (c.name || '') : '';
   };
   syncHid();
   sel.onchange = syncHid;
 }
 
-async function fillPublishPublisherSelect(preloaded) {
+window.fillPublishPublisherSelect = async function fillPublishPublisherSelect(preloaded) {
   const formModal = document.getElementById('submit-form-modal');
   let sel = (formModal && formModal.querySelector('#sg-publisher-id'))
     || document.getElementById('sg-publisher-id')
     || document.querySelector('select[name="publisher_id"]');
   if (!sel) {
-    console.warn('[publishers] select #sg-publisher-id не найден в DOM');
-    return;
+    console.warn('[publishers] #sg-publisher-id не найден');
+    return [];
   }
-  try {
-    const wrap = sel.closest('.catio-select');
-    if (wrap && wrap.parentNode) {
-      wrap.parentNode.insertBefore(sel, wrap);
-      wrap.remove();
-    }
-  } catch (e) {}
-  sel.hidden = false;
-  sel.style.display = 'block';
-  sel.style.visibility = 'visible';
-  sel.classList.remove('hidden', 'select-native-hidden');
 
   const cur = sel.value || '';
-  let pubs = Array.isArray(preloaded) ? preloaded.slice() : [];
+  let pubs = Array.isArray(preloaded) && preloaded.length ? preloaded.slice() : null;
 
-  const api = (typeof PUB_API !== 'undefined' ? PUB_API : 'api/publishers.php');
-  // 1) mine
-  try {
-    const res = await fetch(api + '?action=mine&_t=' + Date.now(), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
-    const data = await res.json().catch(() => ({}));
-    console.log('[publishers] mine HTTP', res.status, data);
-    if (Array.isArray(data.publishers)) pubs = data.publishers;
-    else if (data && data.ok === false) console.warn('[publishers] mine error', data.error);
-  } catch (e) {
-    console.warn('[publishers] mine exception', e);
-  }
-  // 2) for_user fallback
-  if (!pubs.length) {
+  if (!pubs) {
     try {
-      const me = (window.AUTH_STATE && window.AUTH_STATE.user) || {};
-      const uid = me.id || me.user_id;
-      if (uid) {
-        const res = await fetch(api + '?action=for_user&user_id=' + encodeURIComponent(uid) + '&_t=' + Date.now(), { credentials: 'same-origin' });
-        const data = await res.json().catch(() => ({}));
-        console.log('[publishers] for_user', data);
-        if (Array.isArray(data.publishers)) pubs = data.publishers;
-      }
-    } catch (e2) {
-      console.warn('[publishers] for_user exception', e2);
+      pubs = await window.fetchMyPublishers(true);
+    } catch (e) {
+      console.error('[publishers] load failed', e);
+      pubs = [];
+      toast('Не удалось загрузить издательства: ' + (e.message || e));
     }
   }
 
-  window.__pendingPublishPublishers = pubs;
-  window.__myPublishersCache = { list: pubs, ts: Date.now() };
+  applyPublisherOptionsToSelect(sel, pubs, cur);
 
-  let html = '<option value="">— без издательства —</option>';
-  pubs.forEach(p => {
-    html += '<option value="' + String(p.id) + '">' + escapeHtml(String(p.name || ('#' + p.id))) + '</option>';
-  });
-  sel.innerHTML = html;
-
-  if (cur && pubs.some(p => String(p.id) === String(cur))) sel.value = String(cur);
-  else if (pubs.length === 1) sel.value = String(pubs[0].id);
-  else sel.value = '';
+  // если одно издательство — сразу выбрать
+  if (pubs.length === 1) sel.value = String(pubs[0].id);
+  else if (cur && pubs.some(p => String(p.id) === String(cur))) sel.value = String(cur);
 
   const hid = document.getElementById('sg-publisher');
   if (hid) {
-    const sync = () => {
-      const p = pubs.find(x => String(x.id) === String(sel.value));
-      hid.value = p ? (p.name || '') : '';
-    };
-    sync();
-    sel.onchange = sync;
+    const p = pubs.find(x => String(x.id) === String(sel.value));
+    hid.value = p ? (p.name || '') : '';
   }
-  console.log('[publishers] filled count=', pubs.length, pubs);
+
+  return pubs;
 }
+
 
 
 async function openPublisherPage(id, slug) {
@@ -11322,7 +11687,7 @@ window.__pubLineToken = 0;
       if (!viewingUserId) {
         loadProfilePublishers(me.id);
       }
-      fetchMyPublishers(true).catch(() => {});
+      window.fetchMyPublishers(true).catch(() => {});
     }
   } catch (e) {}
 
@@ -11365,4 +11730,295 @@ window.__pubLineToken = 0;
   } else {
     showView(view, gameId);
   }
+});
+
+
+document.addEventListener('click', (e) => {
+  const adm = e.target.closest && e.target.closest('#btn-admin');
+  if (adm) {
+    e.preventDefault();
+    if (typeof showView === 'function') showView('admin');
+    else if (typeof setView === 'function') setView('admin');
+  }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  try { refreshAdminPendingBadge(); } catch (e) {}
+  setInterval(() => { try { refreshAdminPendingBadge(); } catch (e) {} }, 45000);
+});
+
+/* Preload publishers on boot */
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    if (window.AUTH_STATE && window.AUTH_STATE.authorized && typeof fetchMyPublishers === 'function') {
+      window.fetchMyPublishers(true).then(list => {
+        console.log('[publishers] preloaded', (list || []).length);
+      }).catch(e => console.warn('[publishers] preload', e));
+    }
+  } catch (e) {}
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  try { initPubFormTabs(); initPubMediaTabs(); initBuildsUi(); bindPublishValidationWatchers(); updatePublishSectionStatus(); } catch (e) {}
+});
+
+
+/* force switchPubTab — layout v2 */
+window.switchPubTab = function(tab) {
+  if (!tab) return;
+  var modal = document.getElementById('submit-form-modal');
+  if (!modal) return;
+  modal.querySelectorAll('.pub-nav-btn').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-pub-tab') === tab);
+  });
+  modal.querySelectorAll('.pub-pane').forEach(function(p) {
+    var on = p.getAttribute('data-pub-pane') === tab;
+    p.classList.toggle('active', on);
+    p.style.cssText = ''; // clear any inline absolute/display from old builds
+  });
+  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
+};
+
+
+window.switchPubTab = function(tab) {
+  if (!tab) return;
+  var modal = document.getElementById('submit-form-modal');
+  if (!modal) return;
+  modal.querySelectorAll('.sgdb-nav-btn[data-pub-tab], .pub-nav-btn[data-pub-tab]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-pub-tab') === tab);
+  });
+  modal.querySelectorAll('.sgdb-pane[data-pub-pane], .pub-pane[data-pub-pane]').forEach(function(p) {
+    var on = p.getAttribute('data-pub-pane') === tab;
+    p.classList.toggle('active', on);
+  });
+  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
+};
+
+/* open/close: support both old and sgdb structure */
+(function() {
+  var oldBox = HTMLElement.prototype.querySelector;
+})();
+
+
+window.switchPubTab = function(tab) {
+  if (!tab) return;
+  var modal = document.getElementById('submit-form-modal');
+  if (!modal) return;
+  modal.querySelectorAll('[data-pub-tab]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-pub-tab') === tab);
+  });
+  modal.querySelectorAll('[data-pub-pane]').forEach(function(p) {
+    var on = p.getAttribute('data-pub-pane') === tab;
+    p.classList.toggle('active', on);
+    p.hidden = !on;
+    if (on) {
+      p.style.setProperty('display', 'block', 'important');
+      p.style.setProperty('visibility', 'visible', 'important');
+      p.style.setProperty('position', 'relative', 'important');
+      p.style.setProperty('left', 'auto', 'important');
+      p.style.setProperty('width', 'auto', 'important');
+      p.style.setProperty('height', 'auto', 'important');
+      p.style.setProperty('pointer-events', 'auto', 'important');
+    } else {
+      p.style.setProperty('display', 'none', 'important');
+      p.style.setProperty('visibility', 'hidden', 'important');
+      p.style.setProperty('position', 'absolute', 'important');
+      p.style.setProperty('left', '-9999px', 'important');
+      p.style.setProperty('pointer-events', 'none', 'important');
+    }
+  });
+  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
+};
+
+// on first open hide all but main
+document.addEventListener('DOMContentLoaded', function() {
+  try { window.switchPubTab('main'); } catch (e) {}
+});
+
+
+/** Принудительная вёрстка модалки публикации (не зависит от CSS-кэша) */
+window.forcePublishModalLayout = function forcePublishModalLayout() {
+  var modal = document.getElementById('submit-form-modal');
+  if (!modal) return;
+  modal.style.cssText = 'position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+  var backdrop = modal.querySelector('.sgdb-modal-backdrop, .submit-modal-backdrop');
+  if (backdrop) backdrop.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,.65);';
+  var card = modal.querySelector('.sgdb-modal-card, .submit-modal-box');
+  if (card) {
+    card.style.cssText = 'position:relative;z-index:1;width:min(920px,94vw);height:min(640px,88vh);max-width:94vw;max-height:88vh;background:#1a1814;border:1px solid rgba(255,255,255,.08);border-radius:10px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55);';
+  }
+  var head = modal.querySelector('.sgdb-modal-head, .submit-modal-head');
+  if (head) head.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.08);';
+  var body = modal.querySelector('.sgdb-modal-body, .submit-modal-body');
+  if (body) body.style.cssText = 'flex:1 1 auto;min-height:0;display:flex;flex-direction:row;overflow:hidden;';
+  var nav = modal.querySelector('.sgdb-nav, #pub-form-nav');
+  if (nav) {
+    nav.style.cssText = 'flex:0 0 200px;width:200px;background:#12110e;border-right:1px solid rgba(255,255,255,.08);padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;';
+  }
+  var content = modal.querySelector('form.sgdb-content, .sgdb-content, #submit-game-form');
+  if (content) {
+    content.style.cssText = 'flex:1 1 auto;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:#1a1814;margin:0;padding:0;';
+  }
+  var foot = modal.querySelector('.sgdb-modal-foot, .submit-modal-foot');
+  if (foot) foot.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-top:1px solid rgba(255,255,255,.08);';
+  var activeTab = 'main';
+  var activeBtn = modal.querySelector('[data-pub-tab].active');
+  if (activeBtn) activeTab = activeBtn.getAttribute('data-pub-tab') || 'main';
+  window.switchPubTab(activeTab);
+};
+
+window.switchPubTab = function(tab) {
+  if (!tab) tab = 'main';
+  var modal = document.getElementById('submit-form-modal');
+  if (!modal) return;
+  modal.querySelectorAll('[data-pub-tab]').forEach(function(b) {
+    var on = b.getAttribute('data-pub-tab') === tab;
+    b.classList.toggle('active', on);
+    if (on) {
+      b.style.background = 'rgba(239,91,44,0.18)';
+      b.style.color = '#fff';
+    } else {
+      b.style.background = 'transparent';
+      b.style.color = '';
+    }
+  });
+  modal.querySelectorAll('[data-pub-pane]').forEach(function(p) {
+    var on = p.getAttribute('data-pub-pane') === tab;
+    p.classList.toggle('active', on);
+    p.hidden = !on;
+    if (on) {
+      p.style.cssText = 'display:block;flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto;padding:16px 20px;box-sizing:border-box;';
+    } else {
+      p.style.cssText = 'display:none !important;visibility:hidden;height:0;overflow:hidden;padding:0;margin:0;border:0;';
+    }
+  });
+  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
+};
+
+(function() {
+  function hookOpen() {
+    var modal = document.getElementById('submit-form-modal');
+    if (!modal || modal.__layoutHooked) return;
+    modal.__layoutHooked = true;
+    var obs = new MutationObserver(function() {
+      if (!modal.classList.contains('hidden')) {
+        try { window.forcePublishModalLayout(); } catch (e) { console.warn(e); }
+      }
+    });
+    obs.observe(modal, { attributes: true, attributeFilter: ['class'] });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hookOpen);
+  else hookOpen();
+})();
+
+
+
+/* ===== pubm tabs — простой хардкод ===== */
+window.switchPubTab = function(tab) {
+  var modal = document.getElementById('submit-form-modal');
+  if (!modal || !tab) return;
+  modal.querySelectorAll('[data-pub-tab]').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-pub-tab') === tab);
+  });
+  modal.querySelectorAll('[data-pub-pane]').forEach(function(pane) {
+    pane.classList.toggle('active', pane.getAttribute('data-pub-pane') === tab);
+  });
+  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
+};
+
+document.addEventListener('click', function(e) {
+  var btn = e.target && e.target.closest && e.target.closest('#submit-form-modal [data-pub-tab]');
+  if (!btn) return;
+  e.preventDefault();
+  window.switchPubTab(btn.getAttribute('data-pub-tab'));
+}, true);
+
+document.addEventListener('click', function(e) {
+  var btn = e.target && e.target.closest && e.target.closest('#submit-form-modal .pubm-media-tab, #submit-form-modal .pub-media-tab');
+  if (!btn) return;
+  var pane = document.querySelector('#submit-form-modal [data-pub-pane="media"]');
+  if (!pane) return;
+  var name = btn.getAttribute('data-media-tab');
+  pane.querySelectorAll('.pubm-media-tab, .pub-media-tab').forEach(function(b) {
+    b.classList.toggle('active', b === btn);
+  });
+  pane.querySelectorAll('[data-media-panel]').forEach(function(el) {
+    el.style.display = (el.getAttribute('data-media-panel') === name) ? '' : 'none';
+  });
+}, true);
+
+/* статусы: класс ok вместо is-ok */
+(function() {
+  var old = window.updatePublishSectionStatus;
+  if (typeof old !== 'function') return;
+  window.updatePublishSectionStatus = function() {
+    var r = old.apply(this, arguments);
+    var modal = document.getElementById('submit-form-modal');
+    if (!modal) return r;
+    modal.querySelectorAll('.pubm-status, .pub-nav-status').forEach(function(el) {
+      if (el.classList.contains('is-ok') || el.textContent.indexOf('✓') >= 0) {
+        el.classList.add('ok');
+        el.classList.remove('is-ok');
+      } else {
+        el.classList.remove('ok');
+      }
+    });
+    return r;
+  };
+})();
+
+
+window.forcePublishModalLayout = function() {
+  var modal = document.getElementById('submit-form-modal');
+  if (!modal) return;
+  if (modal.classList.contains('hidden')) {
+    modal.style.cssText = '';
+    return;
+  }
+  // opened: only switch tab, CSS handles layout
+  var activeBtn = modal.querySelector('[data-pub-tab].active');
+  var tab = (activeBtn && activeBtn.getAttribute('data-pub-tab')) || 'main';
+  if (typeof window.switchPubTab === 'function') window.switchPubTab(tab);
+};
+
+window.switchPubTab = function(tab) {
+  var modal = document.getElementById('submit-form-modal');
+  if (!modal || !tab) return;
+  modal.querySelectorAll('[data-pub-tab]').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-pub-tab') === tab);
+  });
+  modal.querySelectorAll('[data-pub-pane]').forEach(function(pane) {
+    pane.classList.toggle('active', pane.getAttribute('data-pub-pane') === tab);
+  });
+  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
+};
+
+/* на загрузке гарантированно прячем publish modal */
+document.addEventListener('DOMContentLoaded', function() {
+  var modal = document.getElementById('submit-form-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.cssText = '';
+    modal.setAttribute('aria-hidden', 'true');
+  }
+});
+
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.submit-modal').forEach(function(m) {
+    if (!m.classList.contains('hidden')) {
+      // leave auth alone; only force-hide success/form overlays if stuck open without intent
+    }
+    // ensure done modal starts hidden
+    if (m.id === 'submit-done-modal' || m.id === 'submit-form-modal' || m.id === 'submit-rules-modal') {
+      m.classList.add('hidden');
+    }
+  });
+  // stray backdrops outside .submit-modal.hidden parents
+  document.querySelectorAll('.submit-modal-backdrop').forEach(function(bd) {
+    var parent = bd.closest('.submit-modal, .pubm, .sgdb-modal');
+    if (!parent || parent.classList.contains('hidden')) {
+      bd.style.pointerEvents = 'none';
+    }
+  });
 });

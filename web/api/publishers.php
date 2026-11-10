@@ -56,47 +56,65 @@ try {
         case 'mine': {
             $user = requireUserP();
             $uid = (int)$user['id'];
-            $rows = [];
+
+            // Починить membership для всех своих owner-издательств
             try {
-                $st = $pdo->prepare("
-                  SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id,
-                    COALESCE(pm.role, 'member') AS my_role,
-                    (SELECT COUNT(*) FROM publisher_members pm2 WHERE pm2.publisher_id = p.id) AS members_count,
-                    (SELECT COUNT(*) FROM games g WHERE g.publisher_id = p.id AND g.is_published = 1) AS games_count
-                  FROM publisher_members pm
-                  INNER JOIN publishers p ON p.id = pm.publisher_id
-                  WHERE pm.user_id = ?
-                  ORDER BY p.name ASC
-                ");
-                $st->execute([$uid]);
-                $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            } catch (Throwable $e) {
-                jsonOut(['ok' => false, 'error' => 'DB members: ' . $e->getMessage()], 500);
-            }
-            try {
-                $st2 = $pdo->prepare("
-                  SELECT id, name, slug, avatar_url, owner_id,
-                    (SELECT COUNT(*) FROM publisher_members pm2 WHERE pm2.publisher_id = publishers.id) AS members_count,
-                    (SELECT COUNT(*) FROM games g WHERE g.publisher_id = publishers.id AND g.is_published = 1) AS games_count
-                  FROM publishers WHERE owner_id = ?
-                ");
-                $st2->execute([$uid]);
-                foreach ($st2->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
-                    $found = false;
-                    foreach ($rows as $ex) {
-                        if ((int)$ex['id'] === (int)$r['id']) { $found = true; break; }
-                    }
-                    if (!$found) {
-                        $r['my_role'] = 'owner';
-                        $rows[] = $r;
-                        try {
-                            $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')")
-                                ->execute([(int)$r['id'], $uid]);
-                        } catch (Throwable $e) {}
-                    }
+                $own = $pdo->prepare("SELECT id FROM publishers WHERE owner_id = ?");
+                $own->execute([$uid]);
+                $ins = $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')");
+                foreach ($own->fetchAll(PDO::FETCH_COLUMN) ?: [] as $pid) {
+                    $ins->execute([(int)$pid, $uid]);
                 }
             } catch (Throwable $e) {}
-            jsonOut(['ok' => true, 'publishers' => $rows, 'user_id' => $uid, 'count' => count($rows)]);
+
+            // Прямой запрос: membership UNION owner
+            $sql = "
+              SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id, pm.role AS my_role
+              FROM publisher_members pm
+              INNER JOIN publishers p ON p.id = pm.publisher_id
+              WHERE pm.user_id = ?
+              UNION
+              SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id, 'owner' AS my_role
+              FROM publishers p
+              WHERE p.owner_id = ?
+              ORDER BY name ASC
+            ";
+            $st = $pdo->prepare($sql);
+            $st->execute([$uid, $uid]);
+            $raw = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            // unique by id
+            $byId = [];
+            foreach ($raw as $r) {
+                $id = (int)$r['id'];
+                if (!isset($byId[$id])) $byId[$id] = $r;
+            }
+            $rows = array_values($byId);
+
+            foreach ($rows as &$r) {
+                $pid = (int)$r['id'];
+                $r['id'] = $pid;
+                $r['members_count'] = 1;
+                $r['games_count'] = 0;
+                try {
+                    $c = $pdo->prepare("SELECT COUNT(*) FROM publisher_members WHERE publisher_id = ?");
+                    $c->execute([$pid]);
+                    $r['members_count'] = (int)$c->fetchColumn();
+                } catch (Throwable $e) {}
+                try {
+                    $c = $pdo->prepare("SELECT COUNT(*) FROM games WHERE publisher_id = ?");
+                    $c->execute([$pid]);
+                    $r['games_count'] = (int)$c->fetchColumn();
+                } catch (Throwable $e) {}
+            }
+            unset($r);
+
+            jsonOut([
+                'ok' => true,
+                'publishers' => $rows,
+                'user_id' => $uid,
+                'count' => count($rows),
+            ]);
         }
 
         case 'get': {
@@ -213,9 +231,20 @@ try {
                     $ins->execute([$pid, $uid]);
                 }
             }
+            // гарантируем membership owner
+            try {
+                $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')")
+                    ->execute([$pid, (int)$user['id']]);
+            } catch (Throwable $e) {}
             $st = $pdo->prepare("SELECT * FROM publishers WHERE id = ?");
             $st->execute([$pid]);
-            jsonOut(['ok' => true, 'publisher' => $st->fetch()]);
+            $pub = $st->fetch();
+            if ($pub) {
+                $pub['my_role'] = 'owner';
+                $pub['members_count'] = 1;
+                $pub['games_count'] = 0;
+            }
+            jsonOut(['ok' => true, 'publisher' => $pub]);
         }
 
         case 'search_users': {
@@ -237,9 +266,7 @@ try {
             $uid = (int)($_GET['user_id'] ?? 0);
             if ($uid <= 0) jsonOut(['ok'=>false,'error'=>'user_id'], 400);
             $st = $pdo->prepare("
-                SELECT p.id, p.name, p.slug, p.avatar_url, pm.role,
-                  (SELECT COUNT(*) FROM publisher_members pm2 WHERE pm2.publisher_id = p.id) AS members_count,
-                  (SELECT COUNT(*) FROM games g WHERE g.publisher_id = p.id AND g.is_published = 1) AS games_count
+                SELECT p.id, p.name, p.slug, p.avatar_url, pm.role
                 FROM publisher_members pm
                 JOIN publishers p ON p.id = pm.publisher_id
                 WHERE pm.user_id = ?
