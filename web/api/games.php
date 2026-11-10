@@ -580,16 +580,20 @@ try {
         }
 
         try {
-            $stmt = $pdo->prepare("SELECT id, platform, version, changelog, file_size_bytes, file_name, status, created_at
+            $stmt = $pdo->prepare("SELECT id, platform, version, changelog, file_url, file_name, file_size_bytes, status, created_at
                 FROM game_builds WHERE game_id = ? AND (status = 'published' OR status IS NULL OR status = '')
-                ORDER BY created_at DESC");
+                ORDER BY id DESC");
             $stmt->execute([$id]);
             $builds = $stmt->fetchAll();
         } catch (Throwable $e) {
-            $stmt = $pdo->prepare("SELECT id, platform, version, file_size_bytes, created_at
-                FROM game_builds WHERE game_id = ? ORDER BY created_at DESC");
-            $stmt->execute([$id]);
-            $builds = $stmt->fetchAll();
+            try {
+                $stmt = $pdo->prepare("SELECT id, platform, version, file_url, file_size_bytes, created_at
+                    FROM game_builds WHERE game_id = ? ORDER BY id DESC");
+                $stmt->execute([$id]);
+                $builds = $stmt->fetchAll();
+            } catch (Throwable $e2) {
+                $builds = [];
+            }
         }
 
         $stmt = $pdo->prepare("

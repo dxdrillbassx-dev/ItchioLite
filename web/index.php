@@ -2261,7 +2261,7 @@ function socialAuth(provider) {
               <label class="settings-label"><span>Разработчик</span><input class="auth-input" name="developer" id="sg-developer" maxlength="120" placeholder="Студия или автор" /></label>
               <label class="settings-label"><span>Издательство</span>
                 <select class="settings-select" id="sg-publisher-id" name="publisher_id">
-                  <option value="">— выберите издательство —</option>
+                  <option value="">— без издательства —</option>
                 </select>
               </label>
               <input type="hidden" name="publisher" id="sg-publisher" value="" />
@@ -2435,36 +2435,26 @@ function socialAuth(provider) {
           <section class="pub-section" id="sg-builds-section">
             <div class="pub-section-head">
               <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
-              <h3>Сборки и файлы</h3>
+              <h3>Сборка и файл</h3>
             </div>
-            <p class="pub-hint">Загрузите exe / zip / 7z и укажите версию. Без файла и версии игра не уйдёт на модерацию.</p>
+            <p class="pub-hint">Укажите версию, кратко что нового и прикрепите файл (zip/exe). Без этого на модерацию не отправится.</p>
             <div class="ws-ff" style="margin-bottom:10px">
               <span>Версия *</span>
-              <input type="text" class="auth-input" id="sg-build-version" placeholder="1.0.0" maxlength="32" />
+              <input type="text" class="auth-input" id="sg-build-version" name="build_version" placeholder="1.0.0" maxlength="32" />
             </div>
             <div class="ws-ff" style="margin-bottom:10px">
-              <span>Платформа</span>
-              <select class="settings-select" id="sg-build-platform" style="width:100%">
-                <option value="windows">Windows</option>
-                <option value="linux">Linux</option>
-                <option value="mac">macOS</option>
-              </select>
+              <span>Что нового</span>
+              <input type="text" class="auth-input" id="sg-build-changelog" name="build_changelog" placeholder="Кратко об изменениях…" maxlength="500" />
             </div>
             <div class="ws-ff" style="margin-bottom:10px">
-              <span>Описание изменений</span>
-              <input type="text" class="auth-input" id="sg-build-changelog" placeholder="Что нового в этой версии…" maxlength="500" />
-            </div>
-            <div class="ws-ff" style="margin-bottom:10px">
-              <span>Файл сборки *</span>
+              <span>Файл *</span>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                 <label class="pub-file-btn" for="sg-build-file">Выбрать файл</label>
-                <input type="file" id="sg-build-file" accept=".exe,.zip,.7z,.rar,.msi,.dmg,.appimage,.tar,.gz" hidden />
-                <span class="settings-hint" id="sg-build-file-name">ZIP / EXE / 7z / DMG…</span>
+                <input type="file" id="sg-build-file" class="pub-file-input" name="build_file" accept=".exe,.zip,.7z,.rar,.msi,.dmg,.appimage,.tar,.gz" hidden />
+                <span class="settings-hint" id="sg-build-file-name">ZIP / EXE / 7z…</span>
               </div>
+              <div id="sg-build-existing" class="settings-hint" style="display:none;margin-top:8px"></div>
             </div>
-            <button type="button" class="hp-btn-edit" id="sg-build-add" style="margin-bottom:12px">+ Добавить сборку</button>
-            <input type="hidden" id="sg-builds-json" name="builds_meta" value="[]" />
-            <div id="sg-builds-list"></div>
           </section>
 
           <section class="pub-section">

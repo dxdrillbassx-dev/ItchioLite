@@ -49,11 +49,12 @@ function save_builds_from_request(PDO $pdo, int $gameId): void {
     $root = dirname(__DIR__) . '/uploads/games/builds/' . $gameId;
     if (!is_dir($root)) @mkdir($root, 0755, true);
 
-    // PHP may parse builds[0] as $_FILES['builds'] with nested name/tmp_name arrays
+    // PHP: builds[0] → $_FILES['builds'][name][0]  ИЛИ  builds_0
     $filesBag = [];
     if (!empty($_FILES['builds']) && is_array($_FILES['builds']['name'] ?? null)) {
         foreach ($_FILES['builds']['name'] as $k => $name) {
             if (($_FILES['builds']['error'][$k] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+            if (!is_uploaded_file($_FILES['builds']['tmp_name'][$k] ?? '')) continue;
             $filesBag[(string)$k] = [
                 'name' => $name,
                 'tmp_name' => $_FILES['builds']['tmp_name'][$k],
@@ -61,14 +62,35 @@ function save_builds_from_request(PDO $pdo, int $gameId): void {
                 'error' => (int)$_FILES['builds']['error'][$k],
             ];
         }
-    } else {
-        // builds[0], builds[1] as separate fields
-        foreach ($_FILES as $key => $f) {
-            if (preg_match('/^builds_(\d+)$/', $key, $m) || preg_match('/^builds\[(\d+)\]$/', $key, $m)) {
-                if (($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
-                    $filesBag[$m[1]] = $f;
-                }
+    }
+    foreach ($_FILES as $key => $f) {
+        if (!is_array($f) || !isset($f['tmp_name'])) continue;
+        if (preg_match('/^builds_(\d+)$/', $key, $m) || preg_match('/^builds\[(\d+)\]$/', $key, $m)) {
+            if (($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK && is_uploaded_file($f['tmp_name'])) {
+                $filesBag[$m[1]] = $f;
             }
+        }
+    }
+
+    // одиночный файл name=build_file
+    if (!$filesBag && !empty($_FILES['build_file']) && ($_FILES['build_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+        $filesBag['0'] = $_FILES['build_file'];
+    }
+    // версия/changelog из простых POST полей
+    if ($meta === [] && $filesBag) {
+        $meta[] = [
+            'i' => '0',
+            'version' => trim((string)($_POST['build_version'] ?? '1.0')) ?: '1.0',
+            'platform' => 'windows',
+            'changelog' => trim((string)($_POST['build_changelog'] ?? '')),
+            'has_file' => true,
+        ];
+    }
+
+    // если meta пустая, но файлы есть — собрать meta из ключей файлов
+    if (!$meta && $filesBag) {
+        foreach ($filesBag as $idx => $f) {
+            $meta[] = ['i' => $idx, 'version' => '1.0', 'platform' => 'windows', 'changelog' => '', 'has_file' => true];
         }
     }
 
@@ -76,6 +98,11 @@ function save_builds_from_request(PDO $pdo, int $gameId): void {
         ? (string)$GLOBALS['__build_status_override']
         : 'pending';
     $uid = isset($GLOBALS['__build_submitted_by']) ? (int)$GLOBALS['__build_submitted_by'] : null;
+    try {
+        $u = getCurrentUser();
+        if ($u && $uid === null) $uid = (int)$u['id'];
+    } catch (Throwable $e) {}
+
     $ins = $pdo->prepare("INSERT INTO game_builds (game_id, platform, version, changelog, file_url, file_name, file_size_bytes, status, submitted_by) VALUES (?,?,?,?,?,?,?,?,?)");
     foreach ($meta as $i => $item) {
         if (!is_array($item)) continue;
@@ -88,16 +115,28 @@ function save_builds_from_request(PDO $pdo, int $gameId): void {
         if ($existingId > 0 && empty($item['has_file']) && empty($filesBag[$idx])) continue;
 
         $file = $filesBag[$idx] ?? null;
-        if (!$file) continue;
+        if (!$file) {
+            // fallback: первый неиспользованный файл
+            if ($filesBag) {
+                $file = array_shift($filesBag);
+            } else {
+                continue;
+            }
+        } else {
+            unset($filesBag[$idx]);
+        }
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if ($ext === '') $ext = 'bin';
         $safe = bin2hex(random_bytes(8)) . '.' . preg_replace('/[^a-z0-9]+/i', '', $ext);
         $dest = $root . '/' . $safe;
-        if (!move_uploaded_file($file['tmp_name'], $dest)) continue;
+        if (!@move_uploaded_file($file['tmp_name'], $dest)) {
+            // иногда tmp уже перемещён — пробуем copy
+            if (!@copy($file['tmp_name'], $dest)) continue;
+        }
         $rel = 'uploads/games/builds/' . $gameId . '/' . $safe;
         $ins->execute([
             $gameId, $platform, $version, $changelog,
-            $rel, $file['name'], (int)$file['size'],
+            $rel, $file['name'], (int)($file['size'] ?? filesize($dest) ?: 0),
             $status, $uid
         ]);
     }
@@ -248,12 +287,7 @@ try {
                 $chk->execute([$publisherId, (int)$user['id']]);
                 if (!$chk->fetch()) $publisherId = 0;
             }
-            // Для новой игры издательство обязательно
-            if ($publisherId <= 0) {
-                http_response_code(400);
-                echo json_encode(['ok' => false, 'error' => 'Выберите издательство. Сначала создайте его в разделе «Мои издательства».'], JSON_UNESCAPED_UNICODE);
-                break;
-            }
+            // издательство опционально — можно публиковать только с разработчиком
             $video = normalize_video_urls_field(trim((string)($_POST['video_url'] ?? '')));
             $sysMin = trim($_POST['sys_req_min'] ?? '');
             $sysRec = trim($_POST['sys_req_rec'] ?? '');
@@ -263,12 +297,14 @@ try {
             $isAdult = !empty($_POST['is_adult']) ? 1 : 0;
             $developerIn = trim($_POST['developer'] ?? '');
             $publisherIn = trim($_POST['publisher'] ?? '');
-            $devName = $publisherIn !== '' ? $publisherIn : ($developerIn !== '' ? $developerIn : $user['username']);
+            $devName = $developerIn !== '' ? $developerIn : ($publisherIn !== '' ? $publisherIn : $user['username']);
             if ($publisherId > 0) {
                 $pn = $pdo->prepare("SELECT name FROM publishers WHERE id = ?");
                 $pn->execute([$publisherId]);
                 $prow = $pn->fetch();
-                if ($prow) $devName = $prow['name'];
+                if ($prow && $publisherIn === '') {
+                    // если выбрано издательство и имя не задано отдельно — можно подставить
+                }
             }
             $developerCol = $developerIn !== '' ? $developerIn : $user['username'];
 
@@ -349,6 +385,28 @@ try {
             $gameId = (int)$pdo->lastInsertId();
             insert_trailer_media($pdo, $gameId, $video);
             try { save_builds_from_request($pdo, (int)$gameId); } catch (Throwable $e) {}
+            // обязательна хотя бы одна сборка
+            try {
+                $bc = $pdo->prepare("SELECT COUNT(*) FROM game_builds WHERE game_id = ?");
+                $bc->execute([$gameId]);
+                if ((int)$bc->fetchColumn() < 1) {
+                    $pdo->prepare("DELETE FROM games WHERE id = ?")->execute([$gameId]);
+                    http_response_code(400);
+                    echo json_encode(['ok' => false, 'error' => 'Прикрепите файл сборки и укажите версию'], JSON_UNESCAPED_UNICODE);
+                    break;
+                }
+            } catch (Throwable $e) {}
+            // обязательна хотя бы одна сборка
+            try {
+                $bc = $pdo->prepare("SELECT COUNT(*) FROM game_builds WHERE game_id = ?");
+                $bc->execute([$gameId]);
+                if ((int)$bc->fetchColumn() < 1) {
+                    $pdo->prepare("DELETE FROM games WHERE id = ?")->execute([$gameId]);
+                    http_response_code(400);
+                    echo json_encode(['ok' => false, 'error' => 'Прикрепите файл сборки и укажите версию'], JSON_UNESCAPED_UNICODE);
+                    break;
+                }
+            } catch (Throwable $e) {}
 
             // trailers from pack (local uploads paths)
             $trailerUrls = trim((string)($_POST['trailer_urls'] ?? ''));
@@ -467,6 +525,68 @@ try {
             echo json_encode(['ok' => true, 'game_id' => $gameId], JSON_UNESCAPED_UNICODE);
             break;
 
+
+        // ===== ПУБЛИКАТОР: обновление карточки + новая сборка на модерацию =====
+        case 'publisher_update': {
+            if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false]); break; }
+            $user = requireUserS();
+            if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+                http_response_code(403);
+                echo json_encode(['ok'=>false,'error'=>'CSRF'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $id = (int)($_POST['id'] ?? 0);
+            $st = $pdo->prepare("SELECT * FROM games WHERE id = ?");
+            $st->execute([$id]);
+            $game = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$game) {
+                http_response_code(404);
+                echo json_encode(['ok'=>false,'error'=>'Не найдено'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $uid = (int)$user['id'];
+            $isOwner = ((int)($game['submitted_by'] ?? 0) === $uid);
+            $isAdmin = (($user['role'] ?? '') === 'admin');
+            if (!$isOwner && !$isAdmin) {
+                http_response_code(403);
+                echo json_encode(['ok'=>false,'error'=>'Нет доступа'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            // поля карточки (как admin_save, урезанно)
+            $title = trim($_POST['title'] ?? $game['title'] ?? '');
+            $short = trim($_POST['short_description'] ?? $game['short_description'] ?? '');
+            $desc = trim($_POST['description'] ?? $game['description'] ?? '');
+            $genre = trim($_POST['genre'] ?? $game['genre'] ?? '');
+            $video = normalize_video_urls_field(trim((string)($_POST['video_url'] ?? $game['video_url'] ?? '')));
+            $price = (float)($_POST['price'] ?? $game['price'] ?? 0);
+            $developer = trim($_POST['developer'] ?? $game['developer'] ?? '');
+            $pdo->prepare("UPDATE games SET title=?, short_description=?, description=?, genre=?, video_url=?, price=?, developer=?, developer_name=COALESCE(NULLIF(?,''), developer_name) WHERE id=?")
+                ->execute([$title, $short, $desc, $genre, $video, $price, $developer, $developer, $id]);
+
+            // сборка строго pending
+            $GLOBALS['__build_status_override'] = 'pending';
+            $GLOBALS['__build_submitted_by'] = $uid;
+            try { save_builds_from_request($pdo, $id); } catch (Throwable $e) {}
+            $bc = $pdo->prepare("SELECT COUNT(*) FROM game_builds WHERE game_id = ? AND status = 'pending'");
+            $bc->execute([$id]);
+            if ((int)$bc->fetchColumn() < 1) {
+                http_response_code(400);
+                echo json_encode(['ok'=>false,'error'=>'Не удалось сохранить файл сборки. Укажите версию и прикрепите файл.'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            // уведомить админов
+            try {
+                $admins = $pdo->query("SELECT id FROM users WHERE role = 'admin'")->fetchAll(PDO::FETCH_COLUMN);
+                $ins = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)");
+                $meta = json_encode(['game_id' => $id], JSON_UNESCAPED_UNICODE);
+                foreach ($admins as $aid) {
+                    $ins->execute([(int)$aid, 'game_update_pending', 'Обновление игры на модерации', '«' . $title . '» — новая версия/сборка', $meta]);
+                }
+            } catch (Throwable $e) {}
+            echo json_encode(['ok' => true, 'pending' => true], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
         // ===== СПИСОК НА МОДЕРАЦИИ (admin) =====
         case 'pending':
             $user = requireAdminS();
@@ -503,6 +623,13 @@ try {
             $media = $pdo->prepare("SELECT id, kind, url, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order");
             $media->execute([$id]);
             $g['media'] = $media->fetchAll() ?: [];
+
+            try {
+                ensure_game_builds_table($pdo);
+                $stB = $pdo->prepare("SELECT id, platform, version, changelog, file_url, file_name, file_size_bytes, status, created_at FROM game_builds WHERE game_id = ? ORDER BY id DESC");
+                $stB->execute([$id]);
+                $g['builds'] = $stB->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable $e) { $g['builds'] = []; }
             // скриншоты из game_screenshots, если не попали в game_media
             $shotUrls = [];
             foreach ($g['media'] as $m) {
@@ -720,6 +847,19 @@ try {
             }
 
             insert_trailer_media($pdo, (int)$id, $fields['video_url'] ?? '');
+            // новые сборки: pending, если явно просят; иначе published только при publish-флоу
+            try {
+                if (!empty($_POST['builds_as_pending'])) {
+                    $GLOBALS['__build_status_override'] = 'pending';
+                } else {
+                    $stPub = $pdo->prepare("SELECT is_published, status FROM games WHERE id = ?");
+                    $stPub->execute([$id]);
+                    $gPub = $stPub->fetch(PDO::FETCH_ASSOC) ?: [];
+                    if (!empty($gPub['is_published']) || ($gPub['status'] ?? '') === 'published') {
+                        $GLOBALS['__build_status_override'] = 'published';
+                    }
+                }
+            } catch (Throwable $e) {}
             try { save_builds_from_request($pdo, (int)$id); } catch (Throwable $e) {}
 
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
@@ -939,8 +1079,21 @@ try {
             if ($id <= 0) { echo json_encode(['ok'=>false,'error'=>'game_id']); break; }
             $user = getCurrentUser();
             $isAdmin = $user && (($user['role'] ?? '') === 'admin');
+            $isSubmitter = false;
+            if ($user) {
+                try {
+                    $stG = $pdo->prepare("SELECT submitted_by, status FROM games WHERE id = ?");
+                    $stG->execute([$id]);
+                    $gRow = $stG->fetch(PDO::FETCH_ASSOC);
+                    if ($gRow && (int)$gRow['submitted_by'] === (int)$user['id']) $isSubmitter = true;
+                    // pending-игра: автор и админ видят pending-сборки
+                    if ($gRow && ($gRow['status'] ?? '') === 'pending' && ($isAdmin || $isSubmitter)) {
+                        $isAdmin = true; // reuse filter below as "show all"
+                    }
+                } catch (Throwable $e) {}
+            }
             $sql = "SELECT id, game_id, platform, version, changelog, file_url, file_name, file_size_bytes, status, created_at FROM game_builds WHERE game_id = ?";
-            if (!$isAdmin) $sql .= " AND (status = 'published' OR status IS NULL OR status = '')";
+            if (!$isAdmin && !$isSubmitter) $sql .= " AND (status = 'published' OR status IS NULL OR status = '')";
             $sql .= " ORDER BY id DESC";
             $st = $pdo->prepare($sql);
             $st->execute([$id]);

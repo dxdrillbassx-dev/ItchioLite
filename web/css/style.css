@@ -11830,52 +11830,76 @@ select.select-native-hidden,
   background: var(--bg-elevated);
 }
 .pub-file-preview {
-  height: 120px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.04) center/cover no-repeat;
+  border-radius: 10px;
+  background-color: rgba(255,255,255,0.04);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 600;
-  border: 1px dashed rgba(255,255,255,0.1);
+  border: 1px dashed rgba(255,255,255,0.12);
   overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+.pub-file-preview.has-img {
+  border-style: solid;
+  border-color: rgba(255,255,255,0.08);
 }
 .pub-file-preview.has-img span { display: none; }
 /* обложка — портрет 2:3 */
 .pub-file-card[data-for="sg-cover"] .pub-file-preview {
+  width: 140px;
+  max-width: 100%;
   aspect-ratio: 2 / 3;
   height: auto;
-  min-height: 120px;
-  max-height: 180px;
+  min-height: 0;
+  max-height: 210px;
   background-size: cover;
-  background-position: center;
 }
-.pub-file-preview--wide {
-  height: 96px;
+/* баннер — широкий */
+.pub-file-preview--wide,
+.pub-file-card[data-for="sg-banner"] .pub-file-preview {
+  width: 100%;
+  max-width: 280px;
   aspect-ratio: 16 / 5;
-  width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: 100px;
   background-size: cover;
-  background-position: center;
 }
-.pub-file-preview--logo {
-  height: 72px;
+/* лого — contain, без растягивания */
+.pub-file-preview--logo,
+.pub-file-card[data-for="sg-logo"] .pub-file-preview {
   width: 100%;
+  max-width: 280px;
+  aspect-ratio: 3 / 1;
+  height: auto;
+  min-height: 56px;
+  max-height: 80px;
   background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-color: rgba(0,0,0,0.25);
+  background-color: rgba(0,0,0,0.28);
 }
-.pub-file-preview--icon {
-  width: 88px !important;
-  height: 88px !important;
-  max-width: 88px;
+/* иконка — квадрат, contain */
+.pub-file-preview--icon,
+.pub-file-card[data-for="sg-icon"] .pub-file-preview {
+  width: 96px !important;
+  height: 96px !important;
+  max-width: 96px;
   aspect-ratio: 1 / 1;
-  border-radius: 12px;
-  background-size: cover;
-  background-position: center;
-  margin: 0 auto;
+  border-radius: 14px;
+  background-size: contain;
+  background-color: rgba(0,0,0,0.28);
+  margin: 0;
+  /* лёгкая клетка для прозрачности */
+  background-image: none;
+}
+.pub-file-card[data-for="sg-icon"] .pub-file-preview.has-img {
+  background-color: #1a1916;
 }
 .pub-file-input {
   position: absolute !important;
@@ -15597,3 +15621,61 @@ textarea.field-changed,
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 1px rgba(239,91,44,0.35);
 }
+
+
+/* builds locked */
+.btn-download.is-disabled,
+.btn-download:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.build-row.is-locked .btn-download {
+  opacity: 0.45;
+}
+
+
+/* builds: установлено — не кликабельно */
+.btn-download.is-installed,
+.btn-download.is-installed:disabled {
+  opacity: 0.85;
+  cursor: default;
+  pointer-events: none;
+  background: rgba(239, 91, 44, 0.35) !important;
+  border-color: rgba(239, 91, 44, 0.5) !important;
+  color: #fff !important;
+}
+.build-installed { display: none !important; }
+
+
+/* превью медиа: img внутри блока */
+.pub-file-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+.pub-file-preview--logo img,
+.pub-file-card[data-for="sg-logo"] .pub-file-preview img,
+.pub-file-preview--icon img,
+.pub-file-card[data-for="sg-icon"] .pub-file-preview img {
+  object-fit: contain;
+}
+.pub-file-preview {
+  position: relative;
+}
+.pub-file-preview.has-img {
+  padding: 0;
+}
+
+
+#sg-build-file-name {
+  display: inline !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-left: 4px;
+}
+#submit-admin-reject.hidden { display: none !important; }

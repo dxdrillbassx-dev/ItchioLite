@@ -153,6 +153,10 @@ function formatSize(bytes) {
   if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' МБ';
   return (b / 1024 / 1024 / 1024).toFixed(2) + ' ГБ';
 }
+function formatBytes(n) {
+  const s = formatSize(n);
+  return s || ((Number(n) || 0) + ' Б');
+}
 
 
 // ---------- Accordion (профиль / фильтры / страница игры) ----------
@@ -3336,29 +3340,41 @@ function renderBuildsList(builds, g) {
   if (!builds.length) {
     return '<p class="modal-builds-empty">Сборок пока нет — загрузите файл при публикации.</p>';
   }
-  const platformName = { windows: 'Windows', linux: 'Linux', mac: 'macOS', web: 'Web' };
   const isAdm = !!(window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.role === 'admin');
+  const owned = !!(g && (g.owned === true || g.owned === 1 || g.owned === '1' || g.in_library || g.is_owned || g.purchased));
   return `
     <div class="modal-builds">
       ${builds.map(b => {
         const installed = isVersionInstalled(g.id, b.version);
         const pending = (b.status === 'pending');
-        let btnLabel = installed ? 'Установлено' : 'Установить';
-        if (pending && isAdm) btnLabel = 'Предзагрузить';
-        else if (pending) btnLabel = 'На модерации';
+        let btnLabel = 'Установить';
+        let locked = false;
+        if (pending && isAdm) {
+          btnLabel = 'Предзагрузить';
+          locked = false;
+        } else if (pending) {
+          btnLabel = 'На модерации';
+          locked = true;
+        } else if (!owned) {
+          btnLabel = 'Купите игру';
+          locked = true;
+        } else if (installed) {
+          btnLabel = 'Установлено';
+          locked = true;
+        }
         return `
-        <div class="build-row${pending ? ' is-pending' : ''}">
+        <div class="build-row${pending ? ' is-pending' : ''}${locked ? ' is-locked' : ''}">
           <div class="build-info">
-            <span class="build-platform">${escapeHtml(platformName[b.platform] || b.platform)}</span>
-            <span class="build-version">v${escapeHtml(b.version)}</span>
+            <span class="build-version">v${escapeHtml(b.version || '')}</span>
+            ${b.file_name ? `<span class="build-size">${escapeHtml(b.file_name)}</span>` : ''}
             ${b.file_size_bytes ? `<span class="build-size">${formatSize(b.file_size_bytes)}</span>` : ''}
+            ${b.changelog ? `<span class="build-size">${escapeHtml(String(b.changelog).slice(0, 80))}</span>` : ''}
             ${pending ? '<span class="build-pending">на модерации</span>' : ''}
-            ${installed ? '<span class="build-installed">установлено</span>' : ''}
           </div>
-          <button type="button" class="btn-download${installed ? ' is-installed' : ''}" data-build-id="${b.id}"
-            data-platform="${escapeHtml(b.platform)}" data-version="${escapeHtml(b.version)}"
+          <button type="button" class="btn-download${installed ? ' is-installed' : ''}${locked ? ' is-disabled' : ''}" data-build-id="${b.id}"
+            data-platform="${escapeHtml(b.platform || 'windows')}" data-version="${escapeHtml(b.version || '')}"
             data-size="${b.file_size_bytes || 0}" data-pending="${pending ? '1' : '0'}"
-            ${pending && !isAdm ? 'disabled' : ''}>${btnLabel}</button>
+            ${locked ? 'disabled' : ''}>${btnLabel}</button>
         </div>`;
       }).join('')}
     </div>`;
@@ -3479,6 +3495,18 @@ function clearPublishFormFields() {
   try { if (typeof syncPublishGenres === 'function') syncPublishGenres(); } catch (e) {}
   try { if (typeof syncPublishDescription === 'function') syncPublishDescription(); } catch (e) {}
   window.__importedGamePack = null;
+  // сборка
+  const bv = document.getElementById('sg-build-version');
+  const bc = document.getElementById('sg-build-changelog');
+  const bf = document.getElementById('sg-build-file');
+  const bn = document.getElementById('sg-build-file-name');
+  const be = document.getElementById('sg-build-existing');
+  if (bv) { bv.value = ''; bv.placeholder = '1.0.0'; }
+  if (bc) bc.value = '';
+  if (bf) bf.value = '';
+  window.__selectedBuildFile = null;
+  if (bn) bn.textContent = 'ZIP / EXE / 7z…';
+  if (be) { be.style.display = 'none'; be.innerHTML = ''; }
   // pack sgdb оставляем — пригодится в CATioGridDB до перезагрузки
 }
 
@@ -3495,11 +3523,19 @@ function resetPublishFormMode() {
     sendBtn.textContent = 'Отправить на модерацию';
     delete sendBtn.dataset.adminPublish;
     delete sendBtn.dataset.adminSave;
+    delete sendBtn.dataset.publisherEdit;
+    delete sendBtn.dataset.updateMode;
+    sendBtn.disabled = false;
+    sendBtn.classList.remove('is-disabled');
   }
+  const rej = document.getElementById('submit-admin-reject');
+  if (rej) { rej.classList.add('hidden'); rej.style.display = 'none'; }
   const extra = document.getElementById('sg-admin-extra-actions');
   if (extra) extra.remove();
   try { clearPublishFormFields(); } catch (e) {}
   try { ensurePublishAdminFooter(formModal, {}, null); } catch (e) {}
+  window.__publishEditGameId = null;
+  window.__adminModeratingId = null;
 }
 
 function ensurePublishAdminFooter(formModal, opts, g) {
@@ -3571,7 +3607,7 @@ function ensurePublishAdminFooter(formModal, opts, g) {
   left.innerHTML = '';
   left.appendChild(importInput);
 
-  const mode = opts.moderate ? 'moderate' : (opts.adminEdit ? 'adminEdit' : 'submit');
+  const mode = opts.moderate ? 'moderate' : ((opts.adminEdit || opts.publisherEdit) ? 'adminEdit' : 'submit');
   if (mode === 'submit') {
     importBtn.style.display = '';
     importBtn.textContent = 'Импорт';
@@ -3623,6 +3659,19 @@ function ensurePublishAdminFooter(formModal, opts, g) {
   if (oldExtra) oldExtra.remove();
   const oldRej = document.getElementById('sg-admin-reject');
   if (oldRej) oldRej.remove();
+  // «Отклонить» только в модерации — иначе удаляем из DOM
+  const rejBtn = document.getElementById('submit-admin-reject');
+  if (rejBtn) {
+    if (mode === 'moderate') {
+      rejBtn.classList.remove('hidden');
+      rejBtn.style.display = '';
+    } else {
+      try { rejBtn.remove(); } catch (e) {
+        rejBtn.classList.add('hidden');
+        rejBtn.style.display = 'none';
+      }
+    }
+  }
 
   const gid = g && g.id;
   exportBtn.onclick = async () => {
@@ -3672,15 +3721,17 @@ async function openPublishFormForGame(g, opts) {
     toast('Модалка публикации не найдена');
     return;
   }
-  const isAdminMode = !!(opts.adminEdit || opts.moderate);
+  const isPublisherEdit = !!opts.publisherEdit;
+  const isAdminMode = !!(opts.adminEdit || opts.moderate) && !isPublisherEdit;
   window.__adminModeratingId = isAdminMode ? g.id : null;
+  window.__publishEditGameId = (isPublisherEdit || isAdminMode) ? (g && g.id) : null;
   window.__adminPublishMode = isAdminMode;
   window.__publishFormMode = opts.moderate ? 'moderate' : (opts.adminEdit ? 'adminEdit' : 'submit');
 
   // заголовок ТОЛЬКО в этой модалке
   const head = formModal.querySelector('#submit-form-title') || formModal.querySelector('.sgdb-modal-head h3') || formModal.querySelector('h2, h3');
   if (head) {
-    head.textContent = opts.moderate ? 'Модерация заявки' : (opts.adminEdit ? 'Редактирование карточки' : 'Публикация игры');
+    head.textContent = opts.moderate ? 'Модерация заявки' : (opts.publisherEdit ? 'Обновление карточки' : (opts.adminEdit ? 'Редактирование карточки' : 'Публикация игры'));
   }
   const sendBtn = document.getElementById('submit-game-send');
   if (sendBtn) {
@@ -3688,14 +3739,23 @@ async function openPublishFormForGame(g, opts) {
       sendBtn.textContent = 'Опубликовать';
       sendBtn.dataset.adminPublish = '1';
       delete sendBtn.dataset.adminSave;
+      delete sendBtn.dataset.publisherEdit;
+    } else if (opts.publisherEdit) {
+      sendBtn.textContent = 'Отправить на модерацию';
+      delete sendBtn.dataset.adminPublish;
+      delete sendBtn.dataset.adminSave;
+      sendBtn.dataset.publisherEdit = '1';
+      sendBtn.dataset.updateMode = '1';
     } else if (opts.adminEdit) {
       sendBtn.textContent = 'Сохранить';
       sendBtn.dataset.adminSave = '1';
       delete sendBtn.dataset.adminPublish;
+      delete sendBtn.dataset.publisherEdit;
     } else {
       sendBtn.textContent = 'Отправить на модерацию';
       delete sendBtn.dataset.adminPublish;
       delete sendBtn.dataset.adminSave;
+      delete sendBtn.dataset.publisherEdit;
     }
   }
   // доп. кнопки админа в футере модалки
@@ -3743,23 +3803,19 @@ async function openPublishFormForGame(g, opts) {
   const banner = g.banner_url || '';
   if (cover) {
     set('sg-cover-url', cover);
-    const prev = document.getElementById('sg-cover-preview');
-    if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(cover) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
+    setPubPreviewImg('sg-cover-preview', cover);
   }
   if (banner) {
     set('sg-banner-url', banner);
-    const prev = document.getElementById('sg-banner-preview');
-    if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(banner) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
+    setPubPreviewImg('sg-banner-preview', banner);
   }
   if (g.logo_url) {
     set('sg-logo-url', g.logo_url);
-    const prev = document.getElementById('sg-logo-preview');
-    if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(g.logo_url) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
+    setPubPreviewImg('sg-logo-preview', g.logo_url);
   }
   if (g.icon_url) {
     set('sg-icon-url', g.icon_url);
-    const prev = document.getElementById('sg-icon-preview');
-    if (prev) { prev.style.backgroundImage = 'url(' + JSON.stringify(g.icon_url) + ')'; prev.classList.add('has-img'); prev.innerHTML = ''; }
+    setPubPreviewImg('sg-icon-preview', g.icon_url);
   }
 
   // trailers multi — video_url + game_media trailers
@@ -3874,13 +3930,48 @@ async function openPublishFormForGame(g, opts) {
     window.__pendingBuilds = [];
     try { renderPendingBuilds(); } catch (e) {}
   }
+  // публикатор обновляет — нужна НОВАЯ версия и НОВЫЙ файл
+  if (opts.publisherEdit) {
+    const ver = document.getElementById('sg-build-version');
+    const ch = document.getElementById('sg-build-changelog');
+    const fi = document.getElementById('sg-build-file');
+    const nameEl = document.getElementById('sg-build-file-name');
+    const exist = document.getElementById('sg-build-existing');
+    if (ver) { ver.value = ''; ver.placeholder = 'Новая версия, напр. 1.0.1'; }
+    if (ch) ch.value = '';
+    if (fi) fi.value = '';
+    window.__selectedBuildFile = null;
+    if (nameEl) {
+      nameEl.textContent = 'Прикрепите новый файл сборки';
+      nameEl.style.display = 'inline';
+      nameEl.style.opacity = '1';
+    }
+    if (exist) { exist.style.display = 'none'; exist.innerHTML = ''; }
+    const rej = document.getElementById('submit-admin-reject');
+    if (rej) { try { rej.remove(); } catch (e) {} }
+    try { updatePublishSectionStatus(); } catch (e) {}
+  }
   formModal.classList.remove('hidden');
+}
+
+function isGamePublisherOf(g) {
+  const me = window.AUTH_STATE && window.AUTH_STATE.user;
+  if (!me || !g) return false;
+  if (+g.submitted_by === +me.id) return true;
+  if (+g.user_id === +me.id) return true;
+  return false;
 }
 
 function openAdminGameEditModal(g) {
   if (!g) return;
-  // Полностью та же модалка, что «Публикация игры»
-  openPublishFormForGame(g, { adminEdit: true });
+  // Админ + публикатор этой игры → карточка публикатора (без админского «Отклонить»)
+  if (isGamePublisherOf(g)) {
+    openPublishFormForGame(g, { publisherEdit: true, adminEdit: false });
+  } else {
+    openPublishFormForGame(g, { adminEdit: true });
+  }
+  const rej = document.getElementById('submit-admin-reject');
+  if (rej) { try { rej.remove(); } catch (e) { rej.classList.add('hidden'); rej.style.display = 'none'; } }
 }
 
 function bindAdminGameEdit(g, viewer) {
@@ -7733,8 +7824,23 @@ function openPubFilePicker(sourceInput, { multiple = false, accept = 'image/*' }
       // переносим FileList в исходный input через DataTransfer
       const dt = new DataTransfer();
       [...(tmp.files || [])].forEach(f => dt.items.add(f));
-      sourceInput.files = dt.files;
+      try { sourceInput.files = dt.files; } catch (e1) { console.warn('assign files', e1); }
+      // запасной путь — храним File в dataset/window (WebView иногда глотает .files)
+      if (sourceInput.id === 'sg-build-file' && tmp.files && tmp.files[0]) {
+        window.__selectedBuildFile = tmp.files[0];
+        const nameEl = document.getElementById('sg-build-file-name');
+        if (nameEl) {
+          const f = tmp.files[0];
+          nameEl.textContent = f.name + ' · ' + (typeof formatBytes === 'function' ? formatBytes(f.size) : (Math.round(f.size/1048576*10)/10 + ' МБ'));
+          nameEl.style.display = 'inline';
+          nameEl.style.opacity = '1';
+          nameEl.style.visibility = 'visible';
+          nameEl.style.color = 'var(--text-bright)';
+        }
+        try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e2) {}
+      }
       sourceInput.dispatchEvent(new Event('change', { bubbles: true }));
+      sourceInput.dispatchEvent(new Event('input', { bubbles: true }));
     } catch (e) {
       console.warn('pub file transfer failed', e);
     }
@@ -7761,6 +7867,27 @@ function openPubFilePicker(sourceInput, { multiple = false, accept = 'image/*' }
   } catch (e) {
     cleanup();
   }
+}
+
+
+function setPubPreviewImg(previewId, url) {
+  const prev = document.getElementById(previewId);
+  if (!prev) return;
+  if (!url) {
+    prev.style.backgroundImage = '';
+    prev.classList.remove('has-img');
+    const ph = previewId.includes('cover') ? 'Обложка' : previewId.includes('banner') ? 'Баннер' : previewId.includes('logo') ? 'Логотип' : 'Иконка';
+    prev.innerHTML = '<span>' + ph + '</span>';
+    return;
+  }
+  prev.style.backgroundImage = '';
+  prev.classList.add('has-img');
+  prev.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = '';
+  img.draggable = false;
+  prev.appendChild(img);
 }
 
 function initPublishFilePreviews(root = document) {
@@ -7792,16 +7919,29 @@ function initPublishFilePreviews(root = document) {
       const prev = document.getElementById(previewId);
       const nameEl = document.getElementById(nameId);
       if (!file) {
-        if (prev) { prev.style.backgroundImage = ''; prev.classList.remove('has-img'); }
+        if (prev) {
+          prev.style.backgroundImage = '';
+          prev.classList.remove('has-img');
+          const ph = prev.dataset.placeholder || (previewId.includes('cover') ? 'Обложка' : previewId.includes('banner') ? 'Баннер' : previewId.includes('logo') ? 'Логотип' : 'Иконка');
+          prev.innerHTML = '<span>' + ph + '</span>';
+        }
         if (nameEl) nameEl.textContent = nameEl.dataset.placeholder || nameEl.textContent;
         return;
       }
-      if (nameEl) nameEl.textContent = file.name;
+      if (nameEl) nameEl.textContent = file.name + (file.size ? ' · ' + formatBytes(file.size) : '');
       if (prev && file.type && file.type.startsWith('image/')) {
         try {
+          if (prev._objUrl) { try { URL.revokeObjectURL(prev._objUrl); } catch (e) {} }
           const url = URL.createObjectURL(file);
-          prev.style.backgroundImage = "url('" + url + "')";
+          prev._objUrl = url;
+          prev.style.backgroundImage = '';
           prev.classList.add('has-img');
+          prev.innerHTML = '';
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = '';
+          img.draggable = false;
+          prev.appendChild(img);
         } catch (e) {}
       }
     });
@@ -8261,14 +8401,7 @@ function applyGamePackToSubmitForm(data) {
   };
   const setPreview = (previewId, url, nameId, label) => {
     if (!url) return;
-    const prev = document.getElementById(previewId);
-    if (prev) {
-      prev.style.backgroundImage = 'url(' + JSON.stringify(url) + ')';
-      prev.style.backgroundSize = 'cover';
-      prev.style.backgroundPosition = 'center';
-      prev.classList.add('has-img');
-      prev.innerHTML = '';
-    }
+    if (typeof setPubPreviewImg === 'function') setPubPreviewImg(previewId, url);
     if (nameId) {
       const n = document.getElementById(nameId);
       if (n) n.textContent = label || url.split('/').pop() || 'из пакета';
@@ -8787,11 +8920,62 @@ async function submitGameForm() {
   const btn = $('#submit-game-send');
   const isAdminPub = !!(btn && btn.dataset.adminPublish === '1' && window.__adminModeratingId);
   const isAdminSave = !!(btn && btn.dataset.adminSave === '1' && window.__adminModeratingId);
+  const isPublisherEdit = !!(btn && btn.dataset.publisherEdit === '1');
   if (btn) {
     btn.disabled = true;
     btn.textContent = isAdminPub ? 'Публикация...' : (isAdminSave ? 'Сохранение...' : 'Отправка...');
   }
   try {
+    // Публикатор обновляет свою игру → на модерацию (нужны версия + новый файл)
+    if (isPublisherEdit) {
+      const id = (window.__publishEditGameId || window.__adminModeratingId || 0);
+      if (!id) throw new Error('Нет id игры');
+      const ver = (document.getElementById('sg-build-version')?.value || '').trim();
+      const ch = (document.getElementById('sg-build-changelog')?.value || '').trim();
+      const bf = (typeof getSelectedBuildFile === 'function' ? getSelectedBuildFile() : null) || document.getElementById('sg-build-file')?.files?.[0] || null;
+      if (!ver) throw new Error('Укажите версию обновления');
+      if (!bf) throw new Error('Прикрепите новый файл сборки');
+      if (typeof syncPublishGenres === 'function') syncPublishGenres();
+      if (typeof syncPublishDescription === 'function') syncPublishDescription();
+      const fd = new FormData();
+      fd.append('csrf_token', window.CSRF_TOKEN || '');
+      fd.append('id', id);
+      fd.append('builds_as_pending', '1');
+      fd.append('title', ($('#sg-title') && $('#sg-title').value.trim()) || '');
+      fd.append('genre', ($('#sg-genre') && $('#sg-genre').value) || '');
+      fd.append('price', String(parseInt(String(($('#sg-price') && $('#sg-price').value) || '0').replace(/[^\d]/g, ''), 10) || 0));
+      fd.append('short_description', ($('#sg-short') && $('#sg-short').value) || '');
+      fd.append('description', ($('#sg-desc') && $('#sg-desc').value) || '');
+      try { ensureTrailersEditorUi(); } catch (e) {}
+      const tr = (typeof collectTrailerInputs === 'function') ? collectTrailerInputs() : [];
+      fd.append('video_url', (typeof serializeTrailerList === 'function' ? serializeTrailerList(tr) : '') || ($('#sg-video') && $('#sg-video').value) || '');
+      fd.append('developer', ($('#sg-developer') && $('#sg-developer').value) || '');
+      fd.append('publisher', ($('#sg-publisher') && $('#sg-publisher').value) || '');
+      fd.append('publisher_id', ($('#sg-publisher-id') && $('#sg-publisher-id').value) || '');
+      fd.append('sys_req_min', JSON.stringify(collectSysReq('#sg-sys-min-fields')));
+      fd.append('sys_req_rec', JSON.stringify(collectSysReq('#sg-sys-rec-fields')));
+      fd.append('languages', JSON.stringify(collectLanguages('#sg-lang-table')));
+      fd.append('controllers', $$('.sg-ctrl').filter(function(c){return c.checked;}).map(function(c){return c.value;}).join(','));
+      const aCover = $('#sg-cover') && $('#sg-cover').files && $('#sg-cover').files[0];
+      if (aCover) fd.append('cover', aCover);
+      if ($('#sg-cover-url') && $('#sg-cover-url').value) fd.append('cover_url', $('#sg-cover-url').value);
+      const aBanner = $('#sg-banner') && $('#sg-banner').files && $('#sg-banner').files[0];
+      if (aBanner) fd.append('banner', aBanner);
+      if ($('#sg-banner-url') && $('#sg-banner-url').value) fd.append('banner_url', $('#sg-banner-url').value);
+      fd.append('builds_meta', JSON.stringify([{ i: 0, version: ver, platform: 'windows', changelog: ch, has_file: true }]));
+      fd.append('builds[0]', bf, bf.name || 'build.bin');
+      const res = await fetch((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=publisher_update', { method: 'POST', body: fd });
+      const raw = await res.text();
+      let data;
+      try { data = JSON.parse(raw.slice(raw.indexOf('{'))); } catch (e) { throw new Error('Сервер вернул не JSON'); }
+      if (!data.ok) throw new Error(data.error || 'Не удалось отправить обновление');
+      toast('Обновление отправлено на модерацию');
+      $('#submit-form-modal')?.classList.add('hidden');
+      try { resetPublishFormMode(); } catch (e) {}
+      try { if (typeof loadGamePage === 'function') loadGamePage(+id); } catch (e) {}
+      try { refreshAdminPendingBadge(); } catch (e) {}
+      return;
+    }
     if (isAdminPub || isAdminSave) {
       const id = window.__adminModeratingId;
       const fd = new FormData();
@@ -8826,6 +9010,18 @@ async function submitGameForm() {
       if (aIcon) fd.append('icon', aIcon);
       const aShots = $('#sg-shots') && $('#sg-shots').files;
       if (aShots) for (let i = 0; i < aShots.length; i++) fd.append('screenshots[]', aShots[i]);
+      // сборка: версия + файл прямо из полей формы
+      try {
+        const ver = (document.getElementById('sg-build-version')?.value || '').trim();
+        const ch = (document.getElementById('sg-build-changelog')?.value || '').trim();
+        const bf = (typeof getSelectedBuildFile === 'function' ? getSelectedBuildFile() : null) || document.getElementById('sg-build-file')?.files?.[0] || null;
+        if (bf) {
+          fd.append('builds_meta', JSON.stringify([{
+            i: 0, version: ver || '1.0', platform: 'windows', changelog: ch, has_file: true
+          }]));
+          fd.append('builds[0]', bf, bf.name || 'build.bin');
+        }
+      } catch (e) { console.warn('admin builds append', e); }
       let res = await fetch(SUBMIT_API + '?action=admin_save', { method: 'POST', body: fd });
       let data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Не удалось сохранить');
@@ -8834,6 +9030,7 @@ async function submitGameForm() {
         if (!res.ok) throw new Error(res.error || 'Не удалось опубликовать');
         toast('Игра опубликована');
         try { loadAdminPending(); } catch (e) {}
+        try { if (typeof loadGamePage === 'function') loadGamePage(+id); } catch (e) {}
       } else {
         toast('Сохранено');
         try { if (typeof loadGamePage === 'function') loadGamePage(+id); } catch (e) {}
@@ -8890,17 +9087,16 @@ async function submitGameForm() {
     if (icon) fd.append('icon', icon);
     const shots = $('#sg-shots')?.files;
     if (shots) for (let i = 0; i < shots.length; i++) fd.append('screenshots[]', shots[i]);
-    // сборки
-    const builds = window.__pendingBuilds || [];
-    const buildsMeta = builds.map((b, i) => ({
-      i, version: b.version || '1.0', platform: b.platform || 'windows',
-      changelog: b.changelog || '', file_name: b.file_name || (b.file && b.file.name) || '',
-      id: b.id || null, file_url: b.file_url || null, has_file: !!(b.file)
-    }));
-    fd.append('builds_meta', JSON.stringify(buildsMeta));
-    builds.forEach((b, i) => {
-      if (b.file) fd.append('builds[' + i + ']', b.file, b.file.name || ('build-' + i));
-    });
+    // сборка — прямо из полей (версия + файл обязательны)
+    const buildVer = (document.getElementById('sg-build-version')?.value || '').trim();
+    const buildCh = (document.getElementById('sg-build-changelog')?.value || '').trim();
+    const buildFile = (typeof getSelectedBuildFile === 'function' ? getSelectedBuildFile() : null) || document.getElementById('sg-build-file')?.files?.[0] || null;
+    if (!buildVer) throw new Error('Укажите версию сборки');
+    if (!buildFile) throw new Error('Прикрепите файл сборки (zip/exe)');
+    fd.append('builds_meta', JSON.stringify([{
+      i: 0, version: buildVer, platform: 'windows', changelog: buildCh, has_file: true
+    }]));
+    fd.append('builds[0]', buildFile, buildFile.name || 'build.bin');
     const flags = $$('.sg-content-flag').filter(c => c.checked).map(c => c.value);
     fd.append('content_flags', flags.join(','));
     fd.append('is_adult', flags.includes('adult') ? '1' : '0');
@@ -9624,6 +9820,25 @@ async function openAdminGame(id) {
     const g = data.game;
     // основная форма = публикация
     await openPublishFormForGame(g, { moderate: true });
+    try { await loadGameBuildsIntoForm(g.id); } catch (e) {}
+    // если в ответе get уже есть builds — заполним сразу
+    if (Array.isArray(g.builds) && g.builds.length) {
+      const b = g.builds[0];
+      const ver = document.getElementById('sg-build-version');
+      const ch = document.getElementById('sg-build-changelog');
+      const nameEl = document.getElementById('sg-build-file-name');
+      const exist = document.getElementById('sg-build-existing');
+      if (ver) ver.value = b.version || '';
+      if (ch) ch.value = b.changelog || '';
+      const fname = b.file_name || (b.file_url ? String(b.file_url).split('/').pop() : '') || 'файл';
+      if (nameEl) nameEl.textContent = fname + (b.file_size_bytes ? ' · ' + formatBytes(b.file_size_bytes) : '');
+      if (exist) {
+        exist.style.display = 'block';
+        exist.innerHTML = '<strong>Сборка с заявки:</strong> v' + escapeHtml(b.version || '—')
+          + (b.changelog ? ' — ' + escapeHtml(String(b.changelog)) : '')
+          + '<br>Файл: ' + escapeHtml(fname);
+      }
+    }
     // ниже — синхронизация старой боковой панели (если есть)
     $('#admin-empty')?.classList.add('hidden');
     const form = $('#admin-game-form');
@@ -9663,10 +9878,7 @@ async function openAdminGame(id) {
         try { fillSysReq('#sg-sys-rec-fields', g.sys_req_rec); } catch (e) {}
         try { renderLangTable('#sg-lang-table', g.languages); } catch (e) {}
         const setPrev = (pid, url) => {
-          const el = document.getElementById(pid);
-          if (!el || !url) return;
-          el.style.backgroundImage = 'url(' + JSON.stringify(String(url)) + ')';
-          el.classList.add('has-img');
+          if (typeof setPubPreviewImg === 'function') setPubPreviewImg(pid, url || '');
         };
         setPrev('sg-cover-preview', g.cover_url || g.cover_src);
         setPrev('sg-banner-preview', g.banner_url);
@@ -11502,15 +11714,17 @@ function getPublishSectionStatus() {
   const coverFile = $('#sg-cover')?.files?.[0];
   const coverUrl = ($('#sg-cover-url')?.value || '').trim();
   const hasCover = !!(coverFile || coverUrl);
-  const builds = (window.__pendingBuilds || []).length > 0;
+  const buildVer = (document.getElementById('sg-build-version')?.value || '').trim();
+  const buildFile = (typeof getSelectedBuildFile === 'function') ? getSelectedBuildFile() : document.getElementById('sg-build-file')?.files?.[0];
+  const hasBuild = !!(buildVer && buildFile);
 
   return {
-    main: !!(title && genres.length && pubId),
+    main: !!(title && genres.length),
     desc: desc.length >= 10,
     media: hasCover,
     sys: true,
     lang: true,
-    builds: builds,
+    builds: hasBuild,
     content: true
   };
 }
@@ -11528,16 +11742,28 @@ function updatePublishSectionStatus() {
   const allOk = Object.values(st).every(Boolean);
   const send = document.getElementById('submit-game-send');
   if (send) {
-    const isAdmin = !!(send.dataset.adminPublish || send.dataset.adminSave);
-    // для обычной публикации — блок до заполнения; админ может сохранять
-    if (!isAdmin) {
-      send.disabled = !allOk;
-      send.classList.toggle('is-disabled', !allOk);
-      send.title = allOk ? '' : 'Заполните все обязательные разделы (галочки слева)';
-    } else {
+    const isAdminMod = !!(send.dataset.adminPublish || send.dataset.adminSave);
+    const isPubEdit = !!(send.dataset.publisherEdit);
+    // модерация — всегда; обновление публикатора — версия+файл; иначе все секции
+    if (isAdminMod) {
       send.disabled = false;
       send.classList.remove('is-disabled');
       send.title = '';
+    } else if (isPubEdit) {
+      const verOk = !!(document.getElementById('sg-build-version')?.value || '').trim();
+      const fileOk = !!(typeof getSelectedBuildFile === 'function' ? getSelectedBuildFile() : document.getElementById('sg-build-file')?.files?.[0]);
+      const okUpd = verOk && fileOk;
+      send.disabled = !okUpd;
+      send.classList.toggle('is-disabled', !okUpd);
+      if (okUpd) {
+        send.removeAttribute('disabled');
+        send.classList.remove('is-disabled');
+      }
+      send.title = okUpd ? '' : 'Укажите новую версию и прикрепите файл сборки';
+    } else {
+      send.disabled = !allOk;
+      send.classList.toggle('is-disabled', !allOk);
+      send.title = allOk ? '' : 'Заполните все обязательные разделы (версия + файл сборки)';
     }
   }
   return allOk;
@@ -11611,49 +11837,64 @@ function renderPendingBuilds() {
   });
 }
 
-function initBuildsUi() {
-  if (window.__buildsUiBound) return;
-  window.__buildsUiBound = true;
-  const addBtn = document.getElementById('sg-build-add');
-  const fileInput = document.getElementById('sg-build-file');
+function getSelectedBuildFile() {
+  const input = document.getElementById('sg-build-file');
+  if (input && input.files && input.files[0]) return input.files[0];
+  if (window.__selectedBuildFile instanceof File) return window.__selectedBuildFile;
+  return null;
+}
+function setBuildFileLabel(file) {
   const nameEl = document.getElementById('sg-build-file-name');
-  fileInput?.addEventListener('change', () => {
-    const f = fileInput.files && fileInput.files[0];
-    if (nameEl) nameEl.textContent = f ? `${f.name} (${formatBytes(f.size)})` : 'ZIP / EXE / 7z / DMG…';
-  });
-  addBtn?.addEventListener('click', () => {
-    const f = fileInput && fileInput.files && fileInput.files[0];
-    const version = (document.getElementById('sg-build-version')?.value || '').trim();
-    const platform = document.getElementById('sg-build-platform')?.value || 'windows';
-    const changelog = (document.getElementById('sg-build-changelog')?.value || '').trim();
-    if (!version) {
-      toast('Укажите версию сборки');
-      document.getElementById('sg-build-version')?.focus();
-      return;
-    }
-    if (!f && !window.__adminModeratingId) {
-      toast('Выберите файл сборки');
-      return;
-    }
-    if (!f) {
-      toast('Выберите файл сборки');
-      return;
-    }
-    window.__pendingBuilds.push({
-      version, platform, changelog, file: f, file_name: f.name, file_size: f.size
-    });
-    if (fileInput) fileInput.value = '';
-    if (nameEl) nameEl.textContent = 'ZIP / EXE / 7z / DMG…';
-    const ver = document.getElementById('sg-build-version');
-    if (ver) {
-      // auto bump patch
-      const m = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
-      if (m) ver.value = `${m[1]}.${m[2]}.${+m[3] + 1}`;
-    }
-    renderPendingBuilds();
-    toast('Сборка добавлена в список');
+  if (!nameEl) return;
+  if (file) {
+    const sz = (typeof formatBytes === 'function') ? formatBytes(file.size) : ((file.size / 1048576).toFixed(1) + ' МБ');
+    nameEl.textContent = file.name + ' · ' + sz;
+    nameEl.style.cssText = 'display:inline;opacity:1;visibility:visible;color:var(--text-bright)';
+  } else {
+    nameEl.textContent = 'ZIP / EXE / 7z…';
+  }
+}
+function initBuildsUi() {
+  const fileInput = document.getElementById('sg-build-file');
+  const ver = document.getElementById('sg-build-version');
+  const ch = document.getElementById('sg-build-changelog');
+  const updateBuildName = () => {
+    const f = getSelectedBuildFile();
+    setBuildFileLabel(f);
     try { updatePublishSectionStatus(); } catch (e) {}
-  });
+  };
+  if (fileInput && fileInput.dataset.boundBuild !== '1') {
+    fileInput.dataset.boundBuild = '1';
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files && fileInput.files[0]) window.__selectedBuildFile = fileInput.files[0];
+      updateBuildName();
+    });
+    const openBuild = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof openPubFilePicker === 'function') {
+        openPubFilePicker(fileInput, {
+          multiple: false,
+          accept: '.exe,.zip,.7z,.rar,.msi,.dmg,.appimage,.tar,.gz,application/zip,application/octet-stream'
+        });
+      } else {
+        fileInput.click();
+      }
+    };
+    document.querySelectorAll('label[for="sg-build-file"]').forEach(lab => {
+      lab.addEventListener('click', openBuild);
+    });
+    fileInput.addEventListener('click', openBuild);
+  }
+  if (ver && ver.dataset.boundBuild !== '1') {
+    ver.dataset.boundBuild = '1';
+    ver.addEventListener('input', () => { try { updatePublishSectionStatus(); } catch (e) {} });
+    ver.addEventListener('change', () => { try { updatePublishSectionStatus(); } catch (e) {} });
+  }
+  if (ch && ch.dataset.boundBuild !== '1') {
+    ch.dataset.boundBuild = '1';
+    ch.addEventListener('input', () => { try { updatePublishSectionStatus(); } catch (e) {} });
+  }
 }
 
 async function loadGameBuildsIntoForm(gameId) {
@@ -11661,80 +11902,144 @@ async function loadGameBuildsIntoForm(gameId) {
   try {
     const data = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=list_builds&game_id=' + encodeURIComponent(gameId));
     if (!data.ok) return;
-    const existing = (data.builds || []).map(b => ({
-      id: b.id,
-      version: b.version,
-      platform: b.platform,
-      changelog: b.changelog || '',
-      file_name: b.file_name || b.file_url,
-      file_size: b.file_size_bytes || 0,
-      file_url: b.file_url,
-      file: null
-    }));
-    // keep newly added local files
-    const local = (window.__pendingBuilds || []).filter(b => b.file);
-    window.__pendingBuilds = existing.concat(local);
-    renderPendingBuilds();
+    const list = data.builds || [];
+    const ver = document.getElementById('sg-build-version');
+    const ch = document.getElementById('sg-build-changelog');
+    const nameEl = document.getElementById('sg-build-file-name');
+    const exist = document.getElementById('sg-build-existing');
+    if (!list.length) {
+      if (exist) { exist.style.display = 'none'; exist.textContent = ''; }
+      return;
+    }
+    const b = list[0];
+    if (ver) ver.value = b.version || '';
+    if (ch) ch.value = b.changelog || '';
+    const fname = b.file_name || (b.file_url ? String(b.file_url).split('/').pop() : '') || 'файл на сервере';
+    const size = b.file_size_bytes ? (' · ' + formatBytes(b.file_size_bytes)) : '';
+    if (nameEl) nameEl.textContent = fname + size + ' (на сервере)';
+    if (exist) {
+      exist.style.display = 'block';
+      exist.innerHTML = '<strong>Текущая сборка:</strong> v' + escapeHtml(b.version || '—')
+        + (b.changelog ? ' — ' + escapeHtml(String(b.changelog)) : '')
+        + '<br>Файл: ' + escapeHtml(fname) + size
+        + (b.status ? ' · статус: ' + escapeHtml(b.status) : '');
+    }
   } catch (e) {
     console.warn('list_builds', e);
   }
 }
 
 
-/** Издательства — один запрос, без кэша */
-window.fetchMyPublishers = async function fetchMyPublishers() {
+/** Издательства: прямые запросы (логика a75e210) */
+window.__myPublishersCache = window.__myPublishersCache || { list: null, ts: 0 };
+window.__pendingPublishPublishers = null;
+
+window.fetchMyPublishers = async function fetchMyPublishers(force) {
   const api = (typeof PUB_API !== 'undefined' ? PUB_API : 'api/publishers.php');
-  const data = await fetchJSON(api + '?action=mine&_t=' + Date.now(), { timeout: 6000 });
-  if (!data || data.ok === false) throw new Error((data && data.error) || 'Ошибка publishers');
-  return Array.isArray(data.publishers) ? data.publishers : [];
-};
+  const url = api + '?action=mine&_t=' + Date.now();
+  const res = await fetch(url, {
+    method: 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { 'Accept': 'application/json' }
+  });
+  const text = await res.text();
+  let data;
+  try {
+    const s = text.indexOf('{');
+    data = JSON.parse(s >= 0 ? text.slice(s) : text);
+  } catch (e) {
+    console.error('[publishers] bad JSON', text.slice(0, 300));
+    throw new Error('Ответ publishers не JSON');
+  }
+  if (!data || data.ok === false) {
+    throw new Error((data && data.error) || ('HTTP ' + res.status));
+  }
+  const pubs = Array.isArray(data.publishers) ? data.publishers : [];
+  console.log('[publishers] mine ok', pubs.length, pubs);
+  window.__myPublishersCache = { list: pubs, ts: Date.now() };
+  window.__pendingPublishPublishers = pubs;
+  return pubs;
+}
 
 window.applyPublisherOptionsToSelect = function applyPublisherOptionsToSelect(sel, pubs, prefer) {
   if (!sel) return;
+  try {
+    const oldWrap = sel.closest('.catio-select');
+    if (oldWrap && oldWrap.parentNode) {
+      oldWrap.parentNode.insertBefore(sel, oldWrap);
+      oldWrap.remove();
+    }
+  } catch (e) {}
+  delete sel.dataset.catioEnhanced;
+  sel.classList.add('settings-select');
+  sel.classList.remove('select-native-hidden', 'hidden');
+  sel.hidden = false;
+  sel.style.cssText = 'display:block;visibility:visible;';
+  sel.removeAttribute('aria-hidden');
+  sel.removeAttribute('tabindex');
+
   const list = Array.isArray(pubs) ? pubs : [];
-  if (!list.length) {
-    sel.innerHTML = '<option value="">— нет издательств —</option>';
-    sel.value = '';
-  } else {
-    sel.innerHTML = list.map(p =>
+  // всегда можно без издательства
+  let html = '<option value="">— без издательства —</option>';
+  if (list.length) {
+    html += list.map(p =>
       '<option value="' + String(p.id) + '">' + escapeHtml(String(p.name || ('#' + p.id))) + '</option>'
     ).join('');
-    const pref = prefer != null && prefer !== '' ? String(prefer) : '';
-    if (pref && list.some(p => String(p.id) === pref)) sel.value = pref;
-    else sel.value = String(list[0].id);
   }
-  const hid = document.getElementById('sg-publisher');
-  if (hid) {
-    const c = list.find(p => String(p.id) === String(sel.value));
-    hid.value = c ? (c.name || '') : '';
-  }
-};
+  sel.innerHTML = html;
 
-window.fillPublishPublisherSelect = async function fillPublishPublisherSelect(preferId) {
+  const pref = prefer != null && prefer !== '' ? String(prefer) : '';
+  if (pref && list.some(p => String(p.id) === pref)) {
+    sel.value = pref;
+  } else {
+    sel.value = '';
+  }
+
+  const hid = document.getElementById('sg-publisher');
+  const syncHid = () => {
+    const c = list.find(p => String(p.id) === String(sel.value));
+    if (hid) hid.value = c ? (c.name || '') : '';
+  };
+  syncHid();
+  sel.onchange = syncHid;
+}
+
+window.fillPublishPublisherSelect = async function fillPublishPublisherSelect(preloaded) {
   const formModal = document.getElementById('submit-form-modal');
-  const sel = (formModal && formModal.querySelector('#sg-publisher-id'))
-    || document.getElementById('sg-publisher-id');
+  let sel = (formModal && formModal.querySelector('#sg-publisher-id'))
+    || document.getElementById('sg-publisher-id')
+    || document.querySelector('select[name="publisher_id"]');
   if (!sel) {
-    console.warn('[publishers] select not found');
+    console.warn('[publishers] #sg-publisher-id не найден');
     return [];
   }
 
-  sel.disabled = true;
-  sel.innerHTML = '<option value="">Загрузка…</option>';
+  const cur = sel.value || '';
+  let pubs = Array.isArray(preloaded) && preloaded.length ? preloaded.slice() : null;
 
-  let pubs = [];
-  try {
-    pubs = await window.fetchMyPublishers();
-    window.applyPublisherOptionsToSelect(sel, pubs, preferId || '');
-    console.log('[publishers] filled', pubs.length, pubs);
-  } catch (e) {
-    console.error('[publishers]', e);
-    sel.innerHTML = '<option value="">— ошибка —</option>';
-    try { toast('Издательства: ' + (e.message || e)); } catch (_) {}
+  if (!pubs) {
+    try {
+      pubs = await window.fetchMyPublishers(true);
+    } catch (e) {
+      console.error('[publishers] load failed', e);
+      pubs = [];
+      toast('Не удалось загрузить издательства: ' + (e.message || e));
+    }
   }
-  sel.disabled = false;
+
+  applyPublisherOptionsToSelect(sel, pubs, cur);
+
+  if (cur && pubs.some(p => String(p.id) === String(cur))) sel.value = String(cur);
+
+  const hid = document.getElementById('sg-publisher');
+  if (hid) {
+    const p = pubs.find(x => String(x.id) === String(sel.value));
+    hid.value = p ? (p.name || '') : '';
+  }
+
   return pubs;
-};
+}
 
 
 
