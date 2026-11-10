@@ -196,6 +196,7 @@ if ($isAuthorized) {
         <?php if ($isClient): ?>
         <button type="button" class="nav-btn side-btn <?php echo $currentView === 'library' ? 'active' : ''; ?>" data-view="library"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>Библиотека</button>
         <?php endif; ?>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'workshop' ? 'active' : ''; ?>" data-view="workshop"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>Мастерская</button>
         <button type="button" class="nav-btn side-btn <?php echo $currentView === 'downloads' ? 'active' : ''; ?>" data-view="downloads"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>Загрузки<span class="nav-badge hidden" id="downloads-badge">0</span></button>
       </nav>
 
@@ -467,7 +468,89 @@ if ($isAuthorized) {
       </section>
 
       <!-- ===== ЗАГРУЗКИ (как в Hydra) ===== -->
-      <section id="view-downloads" class="view <?php echo $currentView === 'downloads' ? 'active' : ''; ?>">
+
+      <!-- ===== МАСТЕРСКАЯ ===== -->
+      <section id="view-workshop" class="view <?php echo $currentView === 'workshop' ? 'active' : ''; ?>">
+        <div class="profile-page hydra-profile ws-page">
+          <div class="hp-hero ws-hero" id="ws-hero">
+            <div class="hp-hero-bg" id="ws-hero-bg"></div>
+            <div class="ws-hero-overlay">
+              <div class="ws-hero-left">
+                <h1 class="ws-hero-title">Модификации</h1>
+                <p class="ws-hero-desc">Благодаря мастерской модифицировать игры можно в один клик — ставьте моды, делитесь своими и открывайте новые грани любимых игр.</p>
+              </div>
+              <div class="ws-hero-stats" id="ws-hero-stats">
+                <div class="ws-stat">
+                  <div class="ws-stat-val" id="ws-stat-downloads">0</div>
+                  <div class="ws-stat-lbl">Скачиваний</div>
+                </div>
+                <div class="ws-stat">
+                  <div class="ws-stat-val" id="ws-stat-mods">0</div>
+                  <div class="ws-stat-lbl">Модификаций</div>
+                </div>
+                <div class="ws-stat">
+                  <div class="ws-stat-val" id="ws-stat-users">0</div>
+                  <div class="ws-stat-lbl">Пользователей</div>
+                </div>
+                <div class="ws-stat-note">Это только начало вы что хотели</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hp-body ws-body">
+            <div class="hp-main ws-main">
+              <div class="hp-tabs ws-tabs" id="ws-tabs">
+                <button type="button" class="hp-tab active" data-ws-tab="games">Игры</button>
+                <button type="button" class="hp-tab" data-ws-tab="mods">Моды</button>
+                <button type="button" class="hp-tab" data-ws-tab="media">Медиа</button>
+              </div>
+              <div class="ws-sub" id="ws-sub">Выберите из 0 игр для модификации</div>
+
+              <div class="ws-grid" id="ws-grid">
+                <div class="loading">Загрузка мастерской…</div>
+              </div>
+            </div>
+
+            <aside class="hp-side ws-side" id="ws-side">
+              <!-- filters injected by JS per tab -->
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      
+      <!-- ===== МАСТЕРСКАЯ: страница игры ===== -->
+      <section id="view-workshop-game" class="view">
+        <div class="profile-page hydra-profile ws-page">
+          <button type="button" class="wsg-back" id="wsg-back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Назад в мастерскую
+          </button>
+          <div class="wsg-head" id="wsg-head">
+            <div class="wsg-cover" id="wsg-cover"></div>
+            <div class="wsg-head-info">
+              <h1 class="wsg-title" id="wsg-title">Игра</h1>
+              <p class="wsg-desc" id="wsg-desc"></p>
+              <div class="wsg-meta" id="wsg-meta"></div>
+            </div>
+          </div>
+          <div class="hp-body ws-body">
+            <div class="hp-main ws-main">
+              <div class="hp-tabs ws-tabs" id="wsg-tabs">
+                <button type="button" class="hp-tab active" data-wsg-tab="mods">Моды</button>
+                <button type="button" class="hp-tab" data-wsg-tab="media">Медиа</button>
+              </div>
+              <div class="ws-sub" id="wsg-sub">Моды этой игры</div>
+              <div class="ws-grid is-mods" id="wsg-grid">
+                <div class="loading">Загрузка…</div>
+              </div>
+            </div>
+            <aside class="hp-side ws-side" id="wsg-side"></aside>
+          </div>
+        </div>
+      </section>
+
+<section id="view-downloads" class="view <?php echo $currentView === 'downloads' ? 'active' : ''; ?>">
         <div class="downloads-page">
           <div class="downloads-active" id="downloads-active">
             <div class="downloads-empty" id="downloads-empty">
@@ -1893,269 +1976,29 @@ function socialAuth(provider) {
     </div>
   </div>
 
-  <!-- ===== МОДАЛКА ПУБЛИКАЦИИ (pubm хардкод) ===== -->
-<style id="pubm-css">
-/* модалка публикации — скрыта по умолчанию, не перекрывает логин */
-#submit-form-modal.pubm.hidden,
-#submit-form-modal.hidden {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  opacity: 0 !important;
-  z-index: -1 !important;
-}
-#submit-form-modal.pubm:not(.hidden) {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 10050 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-  opacity: 1 !important;
-}
-#submit-form-modal .pubm-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.65);
-}
-#submit-form-modal .pubm-card {
-  position: relative;
-  width: min(920px, 94vw);
-  height: min(640px, 88vh);
-  background: #1a1814;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
-}
-#submit-form-modal .pubm-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  flex-shrink: 0;
-  background: #1a1814;
-}
-#submit-form-modal .pubm-head h3 {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #eee;
-}
-#submit-form-modal .pubm-close {
-  background: none;
-  border: none;
-  color: #999;
-  font-size: 1.4rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
-}
-#submit-form-modal .pubm-close:hover { color: #fff; }
-#submit-form-modal .pubm-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-#submit-form-modal .pubm-nav {
-  width: 200px;
-  flex-shrink: 0;
-  background: #12110e;
-  border-right: 1px solid rgba(255,255,255,0.08);
-  padding: 10px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-}
-#submit-form-modal .pubm-nav-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 28px 9px 12px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #b8b0a6;
-  font-size: 0.82rem;
-  text-align: left;
-  cursor: pointer;
-  font-family: inherit;
-  position: relative;
-}
-#submit-form-modal .pubm-nav-btn:hover {
-  background: rgba(255,255,255,0.05);
-  color: #eee;
-}
-#submit-form-modal .pubm-nav-btn.active {
-  background: rgba(239, 91, 44, 0.18);
-  color: #fff;
-}
-#submit-form-modal .pubm-nav-btn svg { flex-shrink: 0; opacity: 0.85; }
-#submit-form-modal .pubm-status {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #c45c4a;
-  pointer-events: none;
-}
-#submit-form-modal .pubm-status.ok { color: #6fdf8b; }
-#submit-form-modal .pubm-content {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  background: #1a1814;
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-}
-#submit-form-modal .pubm-pane {
-  display: none;
-  flex: 1;
-  min-height: 0;
-  padding: 16px 20px;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-#submit-form-modal .pubm-pane.active {
-  display: block;
-}
-#submit-form-modal .pubm-pane-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #eee;
-  margin: 0 0 14px;
-}
-#submit-form-modal .pubm-foot {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 18px;
-  border-top: 1px solid rgba(255,255,255,0.08);
-  background: #1a1814;
-}
-#submit-form-modal .pubm-foot-right {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-#submit-form-modal .pubm-media-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-#submit-form-modal .pubm-media-tab {
-  background: none;
-  border: none;
-  color: #999;
-  padding: 8px 14px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  font-family: inherit;
-}
-#submit-form-modal .pubm-media-tab:hover { color: #ddd; }
-#submit-form-modal .pubm-media-tab.active {
-  color: #fff;
-  border-bottom-color: #ef5b2c;
-}
-#submit-form-modal .submit-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-#submit-form-modal .settings-label.full { grid-column: 1 / -1; }
-#submit-form-modal .sysreq-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-#submit-form-modal .auth-input,
-#submit-form-modal .settings-select {
-  background: #12110e;
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #eee;
-  border-radius: 6px;
-}
-#submit-form-modal .pub-rte-editor {
-  min-height: 260px;
-  background: #12110e;
-}
-#submit-form-modal #submit-game-send:disabled {
-  opacity: 0.45;
-  pointer-events: none;
-  cursor: not-allowed;
-}
+    <!-- ===== МОДАЛКА АНКЕТЫ ИГРЫ (restored simple) ===== -->
+<!-- ===== МОДАЛКА АНКЕТЫ ИГРЫ ===== -->
+    <div class="submit-modal hidden" id="submit-form-modal">
+    <div class="submit-modal-backdrop" data-close="form"></div>
+    <div class="submit-modal-box submit-modal-wide pub-modal-box">
+      <div class="submit-modal-head pub-modal-head">
+        <div>
+          <h2>Публикация игры</h2>
+          <p class="pub-modal-sub">Заполните карточку игры — жанры, медиа, требования и описание</p>
+        </div>
+        <button type="button" class="pub-modal-close" data-close="form" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body pub-modal-body">
+        <form id="submit-game-form" class="submit-form pub-form">
 
-
-/* safety: backdrop only interactive when parent modal is open */
-.submit-modal.hidden,
-.submit-modal.hidden .submit-modal-backdrop {
-  display: none !important;
-  pointer-events: none !important;
-  visibility: hidden !important;
-}
-</style>
-
-<div id="submit-form-modal" class="pubm hidden" aria-hidden="true">
-  <div class="pubm-backdrop" data-close="form"></div>
-  <div class="pubm-card" role="dialog" aria-modal="true">
-    <div class="pubm-head">
-      <h3 id="submit-form-title">Публикация игры</h3>
-      <button type="button" class="pubm-close" data-close="form" aria-label="Закрыть">×</button>
-    </div>
-    <div class="pubm-body">
-      <aside class="pubm-nav" id="pub-form-nav">
-        <button type="button" class="pubm-nav-btn active" data-pub-tab="main">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          Основное<span class="pubm-status" data-status-for="main">✕</span>
-        </button>
-        <button type="button" class="pubm-nav-btn" data-pub-tab="desc">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
-          Описание<span class="pubm-status" data-status-for="desc">✕</span>
-        </button>
-        <button type="button" class="pubm-nav-btn" data-pub-tab="media">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-          Медиа<span class="pubm-status" data-status-for="media">✕</span>
-        </button>
-        <button type="button" class="pubm-nav-btn" data-pub-tab="sys">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          Системные<span class="pubm-status ok" data-status-for="sys">✓</span>
-        </button>
-        <button type="button" class="pubm-nav-btn" data-pub-tab="lang">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
-          Языки<span class="pubm-status ok" data-status-for="lang">✓</span>
-        </button>
-        <button type="button" class="pubm-nav-btn" data-pub-tab="builds">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Сборки<span class="pubm-status" data-status-for="builds">✕</span>
-        </button>
-        <button type="button" class="pubm-nav-btn" data-pub-tab="content">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-          Контент<span class="pubm-status ok" data-status-for="content">✓</span>
-        </button>
-      </aside>
-      <form id="submit-game-form" class="pubm-content">
-        <div class="pubm-pane active" data-pub-pane="main">
-          <div class="pubm-pane-title">Основное</div>
-          <div class="submit-grid">
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+              <h3>Основное</h3>
+            </div>
+            <div class="submit-grid">
               <label class="settings-label"><span>Название *</span><input class="auth-input" name="title" id="sg-title" required maxlength="120" /></label>
               <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" name="price" id="sg-price" type="text" inputmode="numeric" pattern="[0-9]*" value="0" maxlength="7" autocomplete="off" /></label>
               <label class="settings-label"><span>Разработчик</span><input class="auth-input" name="developer" id="sg-developer" maxlength="120" placeholder="Студия или автор" /></label>
@@ -2200,11 +2043,7 @@ function socialAuth(provider) {
                   <label class="settings-check"><input type="checkbox" class="sg-platform" value="mac" /> macOS</label>
                 </div>
               </div>
-</div>
-        </div>
-        <div class="pubm-pane" data-pub-pane="desc">
-          <div class="pubm-pane-title">Описание</div>
-          <div class="settings-label full">
+              <div class="settings-label full">
                 <span>Описание * <em class="pub-field-hint">форматирование как в Steam</em></span>
                 <div class="pub-rte" id="sg-rte">
                   <div class="pub-rte-toolbar" role="toolbar" aria-label="Форматирование">
@@ -2232,61 +2071,61 @@ function socialAuth(provider) {
                 </div>
               </div>
             </div>
-        </div>
-        <div class="pubm-pane" data-pub-pane="media">
-          <div class="pubm-pane-title">Медиа</div>
-          
-<div class="pubm-media-tabs" id="pub-media-tabs">
-  <button type="button" class="pubm-media-tab active" data-media-tab="cover">Обложка</button>
-  <button type="button" class="pubm-media-tab" data-media-tab="banner">Баннер</button>
-  <button type="button" class="pubm-media-tab" data-media-tab="logo">Логотип</button>
-  <button type="button" class="pubm-media-tab" data-media-tab="icon">Иконка</button>
-  <button type="button" class="pubm-media-tab" data-media-tab="shots">Скриншоты</button>
-  <button type="button" class="pubm-media-tab" data-media-tab="trailers">Трейлеры</button>
-</div>
-<div class="pub-media-grid">
-              <div class="pub-file-card" data-for="sg-cover" data-media-panel="cover">
+          </section>
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
+              <h3>Медиа</h3>
+            </div>
+            <div class="pub-media-grid">
+              <div class="pub-file-card" data-for="sg-cover">
                 <div class="pub-file-preview" id="sg-cover-preview"><span>Обложка *</span></div>
                 <label class="pub-file-btn" for="sg-cover">Выбрать файл</label>
                 <input type="file" name="cover" id="sg-cover" class="pub-file-input" accept="image/*" />
                 <div class="pub-file-name" id="sg-cover-name">PNG / JPG, 600×900</div>
               </div>
-              <div class="pub-file-card" data-for="sg-banner" data-media-panel="banner">
+              <div class="pub-file-card" data-for="sg-banner">
                 <div class="pub-file-preview pub-file-preview--wide" id="sg-banner-preview"><span>Баннер / шапка</span></div>
                 <label class="pub-file-btn" for="sg-banner">Выбрать файл</label>
                 <input type="file" name="banner" id="sg-banner" class="pub-file-input" accept="image/*" />
                 <div class="pub-file-name" id="sg-banner-name">Широкий баннер</div>
               </div>
-              <div class="pub-file-card" data-for="sg-logo" data-media-panel="logo">
+              <div class="pub-file-card" data-for="sg-logo">
                 <div class="pub-file-preview pub-file-preview--logo" id="sg-logo-preview"><span>Логотип</span></div>
                 <label class="pub-file-btn" for="sg-logo">Выбрать файл</label>
                 <input type="file" name="logo" id="sg-logo" class="pub-file-input" accept="image/*" />
                 <div class="pub-file-name" id="sg-logo-name">Прозрачный PNG</div>
               </div>
-              <div class="pub-file-card" data-for="sg-icon" data-media-panel="icon">
+              <div class="pub-file-card" data-for="sg-icon">
                 <div class="pub-file-preview pub-file-preview--icon" id="sg-icon-preview"><span>Иконка</span></div>
                 <label class="pub-file-btn" for="sg-icon">Выбрать файл</label>
                 <input type="file" name="icon" id="sg-icon" class="pub-file-input" accept="image/*" />
                 <div class="pub-file-name" id="sg-icon-name">Квадрат 256×256</div>
               </div>
             </div>
-            <div class="settings-label full" data-media-panel="shots"><span>Скриншоты</span>
+            <div class="settings-label full" style="margin-top:12px">
+              <span>Скриншоты</span>
               <div class="pub-shots-row">
                 <label class="pub-file-btn" for="sg-shots">Выбрать скриншоты</label>
                 <input type="file" name="screenshots[]" id="sg-shots" class="pub-file-input" accept="image/*" multiple />
                 <div class="pub-shots-preview" id="sg-shots-preview"></div>
               </div>
             </div>
-            <div class="settings-label full" id="sg-trailers-wrap" data-media-panel="trailers" style="margin-top:10px"></div>
+            <div class="settings-label full" id="sg-trailers-wrap" style="margin-top:10px"></div>
             <input type="hidden" name="cover_url" id="sg-cover-url" />
               <input type="hidden" name="screenshot_urls" id="sg-screenshots-urls" />
               <input type="hidden" name="icon_url" id="sg-icon-url" />
               <input type="hidden" name="logo_url" id="sg-logo-url" />
             <input type="hidden" name="banner_url" id="sg-banner-url" />
-        </div>
-        <div class="pubm-pane" data-pub-pane="sys">
-          <div class="pubm-pane-title">Системные требования</div>
-          <div class="settings-label full">
+          </section>
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+              <h3>Системные требования</h3>
+            </div>
+            <div class="settings-label full">
               <span>Минимальные</span>
               <div class="sysreq-fields" id="sg-sys-min-fields">
                 <input class="auth-input" data-k="os" placeholder="ОС" />
@@ -2312,10 +2151,14 @@ function socialAuth(provider) {
                 <input class="auth-input" data-k="other" placeholder="Дополнительно" />
               </div>
             </div>
-        </div>
-        <div class="pubm-pane" data-pub-pane="lang">
-          <div class="pubm-pane-title">Языки и управление</div>
-          <div class="settings-label full">
+          </section>
+
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+              <h3>Языки и управление</h3>
+            </div>
+            <div class="settings-label full">
               <span>Поддержка контроллеров</span>
               <div class="submit-checks">
                 <label class="settings-check"><input type="checkbox" value="xbox" class="sg-ctrl" /> Xbox</label>
@@ -2330,37 +2173,14 @@ function socialAuth(provider) {
                 <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
               </div>
             </div>
-        </div>
-        <div class="pubm-pane" data-pub-pane="builds">
-          <div class="pubm-pane-title">Сборки и файлы</div>
-          
-<p class="settings-hint">Прикрепите установочные файлы. Версия и платформа — простой контроль версий.</p>
-<div class="builds-upload-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-  <label class="settings-label"><span>Версия</span><input class="auth-input" id="sg-build-version" placeholder="1.0.0" maxlength="32" /></label>
-  <label class="settings-label"><span>Платформа</span>
-    <select class="settings-select" id="sg-build-platform">
-      <option value="windows">Windows</option>
-      <option value="linux">Linux</option>
-      <option value="mac">macOS</option>
-      <option value="web">Web</option>
-      <option value="android">Android</option>
-      <option value="other">Другое</option>
-    </select>
-  </label>
-  <label class="settings-label full" style="grid-column:1/-1"><span>Changelog</span><textarea class="auth-input settings-textarea" id="sg-build-changelog" rows="2"></textarea></label>
-  <label class="settings-label full" style="grid-column:1/-1"><span>Файл сборки</span>
-    <input type="file" id="sg-build-file" class="pub-file-input" accept=".zip,.7z,.rar,.exe,.msi,.tar.gz,.gz,.dmg,.AppImage,.apk" />
-    <div class="pub-file-name" id="sg-build-file-name">ZIP / EXE / 7z / DMG…</div>
-  </label>
-  <button type="button" class="hp-btn-edit" id="sg-build-add" style="grid-column:1/-1">Добавить сборку в список</button>
-</div>
-<div id="sg-builds-list" class="builds-list"><div class="settings-hint">Пока нет сборок</div></div>
-<input type="hidden" id="sg-builds-json" name="builds_meta" value="[]" />
+          </section>
 
-        </div>
-        <div class="pubm-pane" data-pub-pane="content">
-          <div class="pubm-pane-title">Специфический контент</div>
-          <p class="pub-hint">Отметьте, если в игре есть возрастной или чувствительный материал</p>
+          <section class="pub-section">
+            <div class="pub-section-head">
+              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <h3>Специфический контент</h3>
+            </div>
+            <p class="pub-hint">Отметьте, если в игре есть возрастной или чувствительный материал</p>
             <div class="pub-content-flags">
               <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="adult" id="sg-adult" /><span>18+ / для взрослых</span></label>
               <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="violence" /><span>Насилие</span></label>
@@ -2371,21 +2191,23 @@ function socialAuth(provider) {
               <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="gambling" /><span>Азартные механики</span></label>
               <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="prohibited" /><span>Запрещённые темы</span></label>
             </div>
-        </div>
-</form>
-    </div>
-    <div class="pubm-foot">
-      <div>
-        <input type="file" id="sg-import-pack" accept=".zip,application/zip" hidden />
-        <button type="button" class="hp-btn-edit" id="sg-import-pack-btn">Импорт</button>
+          </section>
+
+        </form>
       </div>
-      <div class="pubm-foot-right">
-        <button type="button" class="hp-btn-edit" data-close="form">Отмена</button>
-        <button type="button" class="auth-submit" id="submit-game-send" disabled title="Заполните все обязательные разделы">Отправить на модерацию</button>
+            <div class="submit-modal-foot" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="file" id="sg-import-pack" accept=".zip,application/zip" hidden />
+          <button type="button" class="hp-btn-edit" id="sg-import-pack-btn" title="Импорт ZIP-пакета игры">Импорт</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+          <button type="button" class="hp-btn-edit" data-close="form">Отмена</button>
+          <button type="button" class="hp-btn-edit" id="submit-game-send">Отправить на модерацию</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
+
 
 <div class="submit-modal hidden" id="submit-done-modal">
     <div class="submit-modal-backdrop" data-close="done"></div>

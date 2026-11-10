@@ -409,6 +409,48 @@ function getDB() {
             INDEX idx_user (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+        // ===== Мастерская (Nexus-like) =====
+        $pdo->exec("CREATE TABLE IF NOT EXISTS workshop_mods (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            game_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL DEFAULT '',
+            short_description VARCHAR(512) DEFAULT NULL,
+            description TEXT,
+            cover_url VARCHAR(512) DEFAULT NULL,
+            file_url VARCHAR(512) DEFAULT NULL,
+            file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            downloads INT UNSIGNED NOT NULL DEFAULT 0,
+            likes INT UNSIGNED NOT NULL DEFAULT 0,
+            tags VARCHAR(512) NOT NULL DEFAULT '',
+            languages VARCHAR(255) NOT NULL DEFAULT '',
+            status ENUM('draft','pending','published','rejected') NOT NULL DEFAULT 'published',
+            last_download_at TIMESTAMP NULL DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_wm_game (game_id),
+            INDEX idx_wm_user (user_id),
+            INDEX idx_wm_status_created (status, created_at),
+            INDEX idx_wm_downloads (downloads),
+            INDEX idx_wm_likes (likes)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS workshop_media (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            game_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            title VARCHAR(255) NOT NULL DEFAULT '',
+            image_url VARCHAR(512) NOT NULL,
+            likes INT UNSIGNED NOT NULL DEFAULT 0,
+            views INT UNSIGNED NOT NULL DEFAULT 0,
+            status ENUM('draft','pending','published','rejected') NOT NULL DEFAULT 'published',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_wmed_game (game_id),
+            INDEX idx_wmed_user (user_id),
+            INDEX idx_wmed_status_created (status, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
         return $pdo;
     } catch (PDOException $e) {
         die(json_encode(['error' => 'DB connection failed: ' . $e->getMessage()]));

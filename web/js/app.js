@@ -708,6 +708,7 @@ const VIEW_TITLES = {
   home: 'Главная',
   store: 'Каталог',
   community: 'Мастерская',
+  workshop: 'Мастерская',
   library: 'Библиотека',
   downloads: 'Загрузки',
   cart: 'Корзина',
@@ -776,6 +777,7 @@ function showView(name, gameId, opts) {
   if (name === 'store') loadStore();
   if (name === 'library') loadLibrary();
   if (name === 'community') loadWorkshop();
+  if (name === 'workshop' && typeof openWorkshop === 'function') openWorkshop();
   if (name === 'notifications') loadNotifications();
   if (name === 'downloads') renderDownloadsView();
   if (name === 'cart') renderCartPage();
@@ -11763,262 +11765,599 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-/* force switchPubTab — layout v2 */
-window.switchPubTab = function(tab) {
-  if (!tab) return;
-  var modal = document.getElementById('submit-form-modal');
-  if (!modal) return;
-  modal.querySelectorAll('.pub-nav-btn').forEach(function(b) {
-    b.classList.toggle('active', b.getAttribute('data-pub-tab') === tab);
-  });
-  modal.querySelectorAll('.pub-pane').forEach(function(p) {
-    var on = p.getAttribute('data-pub-pane') === tab;
-    p.classList.toggle('active', on);
-    p.style.cssText = ''; // clear any inline absolute/display from old builds
-  });
-  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
-};
-
-
-window.switchPubTab = function(tab) {
-  if (!tab) return;
-  var modal = document.getElementById('submit-form-modal');
-  if (!modal) return;
-  modal.querySelectorAll('.sgdb-nav-btn[data-pub-tab], .pub-nav-btn[data-pub-tab]').forEach(function(b) {
-    b.classList.toggle('active', b.getAttribute('data-pub-tab') === tab);
-  });
-  modal.querySelectorAll('.sgdb-pane[data-pub-pane], .pub-pane[data-pub-pane]').forEach(function(p) {
-    var on = p.getAttribute('data-pub-pane') === tab;
-    p.classList.toggle('active', on);
-  });
-  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
-};
-
-/* open/close: support both old and sgdb structure */
-(function() {
-  var oldBox = HTMLElement.prototype.querySelector;
-})();
-
-
-window.switchPubTab = function(tab) {
-  if (!tab) return;
-  var modal = document.getElementById('submit-form-modal');
-  if (!modal) return;
-  modal.querySelectorAll('[data-pub-tab]').forEach(function(b) {
-    b.classList.toggle('active', b.getAttribute('data-pub-tab') === tab);
-  });
-  modal.querySelectorAll('[data-pub-pane]').forEach(function(p) {
-    var on = p.getAttribute('data-pub-pane') === tab;
-    p.classList.toggle('active', on);
-    p.hidden = !on;
-    if (on) {
-      p.style.setProperty('display', 'block', 'important');
-      p.style.setProperty('visibility', 'visible', 'important');
-      p.style.setProperty('position', 'relative', 'important');
-      p.style.setProperty('left', 'auto', 'important');
-      p.style.setProperty('width', 'auto', 'important');
-      p.style.setProperty('height', 'auto', 'important');
-      p.style.setProperty('pointer-events', 'auto', 'important');
-    } else {
-      p.style.setProperty('display', 'none', 'important');
-      p.style.setProperty('visibility', 'hidden', 'important');
-      p.style.setProperty('position', 'absolute', 'important');
-      p.style.setProperty('left', '-9999px', 'important');
-      p.style.setProperty('pointer-events', 'none', 'important');
-    }
-  });
-  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
-};
-
-// on first open hide all but main
-document.addEventListener('DOMContentLoaded', function() {
-  try { window.switchPubTab('main'); } catch (e) {}
-});
-
-
-/** Принудительная вёрстка модалки публикации (не зависит от CSS-кэша) */
-window.forcePublishModalLayout = function forcePublishModalLayout() {
-  var modal = document.getElementById('submit-form-modal');
-  if (!modal) return;
-  modal.style.cssText = 'position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
-  var backdrop = modal.querySelector('.sgdb-modal-backdrop, .submit-modal-backdrop');
-  if (backdrop) backdrop.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,.65);';
-  var card = modal.querySelector('.sgdb-modal-card, .submit-modal-box');
-  if (card) {
-    card.style.cssText = 'position:relative;z-index:1;width:min(920px,94vw);height:min(640px,88vh);max-width:94vw;max-height:88vh;background:#1a1814;border:1px solid rgba(255,255,255,.08);border-radius:10px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55);';
-  }
-  var head = modal.querySelector('.sgdb-modal-head, .submit-modal-head');
-  if (head) head.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.08);';
-  var body = modal.querySelector('.sgdb-modal-body, .submit-modal-body');
-  if (body) body.style.cssText = 'flex:1 1 auto;min-height:0;display:flex;flex-direction:row;overflow:hidden;';
-  var nav = modal.querySelector('.sgdb-nav, #pub-form-nav');
-  if (nav) {
-    nav.style.cssText = 'flex:0 0 200px;width:200px;background:#12110e;border-right:1px solid rgba(255,255,255,.08);padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;';
-  }
-  var content = modal.querySelector('form.sgdb-content, .sgdb-content, #submit-game-form');
-  if (content) {
-    content.style.cssText = 'flex:1 1 auto;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:#1a1814;margin:0;padding:0;';
-  }
-  var foot = modal.querySelector('.sgdb-modal-foot, .submit-modal-foot');
-  if (foot) foot.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-top:1px solid rgba(255,255,255,.08);';
-  var activeTab = 'main';
-  var activeBtn = modal.querySelector('[data-pub-tab].active');
-  if (activeBtn) activeTab = activeBtn.getAttribute('data-pub-tab') || 'main';
-  window.switchPubTab(activeTab);
-};
-
-window.switchPubTab = function(tab) {
-  if (!tab) tab = 'main';
-  var modal = document.getElementById('submit-form-modal');
-  if (!modal) return;
-  modal.querySelectorAll('[data-pub-tab]').forEach(function(b) {
-    var on = b.getAttribute('data-pub-tab') === tab;
-    b.classList.toggle('active', on);
-    if (on) {
-      b.style.background = 'rgba(239,91,44,0.18)';
-      b.style.color = '#fff';
-    } else {
-      b.style.background = 'transparent';
-      b.style.color = '';
-    }
-  });
-  modal.querySelectorAll('[data-pub-pane]').forEach(function(p) {
-    var on = p.getAttribute('data-pub-pane') === tab;
-    p.classList.toggle('active', on);
-    p.hidden = !on;
-    if (on) {
-      p.style.cssText = 'display:block;flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto;padding:16px 20px;box-sizing:border-box;';
-    } else {
-      p.style.cssText = 'display:none !important;visibility:hidden;height:0;overflow:hidden;padding:0;margin:0;border:0;';
-    }
-  });
-  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
-};
-
-(function() {
-  function hookOpen() {
-    var modal = document.getElementById('submit-form-modal');
-    if (!modal || modal.__layoutHooked) return;
-    modal.__layoutHooked = true;
-    var obs = new MutationObserver(function() {
-      if (!modal.classList.contains('hidden')) {
-        try { window.forcePublishModalLayout(); } catch (e) { console.warn(e); }
-      }
-    });
-    obs.observe(modal, { attributes: true, attributeFilter: ['class'] });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hookOpen);
-  else hookOpen();
-})();
+/* ===== simple publish modal (no side tabs) ===== */
+window.switchPubTab = function(){ /* no tabs in restored modal */ };
+window.forcePublishModalLayout = function(){};
+window.initPubFormTabs = function(){};
+function initPubFormTabs(){}
 
 
 
-/* ===== pubm tabs — простой хардкод ===== */
-window.switchPubTab = function(tab) {
-  var modal = document.getElementById('submit-form-modal');
-  if (!modal || !tab) return;
-  modal.querySelectorAll('[data-pub-tab]').forEach(function(btn) {
-    btn.classList.toggle('active', btn.getAttribute('data-pub-tab') === tab);
-  });
-  modal.querySelectorAll('[data-pub-pane]').forEach(function(pane) {
-    pane.classList.toggle('active', pane.getAttribute('data-pub-pane') === tab);
-  });
-  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
-};
+/* ============================================================
+   МАСТЕРСКАЯ (Workshop)
+   ============================================================ */
+const WS_API = 'api/workshop.php';
+window.__wsTab = 'games';
+window.__wsFilters = {};
+window.__wsgId = 0;
+window.__wsgTab = 'mods';
 
-document.addEventListener('click', function(e) {
-  var btn = e.target && e.target.closest && e.target.closest('#submit-form-modal [data-pub-tab]');
-  if (!btn) return;
-  e.preventDefault();
-  window.switchPubTab(btn.getAttribute('data-pub-tab'));
-}, true);
+function wsFormatNum(n) {
+  n = Number(n) || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'b';
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'm';
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}
+function wsFormatBytes(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+function wsFormatDate(s) {
+  if (!s) return '—';
+  try {
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return String(s).slice(0, 10);
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch (e) { return '—'; }
+}
 
-document.addEventListener('click', function(e) {
-  var btn = e.target && e.target.closest && e.target.closest('#submit-form-modal .pubm-media-tab, #submit-form-modal .pub-media-tab');
-  if (!btn) return;
-  var pane = document.querySelector('#submit-form-modal [data-pub-pane="media"]');
-  if (!pane) return;
-  var name = btn.getAttribute('data-media-tab');
-  pane.querySelectorAll('.pubm-media-tab, .pub-media-tab').forEach(function(b) {
-    b.classList.toggle('active', b === btn);
-  });
-  pane.querySelectorAll('[data-media-panel]').forEach(function(el) {
-    el.style.display = (el.getAttribute('data-media-panel') === name) ? '' : 'none';
-  });
-}, true);
+function wsSideCard(title, bodyHtml) {
+  return `<div class="hp-side-card">
+    <div class="hp-side-head">
+      <span>${title}</span>
+      <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
+        <span class="hp-side-arrow" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+        </span>
+      </button>
+    </div>
+    <div class="hp-side-body">${bodyHtml}</div>
+  </div>`;
+}
 
-/* статусы: класс ok вместо is-ok */
-(function() {
-  var old = window.updatePublishSectionStatus;
-  if (typeof old !== 'function') return;
-  window.updatePublishSectionStatus = function() {
-    var r = old.apply(this, arguments);
-    var modal = document.getElementById('submit-form-modal');
-    if (!modal) return r;
-    modal.querySelectorAll('.pubm-status, .pub-nav-status').forEach(function(el) {
-      if (el.classList.contains('is-ok') || el.textContent.indexOf('✓') >= 0) {
-        el.classList.add('ok');
-        el.classList.remove('is-ok');
+function bindWsSideToggles(root) {
+  const scope = root || document;
+  scope.querySelectorAll('.ws-side .hp-side-toggle').forEach(btn => {
+    if (btn.dataset.wsBound) return;
+    btn.dataset.wsBound = '1';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const card = btn.closest('.hp-side-card');
+      if (!card) return;
+      const body = card.querySelector('.hp-side-body');
+      if (body && typeof animateAccordion === 'function') {
+        const collapsed = animateAccordion(card, body, 'is-collapsed');
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       } else {
-        el.classList.remove('ok');
+        const collapsed = card.classList.toggle('is-collapsed');
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       }
     });
-    return r;
-  };
-})();
+  });
+}
 
+async function loadWorkshopStats() {
+  try {
+    const data = await fetchJSON(WS_API + '?action=stats');
+    if (!data || !data.ok) return;
+    const s = data.stats || {};
+    const el = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = wsFormatNum(v); };
+    el('ws-stat-downloads', s.downloads);
+    el('ws-stat-mods', s.mods);
+    el('ws-stat-users', s.users);
+    const bg = document.getElementById('ws-hero-bg');
+    if (bg && data.banner) {
+      const url = data.banner.banner_url || data.banner.cover_url || '';
+      if (url) {
+        bg.style.backgroundImage = "url('" + String(url).replace(/'/g, '%27') + "')";
+        bg.classList.add('has-image');
+      }
+    }
+    window.__wsStats = s;
+    updateWorkshopSub();
+  } catch (e) {
+    console.warn('[workshop] stats', e);
+  }
+}
 
-window.forcePublishModalLayout = function() {
-  var modal = document.getElementById('submit-form-modal');
-  if (!modal) return;
-  if (modal.classList.contains('hidden')) {
-    modal.style.cssText = '';
+function updateWorkshopSub() {
+  const sub = document.getElementById('ws-sub');
+  if (!sub) return;
+  const tab = window.__wsTab || 'games';
+  const s = window.__wsStats || {};
+  if (tab === 'games') {
+    const n = window.__wsGamesTotal != null ? window.__wsGamesTotal : (s.games || 0);
+    sub.textContent = 'Выберите из ' + n + ' игр для модификации';
+  } else if (tab === 'mods') {
+    sub.textContent = 'Изучите лучшие модификации в интернете';
+  } else {
+    sub.textContent = 'Лучшая галерея в интернете';
+  }
+}
+
+function renderWorkshopSide(tab) {
+  const side = document.getElementById('ws-side');
+  if (!side) return;
+  const f = window.__wsFilters || {};
+  if (tab === 'games') {
+    side.innerHTML =
+      wsSideCard('Поиск', `<input type="text" class="auth-input" id="ws-f-game-q" placeholder="Название игры" value="${escapeHtml(f.q || '')}" />`) +
+      wsSideCard('Жанр', `<div class="ws-chip-list" id="ws-genre-list"><span class="settings-hint">Загрузка…</span></div>`);
+    loadWorkshopGenres();
+    const inp = document.getElementById('ws-f-game-q');
+    if (inp) {
+      let t;
+      inp.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          window.__wsFilters = { ...(window.__wsFilters || {}), q: inp.value.trim() };
+          loadWorkshopList();
+        }, 280);
+      });
+    }
+  } else if (tab === 'mods') {
+    side.innerHTML =
+      wsSideCard('Игра', `<input type="text" class="auth-input" id="ws-f-mod-game" placeholder="Название игры" value="${escapeHtml(f.game || '')}" />`) +
+      wsSideCard('Теги', `<div class="ws-chip-list" id="ws-tag-list"><span class="settings-hint">Загрузка…</span></div>`) +
+      wsSideCard('Параметры', `
+        <input type="text" class="auth-input" id="ws-f-mod-q" placeholder="Поиск…" value="${escapeHtml(f.q || '')}" />
+        <select class="settings-select" id="ws-f-mod-param" style="margin-top:8px;width:100%">
+          <option value="" ${!f.param ? 'selected' : ''}>Везде</option>
+          <option value="title" ${f.param === 'title' ? 'selected' : ''}>Название</option>
+          <option value="description" ${f.param === 'description' ? 'selected' : ''}>Описание</option>
+          <option value="author" ${f.param === 'author' ? 'selected' : ''}>Автор</option>
+        </select>`) +
+      wsSideCard('Язык мода', `<div class="ws-chip-list" id="ws-lang-list">
+        ${['ru','en','de','fr','es','zh','ja','ko'].map(l =>
+          `<button type="button" class="ws-chip ${f.lang === l ? 'active' : ''}" data-ws-lang="${l}">${l.toUpperCase()}</button>`
+        ).join('')}
+      </div>`) +
+      wsSideCard('Размер файла', `<div class="ws-range-row">
+        <label>Мин (МБ)<input type="number" class="auth-input" id="ws-f-size-min" min="0" value="${f.size_min_mb || ''}" /></label>
+        <label>Макс (МБ)<input type="number" class="auth-input" id="ws-f-size-max" min="0" value="${f.size_max_mb || ''}" /></label>
+      </div>`) +
+      wsSideCard('Скачивания', `<div class="ws-range-row">
+        <label>Мин<input type="number" class="auth-input" id="ws-f-dl-min" min="0" value="${f.dl_min || ''}" /></label>
+        <label>Макс<input type="number" class="auth-input" id="ws-f-dl-max" min="0" value="${f.dl_max || ''}" /></label>
+      </div>`) +
+      wsSideCard('Лайки', `<div class="ws-range-row">
+        <label>Мин<input type="number" class="auth-input" id="ws-f-like-min" min="0" value="${f.like_min || ''}" /></label>
+        <label>Макс<input type="number" class="auth-input" id="ws-f-like-max" min="0" value="${f.like_max || ''}" /></label>
+      </div>`);
+    loadWorkshopTags();
+    const setFilter = (key, val) => {
+      window.__wsFilters = { ...(window.__wsFilters || {}), [key]: val };
+      loadWorkshopList();
+    };
+    const bindText = (id, key) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      let t;
+      el.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => setFilter(key, el.value.trim()), 280);
+      });
+      el.addEventListener('change', () => setFilter(key, el.value.trim()));
+    };
+    bindText('ws-f-mod-game', 'game');
+    bindText('ws-f-mod-q', 'q');
+    const param = document.getElementById('ws-f-mod-param');
+    if (param) param.addEventListener('change', () => setFilter('param', param.value));
+    const bindNum = (id, key, storeMbKey) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', () => {
+        const raw = el.value.trim();
+        const next = { ...(window.__wsFilters || {}) };
+        if (storeMbKey) next[storeMbKey] = raw;
+        next[key] = raw ? String(Math.round(parseFloat(raw) * (storeMbKey ? 1048576 : 1))) : '';
+        window.__wsFilters = next;
+        loadWorkshopList();
+      });
+    };
+    bindNum('ws-f-size-min', 'size_min', 'size_min_mb');
+    bindNum('ws-f-size-max', 'size_max', 'size_max_mb');
+    bindNum('ws-f-dl-min', 'dl_min');
+    bindNum('ws-f-dl-max', 'dl_max');
+    bindNum('ws-f-like-min', 'like_min');
+    bindNum('ws-f-like-max', 'like_max');
+    document.getElementById('ws-lang-list')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ws-lang]');
+      if (!b) return;
+      const lang = b.getAttribute('data-ws-lang');
+      const cur = (window.__wsFilters || {}).lang;
+      window.__wsFilters = { ...(window.__wsFilters || {}), lang: cur === lang ? '' : lang };
+      renderWorkshopSide('mods');
+      loadWorkshopList();
+    });
+  } else {
+    side.innerHTML = wsSideCard('Игра', `<input type="text" class="auth-input" id="ws-f-media-game" placeholder="Название игры" value="${escapeHtml(f.game || '')}" />`);
+    const inp = document.getElementById('ws-f-media-game');
+    if (inp) {
+      let t;
+      inp.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          window.__wsFilters = { ...(window.__wsFilters || {}), game: inp.value.trim() };
+          loadWorkshopList();
+        }, 280);
+      });
+    }
+  }
+  bindWsSideToggles(side);
+}
+
+async function loadWorkshopGenres() {
+  const box = document.getElementById('ws-genre-list');
+  if (!box) return;
+  try {
+    const data = await fetchJSON(WS_API + '?action=genres');
+    const list = (data && data.genres) || [];
+    if (!list.length) {
+      box.innerHTML = '<span class="settings-hint">Жанров пока нет</span>';
+      return;
+    }
+    const cur = (window.__wsFilters || {}).genre || '';
+    box.innerHTML = list.map(g =>
+      `<button type="button" class="ws-chip ${cur === g.name ? 'active' : ''}" data-ws-genre="${escapeHtml(g.name)}">${escapeHtml(g.name)} <small>${g.count}</small></button>`
+    ).join('');
+    box.onclick = (e) => {
+      const b = e.target.closest('[data-ws-genre]');
+      if (!b) return;
+      const name = b.getAttribute('data-ws-genre');
+      const prev = (window.__wsFilters || {}).genre;
+      window.__wsFilters = { ...(window.__wsFilters || {}), genre: prev === name ? '' : name };
+      loadWorkshopGenres();
+      loadWorkshopList();
+    };
+  } catch (e) {
+    box.innerHTML = '<span class="settings-hint">Ошибка загрузки</span>';
+  }
+}
+
+async function loadWorkshopTags() {
+  const box = document.getElementById('ws-tag-list');
+  if (!box) return;
+  try {
+    const data = await fetchJSON(WS_API + '?action=tags');
+    const list = (data && data.tags) || [];
+    if (!list.length) {
+      box.innerHTML = '<span class="settings-hint">Тегов пока нет</span>';
+      return;
+    }
+    const cur = (window.__wsFilters || {}).tag || '';
+    box.innerHTML = list.slice(0, 30).map(t =>
+      `<button type="button" class="ws-chip ${cur === t.name ? 'active' : ''}" data-ws-tag="${escapeHtml(t.name)}">${escapeHtml(t.name)}</button>`
+    ).join('');
+    box.onclick = (e) => {
+      const b = e.target.closest('[data-ws-tag]');
+      if (!b) return;
+      const name = b.getAttribute('data-ws-tag');
+      const prev = (window.__wsFilters || {}).tag;
+      window.__wsFilters = { ...(window.__wsFilters || {}), tag: prev === name ? '' : name };
+      loadWorkshopTags();
+      loadWorkshopList();
+    };
+  } catch (e) {
+    box.innerHTML = '<span class="settings-hint">Ошибка</span>';
+  }
+}
+
+function renderWorkshopGames(list) {
+  if (!list.length) return '<div class="ws-empty">Игр в мастерской пока нет</div>';
+  return list.map(g => {
+    const cover = g.cover_url || g.banner_url || '';
+    const mods = g.mods_count != null ? g.mods_count : 0;
+    const modsLabel = mods + ' мод' + (mods === 1 ? '' : (mods >= 2 && mods <= 4 ? 'а' : 'ов'));
+    return `<button type="button" class="ws-game-card" data-ws-game-id="${g.id}">
+      ${cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" />` : ''}
+      <div class="ws-game-shade"></div>
+      <div class="ws-game-info">
+        <div class="ws-game-title">${escapeHtml(g.title || '')}</div>
+        <div class="ws-game-meta">${modsLabel}</div>
+      </div>
+    </button>`;
+  }).join('');
+}
+
+function renderWorkshopMods(list) {
+  if (!list.length) return '<div class="ws-empty">Модов пока нет — скоро появятся</div>';
+  return list.map(m => {
+    const cover = m.cover_url || m.game_cover || '';
+    const av = m.author_avatar || '';
+    const color = m.author_color || '#ef5b2c';
+    const initial = (m.author_name || '?').slice(0, 1).toUpperCase();
+    return `<article class="ws-mod-card" data-mod-id="${m.id}">
+      <div class="ws-mod-cover" style="${cover ? "background-image:url('" + String(cover).replace(/'/g, '%27') + "')" : ''}"></div>
+      <div class="ws-mod-body">
+        <h3 class="ws-mod-title">${escapeHtml(m.title || '')}</h3>
+        <div class="ws-mod-author">
+          <span class="ws-mod-author-av" style="${av ? "background-image:url('" + String(av).replace(/'/g, '%27') + "')" : 'background:' + escapeHtml(color)}">${av ? '' : escapeHtml(initial)}</span>
+          ${escapeHtml(m.author_name || 'Автор')}
+        </div>
+        <div class="ws-mod-game">${escapeHtml(m.game_title || '')}</div>
+        <div class="ws-mod-dates">
+          <span>⬇ ${wsFormatDate(m.last_download_at)}</span>
+          <span>📅 ${wsFormatDate(m.created_at)}</span>
+        </div>
+        <div class="ws-mod-desc">${escapeHtml(m.short_description || '')}</div>
+        <div class="ws-mod-foot">
+          <span>⬇ ${wsFormatNum(m.downloads)}</span>
+          <span>♥ ${wsFormatNum(m.likes)}</span>
+          <span>${wsFormatBytes(m.file_size)}</span>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+function renderWorkshopMedia(list) {
+  if (!list.length) return '<div class="ws-empty">Медиа пока нет</div>';
+  return list.map(m => {
+    const img = m.image_url || '';
+    return `<article class="ws-media-card" data-media-id="${m.id}">
+      <div class="ws-media-img" style="${img ? "background-image:url('" + String(img).replace(/'/g, '%27') + "')" : ''}"></div>
+      <div class="ws-media-body">
+        <div class="ws-media-game">${escapeHtml(m.game_title || '')}</div>
+        <h3 class="ws-media-title">${escapeHtml(m.title || 'Скриншот')}</h3>
+        <div class="ws-media-meta">
+          <span>by ${escapeHtml(m.author_name || '')}</span>
+          <span class="sep">|</span>
+          <span>♥ ${wsFormatNum(m.likes)}</span>
+          <span>👁 ${wsFormatNum(m.views)}</span>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+async function loadWorkshopList() {
+  const grid = document.getElementById('ws-grid');
+  if (!grid) return;
+  const tab = window.__wsTab || 'games';
+  const f = window.__wsFilters || {};
+  grid.classList.toggle('is-mods', tab === 'mods');
+  grid.classList.toggle('is-media', tab === 'media');
+  grid.innerHTML = '<div class="loading">Загрузка…</div>';
+  updateWorkshopSub();
+  try {
+    if (tab === 'games') {
+      const params = new URLSearchParams({ action: 'games', limit: '48' });
+      if (f.q) params.set('q', f.q);
+      if (f.genre) params.set('genre', f.genre);
+      const data = await fetchJSON(WS_API + '?' + params.toString());
+      const list = (data && data.games) || [];
+      window.__wsGamesTotal = data.total != null ? data.total : list.length;
+      updateWorkshopSub();
+      grid.innerHTML = renderWorkshopGames(list);
+      grid.querySelectorAll('[data-ws-game-id]').forEach(card => {
+        card.addEventListener('click', () => openWorkshopGame(card.getAttribute('data-ws-game-id')));
+      });
+    } else if (tab === 'mods') {
+      const params = new URLSearchParams({ action: 'mods', limit: '48' });
+      ['q','game','tag','lang','param','size_min','size_max','dl_min','dl_max','like_min','like_max'].forEach(k => {
+        if (f[k]) params.set(k, f[k]);
+      });
+      const data = await fetchJSON(WS_API + '?' + params.toString());
+      grid.innerHTML = renderWorkshopMods((data && data.mods) || []);
+    } else {
+      const params = new URLSearchParams({ action: 'media', limit: '48' });
+      if (f.game) params.set('game', f.game);
+      const data = await fetchJSON(WS_API + '?' + params.toString());
+      grid.innerHTML = renderWorkshopMedia((data && data.media) || []);
+    }
+  } catch (e) {
+    grid.innerHTML = '<div class="ws-empty">Ошибка: ' + escapeHtml(e.message || 'неизвестно') + '</div>';
+  }
+}
+
+async function openWorkshop() {
+  window.__wsgId = 0;
+  $$('.view').forEach(v => v.classList.remove('active'));
+  const view = document.getElementById('view-workshop');
+  if (view) view.classList.add('active');
+  $$('.nav-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-view') === 'workshop'));
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set('view', 'workshop');
+    url.searchParams.delete('wsg');
+    history.pushState({}, '', url);
+  } catch (e) {}
+  const head = document.getElementById('head-title');
+  if (head) head.textContent = 'Мастерская';
+  window.__wsTab = window.__wsTab || 'games';
+  window.__wsFilters = {};
+  document.querySelectorAll('#ws-tabs .hp-tab').forEach(t => {
+    t.classList.toggle('active', t.getAttribute('data-ws-tab') === window.__wsTab);
+  });
+  await loadWorkshopStats();
+  renderWorkshopSide(window.__wsTab);
+  await loadWorkshopList();
+}
+window.openWorkshop = openWorkshop;
+
+async function openWorkshopGame(id) {
+  id = parseInt(id, 10) || 0;
+  if (!id) return;
+  window.__wsgId = id;
+  window.__wsgTab = 'mods';
+  $$('.view').forEach(v => v.classList.remove('active'));
+  const view = document.getElementById('view-workshop-game');
+  if (view) view.classList.add('active');
+  $$('.nav-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-view') === 'workshop'));
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set('view', 'workshop');
+    url.searchParams.set('wsg', String(id));
+    history.pushState({}, '', url);
+  } catch (e) {}
+  const headTitle = document.getElementById('head-title');
+  if (headTitle) headTitle.textContent = 'Мастерская';
+
+  document.querySelectorAll('#wsg-tabs .hp-tab').forEach(t => {
+    t.classList.toggle('active', t.getAttribute('data-wsg-tab') === 'mods');
+  });
+
+  try {
+    const data = await fetchJSON(WS_API + '?action=game&id=' + id);
+    if (!data || !data.ok || !data.game) throw new Error((data && data.error) || 'Не найдено');
+    const g = data.game;
+    const cover = document.getElementById('wsg-cover');
+    const title = document.getElementById('wsg-title');
+    const desc = document.getElementById('wsg-desc');
+    const meta = document.getElementById('wsg-meta');
+    if (title) title.textContent = g.title || 'Игра';
+    if (desc) desc.textContent = g.short_description || '';
+    if (cover) {
+      const url = g.cover_url || g.banner_url || '';
+      cover.style.backgroundImage = url ? "url('" + String(url).replace(/'/g, '%27') + "')" : '';
+    }
+    if (meta) {
+      meta.innerHTML = `
+        <span>${g.mods_count || 0} модов</span>
+        <span>${g.media_count || 0} медиа</span>
+        ${g.genre ? '<span>' + escapeHtml(g.genre) + '</span>' : ''}
+        ${g.developer_name || g.developer ? '<span>' + escapeHtml(g.developer_name || g.developer) + '</span>' : ''}`;
+    }
+  } catch (e) {
+    toast(e.message || 'Ошибка загрузки');
+    return openWorkshop();
+  }
+
+  // side filters for this game (mods/media of this game)
+  renderWorkshopGameSide();
+  await loadWorkshopGameList();
+}
+window.openWorkshopGame = openWorkshopGame;
+
+function renderWorkshopGameSide() {
+  const side = document.getElementById('wsg-side');
+  if (!side) return;
+  const tab = window.__wsgTab || 'mods';
+  if (tab === 'mods') {
+    side.innerHTML =
+      wsSideCard('Поиск', `<input type="text" class="auth-input" id="wsg-f-q" placeholder="Название мода" />`) +
+      wsSideCard('Теги', `<div class="ws-chip-list" id="wsg-tag-list"><span class="settings-hint">Загрузка…</span></div>`);
+    const inp = document.getElementById('wsg-f-q');
+    if (inp) {
+      let t;
+      inp.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => loadWorkshopGameList(), 280);
+      });
+    }
+    // reuse global tags list
+    loadWorkshopTagsInto('wsg-tag-list', () => loadWorkshopGameList());
+  } else {
+    side.innerHTML = wsSideCard('Поиск', `<input type="text" class="auth-input" id="wsg-f-media-q" placeholder="Название" />`);
+    const inp = document.getElementById('wsg-f-media-q');
+    if (inp) {
+      let t;
+      inp.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => loadWorkshopGameList(), 280);
+      });
+    }
+  }
+  bindWsSideToggles(side);
+}
+
+async function loadWorkshopTagsInto(boxId, onPick) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  try {
+    const data = await fetchJSON(WS_API + '?action=tags');
+    const list = (data && data.tags) || [];
+    if (!list.length) {
+      box.innerHTML = '<span class="settings-hint">Тегов пока нет</span>';
+      return;
+    }
+    box.innerHTML = list.slice(0, 24).map(t =>
+      `<button type="button" class="ws-chip" data-ws-tag="${escapeHtml(t.name)}">${escapeHtml(t.name)}</button>`
+    ).join('');
+    box.onclick = (e) => {
+      const b = e.target.closest('[data-ws-tag]');
+      if (!b) return;
+      box.querySelectorAll('.ws-chip').forEach(x => x.classList.toggle('active', x === b ? !b.classList.contains('active') : false));
+      if (typeof onPick === 'function') onPick();
+    };
+  } catch (e) {
+    box.innerHTML = '<span class="settings-hint">Ошибка</span>';
+  }
+}
+
+async function loadWorkshopGameList() {
+  const grid = document.getElementById('wsg-grid');
+  const sub = document.getElementById('wsg-sub');
+  if (!grid || !window.__wsgId) return;
+  const tab = window.__wsgTab || 'mods';
+  grid.classList.toggle('is-mods', tab === 'mods');
+  grid.classList.toggle('is-media', tab === 'media');
+  grid.innerHTML = '<div class="loading">Загрузка…</div>';
+  if (sub) sub.textContent = tab === 'mods' ? 'Моды этой игры' : 'Медиа этой игры';
+  try {
+    if (tab === 'mods') {
+      const params = new URLSearchParams({ action: 'mods', game_id: String(window.__wsgId), limit: '48' });
+      const q = document.getElementById('wsg-f-q');
+      if (q && q.value.trim()) params.set('q', q.value.trim());
+      const tagBtn = document.querySelector('#wsg-tag-list .ws-chip.active');
+      if (tagBtn) params.set('tag', tagBtn.getAttribute('data-ws-tag') || '');
+      const data = await fetchJSON(WS_API + '?' + params.toString());
+      grid.innerHTML = renderWorkshopMods((data && data.mods) || []);
+    } else {
+      const params = new URLSearchParams({ action: 'media', game_id: String(window.__wsgId), limit: '48' });
+      const data = await fetchJSON(WS_API + '?' + params.toString());
+      grid.innerHTML = renderWorkshopMedia((data && data.media) || []);
+    }
+  } catch (e) {
+    grid.innerHTML = '<div class="ws-empty">Ошибка: ' + escapeHtml(e.message || '') + '</div>';
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const nav = e.target && e.target.closest && e.target.closest('.nav-btn[data-view="workshop"]');
+  if (nav) {
+    e.preventDefault();
+    openWorkshop();
     return;
   }
-  // opened: only switch tab, CSS handles layout
-  var activeBtn = modal.querySelector('[data-pub-tab].active');
-  var tab = (activeBtn && activeBtn.getAttribute('data-pub-tab')) || 'main';
-  if (typeof window.switchPubTab === 'function') window.switchPubTab(tab);
-};
-
-window.switchPubTab = function(tab) {
-  var modal = document.getElementById('submit-form-modal');
-  if (!modal || !tab) return;
-  modal.querySelectorAll('[data-pub-tab]').forEach(function(btn) {
-    btn.classList.toggle('active', btn.getAttribute('data-pub-tab') === tab);
-  });
-  modal.querySelectorAll('[data-pub-pane]').forEach(function(pane) {
-    pane.classList.toggle('active', pane.getAttribute('data-pub-pane') === tab);
-  });
-  try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
-};
-
-/* на загрузке гарантированно прячем publish modal */
-document.addEventListener('DOMContentLoaded', function() {
-  var modal = document.getElementById('submit-form-modal');
-  if (modal) {
-    modal.classList.add('hidden');
-    modal.style.cssText = '';
-    modal.setAttribute('aria-hidden', 'true');
+  const back = e.target && e.target.closest && e.target.closest('#wsg-back');
+  if (back) {
+    e.preventDefault();
+    openWorkshop();
+    return;
+  }
+  const tabBtn = e.target && e.target.closest && e.target.closest('#ws-tabs [data-ws-tab]');
+  if (tabBtn) {
+    const tab = tabBtn.getAttribute('data-ws-tab');
+    window.__wsTab = tab;
+    window.__wsFilters = {};
+    document.querySelectorAll('#ws-tabs .hp-tab').forEach(t => t.classList.toggle('active', t === tabBtn));
+    renderWorkshopSide(tab);
+    loadWorkshopList();
+    return;
+  }
+  const gTab = e.target && e.target.closest && e.target.closest('#wsg-tabs [data-wsg-tab]');
+  if (gTab) {
+    window.__wsgTab = gTab.getAttribute('data-wsg-tab');
+    document.querySelectorAll('#wsg-tabs .hp-tab').forEach(t => t.classList.toggle('active', t === gTab));
+    renderWorkshopGameSide();
+    loadWorkshopGameList();
   }
 });
 
-
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.submit-modal').forEach(function(m) {
-    if (!m.classList.contains('hidden')) {
-      // leave auth alone; only force-hide success/form overlays if stuck open without intent
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.get('view') === 'workshop') {
+      const wsg = parseInt(params.get('wsg') || '0', 10);
+      if (wsg) openWorkshopGame(wsg);
+      else openWorkshop();
     }
-    // ensure done modal starts hidden
-    if (m.id === 'submit-done-modal' || m.id === 'submit-form-modal' || m.id === 'submit-rules-modal') {
-      m.classList.add('hidden');
-    }
-  });
-  // stray backdrops outside .submit-modal.hidden parents
-  document.querySelectorAll('.submit-modal-backdrop').forEach(function(bd) {
-    var parent = bd.closest('.submit-modal, .pubm, .sgdb-modal');
-    if (!parent || parent.classList.contains('hidden')) {
-      bd.style.pointerEvents = 'none';
-    }
-  });
+  } catch (e) {}
 });
