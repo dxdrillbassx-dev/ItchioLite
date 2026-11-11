@@ -1003,9 +1003,17 @@ function renderHomeGrid() {
   if (!grid) return;
   let games = getHomeGamesSorted().slice(0, 12);
   if (!games.length) {
-    grid.innerHTML = '<div class="loading">В каталоге пока нет игр.<br><small>Нажми «+» сверху, чтобы отправить игру на модерацию.</small></div>';
+    grid.classList.add('is-empty');
+    grid.innerHTML = `<div class="hp-empty hp-empty-centered home-empty">
+      <div class="hp-empty-logo" aria-hidden="true">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+      </div>
+      <div class="hp-empty-text">В каталоге пока нет игр</div>
+      <div class="hp-empty-text" style="font-size:0.82rem;opacity:0.8">Нажми «+» сверху, чтобы отправить игру на модерацию</div>
+    </div>`;
     return;
   }
+  grid.classList.remove('is-empty');
 
   grid.innerHTML = games.map(g => {
     const cover = escapeHtml(g.banner_url || g.cover_url || gameCoverUrl(g));
@@ -1908,7 +1916,12 @@ function renderStoreList() {
     const emptyMsg = storeEra === 'classics'
       ? 'В разделе «Классика» пока пусто.<br><small>Сюда попадут ретро-игры и релизы для эмуляторов (PS1, NES и т.д.).</small>'
       : 'Ничего не найдено.<br><small>Сбрось фильтры или измени запрос.</small>';
-    list.innerHTML = `<div class="loading store-empty">${emptyMsg}</div>`;
+    list.innerHTML = `<div class="hp-empty hp-empty-centered store-empty">
+      <div class="hp-empty-logo" aria-hidden="true">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      </div>
+      <div class="hp-empty-text">${emptyMsg}</div>
+    </div>`;
     return;
   }
 
@@ -5091,11 +5104,6 @@ async function loadProfileStats() {
     }
     const topEl = $('#hp-stat-top');
     if (topEl) topEl.textContent = s.top_percent ? `Топ ${s.top_percent}%` : '—';
-
-    const karmaEl = $('#hp-stat-karma');
-    if (karmaEl) {
-      karmaEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> ${s.karma || 0} карма`;
-    }
   } catch (err) {
     // не критично
   }
@@ -5160,6 +5168,47 @@ async function loadProfileLibrary() {
   }
 }
 
+async function loadProfileScreenshots() {
+  const emptyEl = $('#hp-screenshots-empty');
+  const grid = $('#hp-screenshots-grid');
+  if (!grid) return;
+  const uid = viewingUserId || (window.CURRENT_USER && window.CURRENT_USER.id) || 0;
+  if (!uid) {
+    if (emptyEl) emptyEl.classList.remove('hidden');
+    grid.classList.add('hidden');
+    grid.innerHTML = '';
+    return;
+  }
+  try {
+    const data = await fetchJSON(`api/workshop.php?action=media&user_id=${uid}&limit=48`);
+    const list = (data && data.ok && Array.isArray(data.media)) ? data.media : [];
+    if (!list.length) {
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      grid.classList.add('hidden');
+      grid.innerHTML = '';
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+    grid.classList.remove('hidden');
+    grid.innerHTML = list.map(m => {
+      const src = m.image_url || (m.images && (Array.isArray(m.images) ? m.images[0] : (typeof m.images === 'string' ? (JSON.parse(m.images || '[]')[0] || '') : ''))) || '';
+      const title = escapeHtml(m.title || m.game_title || 'Скриншот');
+      if (!src) return '';
+      return `<button type="button" class="hp-shot-card" data-src="${escapeHtml(src)}" title="${title}">
+        <img src="${escapeHtml(src)}" alt="${title}" loading="lazy" />
+      </button>`;
+    }).join('');
+    $$('.hp-shot-card', grid).forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.src && typeof openLightbox === 'function') openLightbox(btn.dataset.src);
+      });
+    });
+  } catch (err) {
+    if (emptyEl) emptyEl.classList.remove('hidden');
+    grid.classList.add('hidden');
+  }
+}
+
 function renderProfileLibrary() {
   let games = [...(profileLibraryCache || [])];
 
@@ -5204,13 +5253,22 @@ function renderProfileLibrary() {
 
   const libBox = $('#hp-library-games');
   const libCount = $('#hp-library-count');
+  const libSectionHead = $('#hp-library-section .hp-section-head');
   if (libCount) libCount.textContent = rest.length;
   if (libBox) {
     if (!rest.length && !pinned.length) {
-      libBox.innerHTML = '<div class="hp-empty">Библиотека пуста. Загляни в каталог.</div>';
+      if (libSectionHead) libSectionHead.style.display = 'none';
+      libBox.innerHTML = `<div class="hp-empty hp-empty-centered">
+        <div class="hp-empty-logo" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h5"/></svg>
+        </div>
+        <div class="hp-empty-text">Загляни в каталог — здесь появятся твои игры</div>
+      </div>`;
     } else if (!rest.length) {
-      libBox.innerHTML = '<div class="hp-empty">Все игры закреплены сверху.</div>';
+      if (libSectionHead) libSectionHead.style.display = '';
+      libBox.innerHTML = '<div class="hp-empty hp-empty-centered"><div class="hp-empty-text">Все игры закреплены сверху.</div></div>';
     } else {
+      if (libSectionHead) libSectionHead.style.display = '';
       libBox.innerHTML = rest.map(g => gameCardHtml(g)).join('');
     }
   }
@@ -5258,7 +5316,7 @@ function initProfileControls() {
       const libSection = $('#hp-library-section');
       const pinnedSection = $('#hp-pinned-section');
       const filters = $('#hp-filters');
-      ['reviews', 'souvenirs', 'screenshots'].forEach(p => {
+      ['reviews', 'screenshots'].forEach(p => {
         const pane = $(`#hp-pane-${p}`);
         if (pane) pane.classList.toggle('hidden', name !== p);
       });
@@ -5270,6 +5328,9 @@ function initProfileControls() {
         else renderProfileLibrary();
       }
       if (filters) filters.style.display = showLib ? '' : 'none';
+      if (name === 'screenshots') {
+        loadProfileScreenshots();
+      }
     });
   });
 
@@ -6171,12 +6232,10 @@ function initSettingsView() {
       const res = await postJSON(`${USER_API}?action=settings`, {
         section: 'general',
         username: $('#settings-username')?.value?.trim() || '',
-        lang: $('#settings-lang')?.value || 'ru',
       });
       if (!res.ok) throw new Error(res.error || 'Ошибка');
       if (window.AUTH_STATE?.user) {
         window.AUTH_STATE.user.username = res.username;
-        window.AUTH_STATE.user.lang = res.lang;
       }
       $$('.side-user-name, .user-menu-name, #hp-username').forEach(el => { if (el) el.textContent = res.username; });
       toast('Основные настройки сохранены');
@@ -6812,7 +6871,12 @@ function renderForeignLibraryOnly(library) {
   if (libCount) libCount.textContent = rest.length;
   if (libBox) {
     if (!rest.length && !pinned.length) {
-      libBox.innerHTML = '<div class="hp-empty">Библиотека пуста</div>';
+      libBox.innerHTML = `<div class="hp-empty hp-empty-centered">
+        <div class="hp-empty-logo" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h5"/></svg>
+        </div>
+        <div class="hp-empty-text">Загляни в каталог — здесь появятся твои игры</div>
+      </div>`;
     } else {
       libBox.innerHTML = rest.map(g => gameCardHtml(g, { showPin: false })).join('');
     }
@@ -7066,10 +7130,6 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
   if (playEl) {
     playEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${formatPlaytime(p.playtime_minutes || 0)}`;
   }
-  const karmaEl = $('#hp-stat-karma');
-  if (karmaEl) {
-    karmaEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> ${p.karma || 0} карма`;
-  }
 
   // library without pin buttons
   profileLibraryCache = library;
@@ -7093,7 +7153,12 @@ function renderForeignProfile(p, library, viewerIsAdmin) {
   if (libCount) libCount.textContent = rest.length;
   if (libBox) {
     if (!rest.length && !pinned.length) {
-      libBox.innerHTML = '<div class="hp-empty">Библиотека пуста</div>';
+      libBox.innerHTML = `<div class="hp-empty hp-empty-centered">
+        <div class="hp-empty-logo" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h5"/></svg>
+        </div>
+        <div class="hp-empty-text">Загляни в каталог — здесь появятся твои игры</div>
+      </div>`;
     } else {
       libBox.innerHTML = rest.map(g => gameCardHtml(g, { showPin: false })).join('');
     }
@@ -7448,7 +7513,7 @@ async function loadNotifications() {
     if (!items.length) {
       list.innerHTML = `
         <div class="notif-page-empty">
-          <div class="notif-page-empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+          <div class="notif-page-empty-icon" aria-hidden="true"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M4 2L2 4"/><path d="M20 2l2 2"/></svg></div>
           <div class="notif-page-empty-title">Нет уведомлений</div>
           <div class="notif-page-empty-sub">Вы в курсе всех событий! Загляните позже за новыми обновлениями.</div>
         </div>`;
@@ -11584,6 +11649,12 @@ function initCreateMenu() {
     openPubsCreateModal();
   });
   $('#pub-create-save')?.addEventListener('click', saveNewPublisher);
+  ['pub-name', 'pub-desc'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.counterBound) return;
+    el.dataset.counterBound = '1';
+    el.addEventListener('input', updatePubFieldCounters);
+  });
   // file previews
   const bindPrev = (inputId, prevId) => {
     const input = document.getElementById(inputId);
@@ -11665,16 +11736,37 @@ window.openPubsListModal = async function openPubsListModal() {
   }
 }
 
+function updatePubFieldCounters() {
+  const name = $('#pub-name');
+  const desc = $('#pub-desc');
+  const nameCount = $('#pub-name-count');
+  const descCount = $('#pub-desc-count');
+  if (name && nameCount) {
+    const n = (name.value || '').length;
+    nameCount.textContent = n + ' / 60';
+    nameCount.classList.toggle('is-warn', n >= 50);
+    nameCount.classList.toggle('is-over', n >= 60);
+    name.classList.toggle('is-invalid', n > 0 && n < 2);
+  }
+  if (desc && descCount) {
+    const n = (desc.value || '').length;
+    descCount.textContent = n + ' / 300';
+    descCount.classList.toggle('is-warn', n >= 260);
+    descCount.classList.toggle('is-over', n >= 300);
+  }
+}
+
 function openPubsCreateModal() {
   window.__pubMembersSelected = [];
   renderPubMemberChips();
-  const name = $('#pub-name'); if (name) name.value = '';
+  const name = $('#pub-name'); if (name) { name.value = ''; name.classList.remove('is-invalid'); }
   const desc = $('#pub-desc'); if (desc) desc.value = '';
   const av = $('#pub-avatar'); if (av) av.value = '';
   const bn = $('#pub-banner'); if (bn) bn.value = '';
   const ap = $('#pub-avatar-preview'); if (ap) { ap.style.backgroundImage = ''; ap.classList.remove('has-img'); }
   const bp = $('#pub-banner-preview'); if (bp) { bp.style.backgroundImage = ''; bp.classList.remove('has-img'); }
   $('#pub-member-suggest')?.classList.add('hidden');
+  updatePubFieldCounters();
   $('#pubs-create-modal')?.classList.remove('hidden');
 }
 
@@ -11727,14 +11819,33 @@ function renderPubMemberChips() {
 
 window.saveNewPublisher = async function saveNewPublisher() {
   const btn = $('#pub-create-save');
-  const name = ($('#pub-name')?.value || '').trim();
-  if (name.length < 2) { toast('Укажите название'); return; }
+  const nameEl = $('#pub-name');
+  const descEl = $('#pub-desc');
+  const name = (nameEl?.value || '').trim();
+  const desc = (descEl?.value || '').trim();
+  if (name.length < 2) {
+    nameEl?.classList.add('is-invalid');
+    toast('Название: минимум 2 символа');
+    return;
+  }
+  if (name.length > 60) {
+    nameEl?.classList.add('is-invalid');
+    toast('Название: максимум 60 символов');
+    return;
+  }
+  if (desc.length > 300) {
+    descEl?.classList.add('is-invalid');
+    toast('Описание: максимум 300 символов');
+    return;
+  }
+  nameEl?.classList.remove('is-invalid');
+  descEl?.classList.remove('is-invalid');
   if (btn) { btn.disabled = true; btn.textContent = 'Создание...'; }
   try {
     const fd = new FormData();
     fd.append('csrf_token', window.CSRF_TOKEN || '');
     fd.append('name', name);
-    fd.append('description', $('#pub-desc')?.value || '');
+    fd.append('description', desc);
     fd.append('members', (window.__pubMembersSelected || []).map(m => m.id).join(','));
     const av = $('#pub-avatar')?.files?.[0];
     if (av) fd.append('avatar', av);
@@ -12237,7 +12348,7 @@ async function openPublisherPage(id, slug) {
     const list = p.members || [];
     if (membersCountEl) membersCountEl.textContent = String(list.length);
     if (memEl) {
-      memEl.innerHTML = list.length ? list.map(m => {
+      const html = list.length ? list.map(m => {
         const avStyle = m.avatar_url
           ? ('background-image:url(' + JSON.stringify(m.avatar_url) + ')')
           : ('background:' + (m.avatar_color || '#ef5b2c'));
@@ -12245,39 +12356,54 @@ async function openPublisherPage(id, slug) {
         const role = m.role === 'owner' ? 'владелец' : 'участник';
         return '<div class="hp-friend-row pub-member-row" data-username="' + escapeHtml(m.username) + '" data-id="' + m.id + '" role="button" tabindex="0">' +
           '<div class="hp-friend-avatar" style="' + avStyle + '">' + letter + '</div>' +
-          '<div style="min-width:0">' +
+          '<div class="hp-friend-text">' +
             '<div class="hp-friend-name">' + escapeHtml(m.username) + '</div>' +
             '<div class="hp-friend-status">' + role + '</div>' +
           '</div></div>';
       }).join('') : '<div class="settings-hint" style="padding:8px 6px">Нет участников</div>';
+      // через setAccordionHTML — сохраняем .acc-inner для корректного схлопывания
+      if (typeof setAccordionHTML === 'function') setAccordionHTML(memEl, html);
+      else memEl.innerHTML = html;
       $$('.pub-member-row', memEl).forEach(r => {
         r.addEventListener('click', () => openUserProfile(r.dataset.username, r.dataset.id));
       });
     }
-    // accordion toggle for members (как в профиле)
+    // accordion toggle for members — один обработчик, как в профиле
     const memCard = $('#pub-members-card');
     if (memCard && !memCard.dataset.toggleBound) {
       memCard.dataset.toggleBound = '1';
-      const head = memCard.querySelector('.hp-side-head');
       const body = memCard.querySelector('.hp-side-body');
       const toggleBtn = memCard.querySelector('.hp-side-toggle');
-      const onToggle = () => {
+      if (body) ensureAccordionInner(body);
+      const onToggle = (e) => {
+        if (e) e.stopPropagation();
         if (!body) return;
         const collapsed = animateAccordion(memCard, body, 'is-collapsed');
         if (toggleBtn) toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       };
-      if (head) head.addEventListener('click', (e) => { if (e.target.closest('.hp-side-toggle') || e.target === head || head.contains(e.target)) onToggle(); });
-      if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); onToggle(); });
+      // клик по шапке (включая стрелку) — один раз
+      const head = memCard.querySelector('.hp-side-head');
+      if (head) head.addEventListener('click', onToggle);
     }
     if (p.name && headTitle) headTitle.textContent = p.name;
     const games = p.games || [];
     if (gamesCountEl) gamesCountEl.textContent = String(games.length);
+    const gamesSectionHead = document.querySelector('#view-publisher .hp-section-head');
     if (gamesEl) {
       gamesEl.classList.remove('store-grid');
       gamesEl.classList.add('hp-games-grid');
       if (!games.length) {
-        gamesEl.innerHTML = '<div class="friends-empty">Пока нет опубликованных игр</div>';
+        if (gamesSectionHead) gamesSectionHead.style.display = 'none';
+        gamesEl.classList.add('is-empty');
+        gamesEl.innerHTML = `<div class="hp-empty hp-empty-centered">
+          <div class="hp-empty-logo" aria-hidden="true">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          </div>
+          <div class="hp-empty-text">Пока нет опубликованных игр</div>
+        </div>`;
       } else {
+        if (gamesSectionHead) gamesSectionHead.style.display = '';
+        gamesEl.classList.remove('is-empty');
         const byId = {};
         games.forEach(g => { byId[String(g.id)] = g; });
         gamesEl.innerHTML = games.map(g => publisherGameCardHtml(g)).join('');
@@ -12331,9 +12457,8 @@ async function openPublisherPage(id, slug) {
       const isSub = !!p.is_subscribed;
       if (isOwner) {
         actionsEl.innerHTML = `
-          <button type="button" class="hp-btn-edit" id="pub-btn-edit" title="Редактировать">
+          <button type="button" class="hp-btn-edit hp-btn-icon" id="pub-btn-edit" title="Редактировать" aria-label="Редактировать">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            Редактировать
           </button>
           <button type="button" class="hp-btn-logout hp-btn-danger" id="pub-btn-delete" title="Удалить издательство">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -12592,14 +12717,32 @@ function updateWorkshopSub() {
   if (!sub) return;
   const tab = window.__wsTab || 'games';
   const s = window.__wsStats || {};
+  let text = '';
+  let hide = false;
   if (tab === 'games') {
     const n = window.__wsGamesTotal != null ? window.__wsGamesTotal : (s.games || 0);
-    sub.textContent = 'Выберите из ' + n + ' игр для модификации';
+    hide = !n;
+    text = n ? ('Выберите из ' + n + ' игр для модификации') : '';
   } else if (tab === 'mods') {
-    sub.textContent = 'Изучите лучшие модификации в интернете';
+    const n = s.mods || 0;
+    hide = !n && !window.__wsHasListContent;
+    text = n ? 'Изучите лучшие модификации в интернете' : '';
   } else {
-    sub.textContent = 'Лучшая галерея в интернете';
+    const n = s.media || 0;
+    hide = !n && !window.__wsHasListContent;
+    text = n ? 'Лучшая галерея в интернете' : '';
   }
+  sub.textContent = text;
+  sub.classList.toggle('is-hidden', hide || !text);
+}
+
+function wsEmptyHtml(text) {
+  return `<div class="hp-empty hp-empty-centered">
+    <div class="hp-empty-logo" aria-hidden="true">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+    </div>
+    <div class="hp-empty-text">${escapeHtml(text)}</div>
+  </div>`;
 }
 
 function wsFilterField(label, html) {
@@ -12612,7 +12755,7 @@ function renderWorkshopSide(tab) {
   const f = window.__wsFilters || {};
   if (tab === 'games') {
     side.innerHTML =
-      wsFilterField('Поиск', `<input type="text" class="auth-input" id="ws-f-game-q" placeholder="Название игры" value="${escapeHtml(f.q || '')}" />`) +
+      wsFilterField('Поиск', `<div class="search-field"><svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" class="auth-input" id="ws-f-game-q" placeholder="Название игры" value="${escapeHtml(f.q || '')}" /></div>`) +
       wsFilterField('Жанр', `<div class="ws-chip-list" id="ws-genre-list"><span class="settings-hint">Загрузка…</span></div>`);
     loadWorkshopGenres();
     const inp = document.getElementById('ws-f-game-q');
@@ -12629,7 +12772,7 @@ function renderWorkshopSide(tab) {
   } else if (tab === 'mods') {
     side.innerHTML =
       wsFilterField('Игра', `<input type="text" class="auth-input" id="ws-f-mod-game" placeholder="Название игры" value="${escapeHtml(f.game || '')}" />`) +
-      wsFilterField('Поиск', `<input type="text" class="auth-input" id="ws-f-mod-q" placeholder="Поиск…" value="${escapeHtml(f.q || '')}" />`) +
+      wsFilterField('Поиск', `<div class="search-field"><svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" class="auth-input" id="ws-f-mod-q" placeholder="Поиск…" value="${escapeHtml(f.q || '')}" /></div>`) +
       wsFilterField('Искать в', `<select class="settings-select" id="ws-f-mod-param" style="width:100%">
           <option value="" ${!f.param ? 'selected' : ''}>Везде</option>
           <option value="title" ${f.param === 'title' ? 'selected' : ''}>Название</option>
@@ -12723,7 +12866,10 @@ async function loadWorkshopGenres() {
     const data = await fetchJSON(WS_API + '?action=genres');
     const list = (data && data.genres) || [];
     if (!list.length) {
-      box.innerHTML = '<span class="settings-hint">Жанров пока нет</span>';
+      box.innerHTML = `<span class="settings-hint" style="display:inline-flex;align-items:center;gap:8px">
+        <span class="hp-empty-logo" style="opacity:0.45;display:inline-flex" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+        <span>Жанров пока нет</span>
+      </span>`;
       return;
     }
     const cur = (window.__wsFilters || {}).genre || '';
@@ -12847,7 +12993,9 @@ async function loadWorkshopList() {
   const f = window.__wsFilters || {};
   grid.classList.toggle('is-mods', tab === 'mods');
   grid.classList.toggle('is-media', tab === 'media');
+  grid.classList.remove('is-empty');
   grid.innerHTML = '<div class="loading">Загрузка…</div>';
+  window.__wsHasListContent = false;
   updateWorkshopSub();
   try {
     if (tab === 'games') {
@@ -12857,26 +13005,49 @@ async function loadWorkshopList() {
       const data = await fetchJSON(WS_API + '?' + params.toString());
       const list = (data && data.games) || [];
       window.__wsGamesTotal = data.total != null ? data.total : list.length;
+      window.__wsHasListContent = list.length > 0;
       updateWorkshopSub();
-      grid.innerHTML = renderWorkshopGames(list);
-      grid.querySelectorAll('[data-ws-game-id]').forEach(card => {
-        card.addEventListener('click', () => openWorkshopGame(card.getAttribute('data-ws-game-id')));
-      });
+      if (!list.length) {
+        grid.classList.add('is-empty');
+        grid.innerHTML = wsEmptyHtml('Пока нет игр для модификации');
+      } else {
+        grid.innerHTML = renderWorkshopGames(list);
+        grid.querySelectorAll('[data-ws-game-id]').forEach(card => {
+          card.addEventListener('click', () => openWorkshopGame(card.getAttribute('data-ws-game-id')));
+        });
+      }
     } else if (tab === 'mods') {
       const params = new URLSearchParams({ action: 'mods', limit: '48' });
       ['q','game','tag','lang','param','size_min','size_max','dl_min','dl_max','like_min','like_max'].forEach(k => {
         if (f[k]) params.set(k, f[k]);
       });
       const data = await fetchJSON(WS_API + '?' + params.toString());
-      grid.innerHTML = renderWorkshopMods((data && data.mods) || []);
+      const list = (data && data.mods) || [];
+      window.__wsHasListContent = list.length > 0;
+      updateWorkshopSub();
+      if (!list.length) {
+        grid.classList.add('is-empty');
+        grid.innerHTML = wsEmptyHtml('Модов пока нет');
+      } else {
+        grid.innerHTML = renderWorkshopMods(list);
+      }
     } else {
       const params = new URLSearchParams({ action: 'media', limit: '48' });
       if (f.game) params.set('game', f.game);
       const data = await fetchJSON(WS_API + '?' + params.toString());
-      grid.innerHTML = renderWorkshopMedia((data && data.media) || []);
+      const list = (data && data.media) || [];
+      window.__wsHasListContent = list.length > 0;
+      updateWorkshopSub();
+      if (!list.length) {
+        grid.classList.add('is-empty');
+        grid.innerHTML = wsEmptyHtml('Медиа пока нет');
+      } else {
+        grid.innerHTML = renderWorkshopMedia(list);
+      }
     }
   } catch (e) {
-    grid.innerHTML = '<div class="ws-empty">Ошибка: ' + escapeHtml(e.message || 'неизвестно') + '</div>';
+    grid.classList.add('is-empty');
+    grid.innerHTML = wsEmptyHtml('Ошибка: ' + (e.message || 'неизвестно'));
   }
 }
 
@@ -13028,7 +13199,7 @@ function renderWorkshopGameSide() {
   const tab = window.__wsgTab || 'mods';
   if (tab === 'mods') {
     side.innerHTML =
-      wsFilterField('Поиск', `<input type="text" class="auth-input" id="wsg-f-q" placeholder="Название мода" />`) +
+      wsFilterField('Поиск', `<div class="search-field"><svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" class="auth-input" id="wsg-f-q" placeholder="Название мода" /></div>`) +
       wsFilterField('Теги', `<div class="ws-chip-list" id="wsg-tag-list"><span class="settings-hint">Загрузка…</span></div>`);
     const inp = document.getElementById('wsg-f-q');
     if (inp) {
@@ -13040,7 +13211,7 @@ function renderWorkshopGameSide() {
     }
     loadWorkshopTagsInto('wsg-tag-list', () => loadWorkshopGameList());
   } else {
-    side.innerHTML = wsFilterField('Поиск', `<input type="text" class="auth-input" id="wsg-f-media-q" placeholder="Название" />`);
+    side.innerHTML = wsFilterField('Поиск', `<div class="search-field"><svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" class="auth-input" id="wsg-f-media-q" placeholder="Название" /></div>`);
     const inp = document.getElementById('wsg-f-media-q');
     if (inp) {
       let t;
@@ -13083,9 +13254,10 @@ async function loadWorkshopGameList() {
   const tab = window.__wsgTab || 'mods';
   grid.classList.toggle('is-mods', tab === 'mods');
   grid.classList.toggle('is-media', tab === 'media');
+  grid.classList.remove('is-empty');
   grid.innerHTML = '<div class="loading">Загрузка…</div>';
-  if (sub) sub.textContent = tab === 'mods' ? 'Моды этой игры' : 'Медиа этой игры';
   try {
+    let list = [];
     if (tab === 'mods') {
       const params = new URLSearchParams({ action: 'mods', game_id: String(window.__wsgId), limit: '48' });
       const q = document.getElementById('wsg-f-q');
@@ -13093,14 +13265,36 @@ async function loadWorkshopGameList() {
       const tagBtn = document.querySelector('#wsg-tag-list .ws-chip.active');
       if (tagBtn) params.set('tag', tagBtn.getAttribute('data-ws-tag') || '');
       const data = await fetchJSON(WS_API + '?' + params.toString());
-      grid.innerHTML = renderWorkshopMods((data && data.mods) || []);
+      list = (data && data.mods) || [];
+      if (sub) {
+        sub.textContent = list.length ? 'Моды этой игры' : '';
+        sub.classList.toggle('is-hidden', !list.length);
+      }
+      if (!list.length) {
+        grid.classList.add('is-empty');
+        grid.innerHTML = wsEmptyHtml('Модов для этой игры пока нет');
+      } else {
+        grid.innerHTML = renderWorkshopMods(list);
+      }
     } else {
       const params = new URLSearchParams({ action: 'media', game_id: String(window.__wsgId), limit: '48' });
       const data = await fetchJSON(WS_API + '?' + params.toString());
-      grid.innerHTML = renderWorkshopMedia((data && data.media) || []);
+      list = (data && data.media) || [];
+      if (sub) {
+        sub.textContent = list.length ? 'Медиа этой игры' : '';
+        sub.classList.toggle('is-hidden', !list.length);
+      }
+      if (!list.length) {
+        grid.classList.add('is-empty');
+        grid.innerHTML = wsEmptyHtml('Медиа для этой игры пока нет');
+      } else {
+        grid.innerHTML = renderWorkshopMedia(list);
+      }
     }
   } catch (e) {
-    grid.innerHTML = '<div class="ws-empty">Ошибка: ' + escapeHtml(e.message || '') + '</div>';
+    if (sub) sub.classList.add('is-hidden');
+    grid.classList.add('is-empty');
+    grid.innerHTML = wsEmptyHtml('Ошибка: ' + (e.message || ''));
   }
 }
 
@@ -13298,18 +13492,69 @@ document.addEventListener('click', (e) => {
   }
 });
 
+function bindWsFormCounters(form) {
+  if (!form || form.dataset.countersBound) return;
+  form.dataset.countersBound = '1';
+  form.querySelectorAll('.field-counter[data-for]').forEach(counter => {
+    const name = counter.getAttribute('data-for');
+    const max = parseInt(counter.getAttribute('data-max') || '0', 10) || 0;
+    const field = form.querySelector(`[name="${name}"]`);
+    if (!field) return;
+    const upd = () => {
+      const n = (field.value || '').length;
+      counter.textContent = n + ' / ' + max;
+      counter.classList.toggle('is-warn', max > 0 && n >= max * 0.85);
+      counter.classList.toggle('is-over', max > 0 && n >= max);
+    };
+    field.addEventListener('input', upd);
+    upd();
+  });
+}
+
+function bindWsFileHint(inputId, hintId, opts) {
+  const input = document.getElementById(inputId);
+  const hint = document.getElementById(hintId);
+  if (!input || input.dataset.hintBound) return;
+  input.dataset.hintBound = '1';
+  input.addEventListener('change', () => {
+    if (!hint) return;
+    const files = input.files ? Array.from(input.files) : [];
+    if (!files.length) {
+      hint.textContent = opts.empty || 'Файл не выбран';
+      return;
+    }
+    if (opts.maxFiles && files.length > opts.maxFiles) {
+      hint.textContent = 'Максимум ' + opts.maxFiles + ' файлов';
+      return;
+    }
+    const names = files.slice(0, 3).map(f => f.name).join(', ');
+    const more = files.length > 3 ? ' +' + (files.length - 3) : '';
+    hint.textContent = files.length + ' файл(ов): ' + names + more;
+  });
+}
+
 document.addEventListener('click', async (e) => {
   if (e.target && e.target.closest && e.target.closest('#ws-media-submit')) {
     e.preventDefault();
     const form = document.getElementById('ws-media-form');
     if (!form) return;
-    const fd = new FormData(form);
-    // ensure images[] key
+    const title = (form.querySelector('[name="title"]')?.value || '').trim();
+    const gameId = form.querySelector('[name="game_id"]')?.value || '';
+    const desc = (form.querySelector('[name="description"]')?.value || '').trim();
     const filesInput = document.getElementById('ws-media-files');
-    if (filesInput && filesInput.files && filesInput.files.length) {
-      fd.delete('images[]');
-      for (let i = 0; i < filesInput.files.length; i++) fd.append('images[]', filesInput.files[i]);
+    const files = filesInput && filesInput.files ? Array.from(filesInput.files) : [];
+    if (title.length < 2) { toast('Название: минимум 2 символа'); return; }
+    if (title.length > 80) { toast('Название: максимум 80 символов'); return; }
+    if (!gameId) { toast('Выберите игру'); return; }
+    if (desc.length > 400) { toast('Описание: максимум 400 символов'); return; }
+    if (!files.length) { toast('Добавьте хотя бы одно изображение'); return; }
+    if (files.length > 12) { toast('Максимум 12 изображений'); return; }
+    for (const f of files) {
+      if (f.size > 5 * 1024 * 1024) { toast('Файл «' + f.name + '» больше 5 МБ'); return; }
     }
+    const fd = new FormData(form);
+    fd.delete('images[]');
+    files.forEach(f => fd.append('images[]', f));
     const btn = document.getElementById('ws-media-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Отправка…'; }
     try {
@@ -13321,6 +13566,8 @@ document.addEventListener('click', async (e) => {
       toast('Медиа отправлено на модерацию');
       wsCloseModal('ws-media-form-modal');
       form.reset();
+      const hint = document.getElementById('ws-media-files-hint');
+      if (hint) hint.textContent = 'До 12 изображений, PNG/JPG/WebP, до 5 МБ каждое';
       try { if (typeof refreshAdminPendingBadge === 'function') refreshAdminPendingBadge(); } catch (e) {}
     } catch (err) {
       toast(err.message || 'Не удалось отправить');
@@ -13334,6 +13581,30 @@ document.addEventListener('click', async (e) => {
     e.preventDefault();
     const form = document.getElementById('ws-mod-form');
     if (!form) return;
+    const title = (form.querySelector('[name="title"]')?.value || '').trim();
+    const gameId = form.querySelector('[name="game_id"]')?.value || '';
+    const shortD = (form.querySelector('[name="short_description"]')?.value || '').trim();
+    const about = (form.querySelector('[name="about"]')?.value || '').trim();
+    const desc = (form.querySelector('[name="description"]')?.value || '').trim();
+    const install = (form.querySelector('[name="install_instructions"]')?.value || '').trim();
+    const features = (form.querySelector('[name="features"]')?.value || '').trim();
+    const deps = (form.querySelector('[name="dependencies"]')?.value || '').trim();
+    const tags = (form.querySelector('[name="tags"]')?.value || '').trim();
+    const modFile = document.getElementById('ws-mod-file');
+    const shots = document.getElementById('ws-mod-shots');
+    if (title.length < 2) { toast('Название: минимум 2 символа'); return; }
+    if (title.length > 80) { toast('Название: максимум 80 символов'); return; }
+    if (!gameId) { toast('Выберите игру'); return; }
+    if (shortD.length > 120) { toast('Краткое описание: максимум 120'); return; }
+    if (about.length > 600) { toast('«Об этом моде»: максимум 600'); return; }
+    if (desc.length > 2000) { toast('Описание: максимум 2000'); return; }
+    if (install.length > 1000) { toast('Инструкция: максимум 1000'); return; }
+    if (features.length > 500) { toast('Характеристики: максимум 500'); return; }
+    if (deps.length > 400) { toast('Зависимости: максимум 400'); return; }
+    if (tags.split(',').filter(t => t.trim()).length > 8) { toast('Максимум 8 тегов'); return; }
+    if (!modFile || !modFile.files || !modFile.files.length) { toast('Выберите файл мода'); return; }
+    if (modFile.files[0].size > 500 * 1024 * 1024) { toast('Файл мода больше 500 МБ'); return; }
+    if (shots && shots.files && shots.files.length > 10) { toast('Максимум 10 скриншотов'); return; }
     const fd = new FormData(form);
     const btn = document.getElementById('ws-mod-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Отправка…'; }
@@ -13359,6 +13630,110 @@ document.addEventListener('click', async (e) => {
     }
   }
 });
+
+// counters + file hints for workshop forms
+document.addEventListener('DOMContentLoaded', () => {
+  ['ws-media-form', 'ws-mod-form'].forEach(id => {
+    const form = document.getElementById(id);
+    if (form) bindWsFormCounters(form);
+  });
+  bindWsFileHint('ws-media-files', 'ws-media-files-hint', { maxFiles: 12, empty: 'До 12 изображений, PNG/JPG/WebP, до 5 МБ каждое' });
+  bindWsFileHint('ws-mod-cover', 'ws-mod-cover-hint', { empty: 'до 5 МБ' });
+  bindWsFileHint('ws-mod-banner', 'ws-mod-banner-hint', { empty: 'до 5 МБ' });
+  bindWsFileHint('ws-mod-shots', 'ws-mod-shots-hint', { maxFiles: 10, empty: 'До 10 шт., до 5 МБ' });
+  bindWsFileHint('ws-mod-file', 'ws-mod-file-hint', { empty: 'ZIP / RAR / 7Z, до 500 МБ' });
+});
+
+/**
+ * Выбор файла ВНЕ модалки (input на document.body).
+ * WebView2 ломает compositing у fixed-модалок при native file dialog —
+ * поэтому диалог открываем только с input, который не внутри .submit-modal.
+ */
+function assignFilesToInput(targetInput, fileList) {
+  if (!targetInput) return;
+  try {
+    const dt = new DataTransfer();
+    Array.from(fileList || []).forEach(f => dt.items.add(f));
+    targetInput.files = dt.files;
+  } catch (err) {
+    console.warn('[file] DataTransfer assign failed', err);
+  }
+  targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+  targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function pickFilesOutsideModal(targetInput) {
+  if (!targetInput) return;
+  const tmp = document.createElement('input');
+  tmp.type = 'file';
+  tmp.multiple = !!targetInput.multiple;
+  if (targetInput.accept) tmp.accept = targetInput.accept;
+  // полностью вне любого stacking context модалки
+  tmp.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;opacity:0;';
+  document.body.appendChild(tmp);
+
+  let done = false;
+  const cleanup = () => {
+    if (done) return;
+    done = true;
+    try { tmp.remove(); } catch (e) {}
+  };
+
+  tmp.addEventListener('change', () => {
+    assignFilesToInput(targetInput, tmp.files);
+    cleanup();
+  });
+  tmp.addEventListener('cancel', () => {
+    cleanup();
+  });
+  // если cancel не пришёл — убрать tmp при следующем фокусе окна
+  const onFocus = () => {
+    setTimeout(() => {
+      if (!done && (!tmp.files || !tmp.files.length)) cleanup();
+    }, 300);
+    window.removeEventListener('focus', onFocus);
+  };
+  window.addEventListener('focus', onFocus);
+
+  // открыть диалог синхронно в user gesture
+  tmp.click();
+}
+
+function recoverModalsAfterFileDialog() {
+  /* no-op: файлы больше не открываются изнутри модалки */
+}
+
+(function bindExternalFilePicker() {
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t) return;
+
+    let targetInput = null;
+
+    if (t.matches && t.matches('input[type="file"]')) {
+      // только если input лежит внутри модалки — перехватываем
+      if (t.closest('.submit-modal, .hp-modal, .modal')) {
+        targetInput = t;
+      }
+    } else {
+      const lab = t.closest && t.closest('label[for]');
+      if (lab) {
+        const el = document.getElementById(lab.getAttribute('for') || '');
+        if (el && el.type === 'file' && el.closest('.submit-modal, .hp-modal, .modal')) {
+          targetInput = el;
+        }
+      }
+    }
+
+    if (!targetInput) return;
+
+    // блокируем штатный open из модалки
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    pickFilesOutsideModal(targetInput);
+  }, true);
+})();
 
 function wsMvStep(dir) {
   const imgs = window.__wsMvImages || [];

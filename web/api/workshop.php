@@ -231,6 +231,7 @@ try {
         case 'media': {
             $game = ws_str($_GET, 'game');
             $gameId = ws_int($_GET, 'game_id', 0);
+            $userId = ws_int($_GET, 'user_id', 0);
             $page = max(1, ws_int($_GET, 'page', 1));
             $limit = min(48, max(1, ws_int($_GET, 'limit', 24)));
             $offset = ($page - 1) * $limit;
@@ -240,6 +241,10 @@ try {
             if ($gameId > 0) {
                 $where[] = "wm.game_id = ?";
                 $params[] = $gameId;
+            }
+            if ($userId > 0) {
+                $where[] = "wm.user_id = ?";
+                $params[] = $userId;
             }
             if ($game !== '') {
                 $where[] = "g.title LIKE ?";

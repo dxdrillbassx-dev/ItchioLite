@@ -177,7 +177,8 @@ try {
             $name = trim($_POST['name'] ?? '');
             $desc = trim($_POST['description'] ?? '');
             if ($name === '' || mb_strlen($name) < 2) jsonOut(['ok'=>false,'error'=>'Название: минимум 2 символа'], 400);
-            if (mb_strlen($name) > 120) jsonOut(['ok'=>false,'error'=>'Название слишком длинное'], 400);
+            if (mb_strlen($name) > 60) jsonOut(['ok'=>false,'error'=>'Название: максимум 60 символов'], 400);
+            if (mb_strlen($desc) > 300) jsonOut(['ok'=>false,'error'=>'Описание: максимум 300 символов'], 400);
             $slug = slugifyPub($name);
             $baseSlug = $slug;
             $n = 0;

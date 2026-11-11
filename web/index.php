@@ -202,7 +202,10 @@ if ($isAuthorized) {
       <div class="side-lib">
         <div class="side-lib-title">МОЯ БИБЛИОТЕКА</div>
         <div class="side-lib-controls">
-          <input type="text" id="side-lib-search" class="side-lib-search" placeholder="Поиск" aria-label="Поиск в библиотеке" />
+          <div class="search-field">
+            <svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input type="text" id="side-lib-search" class="side-lib-search" placeholder="Поиск" aria-label="Поиск в библиотеке" />
+          </div>
           <button type="button" class="side-lib-tool" id="side-lib-installed" title="Только установленные">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
           </button>
@@ -291,7 +294,7 @@ if ($isAuthorized) {
         </button>
         <?php endif; ?>
         <button type="button" class="head-cart" id="btn-cart" title="Корзина" aria-label="Корзина">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
           <span class="cart-badge hidden" id="cart-badge">0</span>
         </button>
         <button type="button" class="head-add-game" id="btn-add-game" title="Создать" onclick="if(window.openCreateMenu){openCreateMenu();}else if(window.openSubmitRules){openSubmitRules();}">
@@ -411,7 +414,10 @@ if ($isAuthorized) {
                 <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>
               </button>
               <div class="filter-block-body">
-                <input type="text" class="filter-search" id="genre-filter-search" placeholder="Фильтр..." />
+                <div class="search-field">
+                  <svg class="search-field-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                  <input type="text" class="filter-search" id="genre-filter-search" placeholder="Фильтр..." />
+                </div>
                 <div class="filter-opts" id="genre-opts"></div>
               </div>
             </div>
@@ -425,7 +431,10 @@ if ($isAuthorized) {
                 <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>
               </button>
               <div class="filter-block-body">
-                <input type="text" class="filter-search" id="dev-filter-search" placeholder="Фильтр..." />
+                <div class="search-field">
+                  <svg class="search-field-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                  <input type="text" class="filter-search" id="dev-filter-search" placeholder="Фильтр..." />
+                </div>
                 <div class="filter-opts" id="dev-opts"></div>
               </div>
             </div>
@@ -599,15 +608,15 @@ if ($isAuthorized) {
         <div class="downloads-page">
           <div class="downloads-active" id="downloads-active">
             <div class="downloads-empty" id="downloads-empty">
-              <div class="downloads-empty-icon">↓</div>
+              <div class="downloads-empty-icon" aria-hidden="true">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3v12"/>
+                  <path d="M7 11l5 5 5-5"/>
+                  <path d="M5 19h14"/>
+                </svg>
+              </div>
               <p class="downloads-empty-title">Здесь так пусто...</p>
               <p class="downloads-empty-sub">Вы ещё ничего не скачали через CATio, но никогда не поздно начать.</p>
-            </div>
-          </div>
-          <div class="downloads-history-wrap" id="downloads-history-wrap">
-            <h3 class="downloads-history-title">Завершённые</h3>
-            <div id="downloads-history" class="downloads-history">
-              <p class="downloads-history-empty">Пока пусто</p>
             </div>
           </div>
         </div>
@@ -618,9 +627,10 @@ if ($isAuthorized) {
         <div class="cart-page" id="cart-page">
           <div class="cart-empty" id="cart-empty">
             <div class="cart-empty-icon" aria-hidden="true">
-              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <path d="M16 10a4 4 0 0 1-8 0"/>
               </svg>
             </div>
             <p class="cart-empty-title">Корзина пуста</p>
@@ -660,8 +670,13 @@ if ($isAuthorized) {
           </div>
           <div class="notif-list" id="notif-list">
             <div class="notif-page-empty" id="notif-empty">
-              <div class="notif-page-empty-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <div class="notif-page-empty-icon" aria-hidden="true">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+                  <path d="M4 2L2 4"/>
+                  <path d="M20 2l2 2"/>
+                </svg>
               </div>
               <div class="notif-page-empty-title">Нет уведомлений</div>
               <div class="notif-page-empty-sub">Вы в курсе всех событий! Загляните позже за новыми обновлениями.</div>
@@ -781,7 +796,6 @@ if ($isAuthorized) {
               <div class="hp-tabs">
                 <button type="button" class="hp-tab active" data-ptab="library">Библиотека</button>
                 <button type="button" class="hp-tab" data-ptab="reviews">Отзывы</button>
-                <button type="button" class="hp-tab" data-ptab="souvenirs">Сувениры</button>
                 <button type="button" class="hp-tab" data-ptab="screenshots">Скриншоты</button>
               </div>
 
@@ -825,13 +839,21 @@ if ($isAuthorized) {
               </div>
 
               <div class="hp-tab-pane hidden" id="hp-pane-reviews">
-                <div class="hp-empty">Пока нет отзывов</div>
-              </div>
-              <div class="hp-tab-pane hidden" id="hp-pane-souvenirs">
-                <div class="hp-empty">Сувениры появятся позже</div>
+                <div class="hp-empty hp-empty-centered">
+                  <div class="hp-empty-logo" aria-hidden="true">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                  </div>
+                  <div class="hp-empty-text">Пока нет отзывов</div>
+                </div>
               </div>
               <div class="hp-tab-pane hidden" id="hp-pane-screenshots">
-                <div class="hp-empty">Скриншотов пока нет</div>
+                <div class="hp-empty hp-empty-centered" id="hp-screenshots-empty">
+                  <div class="hp-empty-logo" aria-hidden="true">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                  </div>
+                  <div class="hp-empty-text">Скриншотов пока нет</div>
+                </div>
+                <div class="hp-screenshots-grid hidden" id="hp-screenshots-grid"></div>
               </div>
             </div>
 
@@ -848,11 +870,11 @@ if ($isAuthorized) {
                 <div class="hp-side-body">
                   <div class="hp-stat">
                     <div class="hp-stat-label">Достижения разблокированы</div>
-                    <div class="hp-stat-value muted" id="hp-stat-achievements">Покажите свои достижения в профиле</div>
+                    <div class="hp-stat-value muted hp-stat-yellow" id="hp-stat-achievements">Покажите свои достижения в профиле</div>
                   </div>
                   <div class="hp-stat">
                     <div class="hp-stat-label">Заработано очков</div>
-                    <div class="hp-stat-value muted" id="hp-stat-points">Показывать заработанные очки в своём профиле</div>
+                    <div class="hp-stat-value muted hp-stat-yellow" id="hp-stat-points">Показывать заработанные очки</div>
                   </div>
                   <div class="hp-stat">
                     <div class="hp-stat-label">Всего сыграно</div>
@@ -862,13 +884,6 @@ if ($isAuthorized) {
                         0 часов
                       </span>
                       <span class="hp-stat-badge" id="hp-stat-top">—</span>
-                    </div>
-                  </div>
-                  <div class="hp-stat">
-                    <div class="hp-stat-label">Карма</div>
-                    <div class="hp-stat-value" id="hp-stat-karma">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg>
-                      0 карма
                     </div>
                   </div>
                 </div>
@@ -998,7 +1013,7 @@ if ($isAuthorized) {
             <!-- ОСНОВНЫЕ -->
             <div class="settings-pane" id="settings-pane-general">
               <h2 class="settings-title">Основные</h2>
-              <p class="settings-sub">Профиль, язык и внешний вид</p>
+              <p class="settings-sub">Профиль и внешний вид</p>
 
               <div class="settings-profile-card" id="settings-profile-card">
                 <div class="settings-profile-card-banner" id="settings-profile-card-banner"<?php
@@ -1030,30 +1045,8 @@ if ($isAuthorized) {
                 <div class="settings-banner-preview hidden" id="settings-banner-preview" <?php if (!empty($user['banner_url'])): ?>style="background-image:url('<?php echo htmlspecialchars($user['banner_url'], ENT_QUOTES); ?>')"<?php endif; ?>></div>
               </div>
 
-              <label class="settings-label">
-                <span>Язык</span>
-                <select id="settings-lang" class="settings-select">
-                  <option value="ru" selected>Русский</option>
-                </select>
-              </label>
-
-              <div class="settings-label">
-                <span>Тема оформления</span>
-                <div class="theme-picker" id="theme-picker" role="group" aria-label="Тема">
-                  <button type="button" class="theme-option" data-theme="dark" title="Тёмная">
-                    <span class="theme-swatch theme-swatch--dark"></span>
-                    <span class="theme-option-label">Тёмная</span>
-                  </button>
-                  <button type="button" class="theme-option" data-theme="light" title="Светлая">
-                    <span class="theme-swatch theme-swatch--light"></span>
-                    <span class="theme-option-label">Светлая</span>
-                  </button>
-                </div>
-                <p class="settings-hint">Тема применяется сразу ко всему интерфейсу</p>
-              </div>
-
               <p id="settings-error" class="auth-error hidden"></p>
-              <button type="button" class="auth-submit" id="settings-save-general">Сохранить</button>
+              <button type="button" class="hp-btn-save" id="settings-save-general">Сохранить</button>
             </div>
 
             <!-- УВЕДОМЛЕНИЯ -->
@@ -1064,18 +1057,11 @@ if ($isAuthorized) {
               <div class="settings-group">
                 <h3 class="settings-group-title">Уведомления библиотеки</h3>
                 <label class="settings-check"><input type="checkbox" data-np="dl_complete" checked /> По завершении загрузки</label>
-                <label class="settings-check"><input type="checkbox" data-np="new_repack" /> При добавлении нового репака</label>
                 <label class="settings-check"><input type="checkbox" data-np="friend_request" checked /> При получении запроса в друзья</label>
                 <label class="settings-check"><input type="checkbox" data-np="friend_playing" checked /> Когда друг начинает играть</label>
                 <label class="settings-check"><input type="checkbox" data-np="friend_message" checked /> Когда друг отправляет сообщение</label>
               </div>
-
-              <div class="settings-group">
-                <h3 class="settings-group-title">Уведомления о достижениях</h3>
-                <label class="settings-check"><input type="checkbox" data-np="ach_unlock" checked /> Когда достижение разблокировано</label>
-                <label class="settings-check"><input type="checkbox" data-np="ach_enable" checked /> Включить уведомления о достижениях</label>
-              </div>
-              <button type="button" class="auth-submit" id="settings-save-notif">Сохранить</button>
+              <button type="button" class="hp-btn-save" id="settings-save-notif">Сохранить</button>
             </div>
 
             <!-- ПРИВАТНОСТЬ -->
@@ -1093,7 +1079,7 @@ if ($isAuthorized) {
               </label>
 
               <label class="settings-label">
-                <span>Видимость сувениров и скриншотов</span>
+                <span>Видимость скриншотов</span>
                 <select id="settings-media-vis" class="settings-select">
                   <option value="public">Публичный</option>
                   <option value="friends">Только для друзей</option>
@@ -1119,7 +1105,7 @@ if ($isAuthorized) {
               <p class="settings-hint" style="margin-top:-4px;margin-bottom:12px;color:var(--text-muted);font-size:0.8rem">Какое издательство видно под ником (или скрыть)</p>
 
               <p id="settings-privacy-error" class="auth-error hidden"></p>
-              <button type="button" class="auth-submit" id="settings-save-privacy">Сохранить</button>
+              <button type="button" class="hp-btn-save" id="settings-save-privacy">Сохранить</button>
             </div>
 
             <!-- БАЛАНС -->
@@ -1581,8 +1567,8 @@ function socialAuth(provider) {
         <div class="friends-me" id="friends-me"></div>
 
         <div class="friends-search-row">
-          <div class="friends-search-wrap">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <div class="friends-search-wrap search-field">
+            <svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
             <input type="text" id="friends-search" class="friends-search" placeholder="Поиск друзей" autocomplete="off" />
           </div>
           <button type="button" class="friends-add-btn" id="friends-add-btn" title="Добавить друга">
@@ -1898,11 +1884,15 @@ function socialAuth(provider) {
       </div>
       <div class="submit-modal-body create-menu-body">
         <button type="button" class="create-menu-item" id="ws-type-mod">
-          <span class="create-menu-ico" aria-hidden="true">🧩</span>
+          <span class="create-menu-ico" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+          </span>
           <span class="create-menu-txt"><strong>Загрузить мод</strong><em>Файлы, описание, скриншоты</em></span>
         </button>
         <button type="button" class="create-menu-item" id="ws-type-media">
-          <span class="create-menu-ico" aria-hidden="true">🖼</span>
+          <span class="create-menu-ico" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </span>
           <span class="create-menu-txt"><strong>Загрузить медиа</strong><em>Скриншоты для игры</em></span>
         </button>
       </div>
@@ -1921,26 +1911,38 @@ function socialAuth(provider) {
       </div>
       <div class="submit-modal-body">
         <form id="ws-media-form" class="ws-pub-form">
-          <label class="ws-field"><span>Название</span>
-            <input type="text" name="title" class="auth-input" required maxlength="255" placeholder="Название набора скриншотов" />
+          <label class="ws-field"><span>Название *</span>
+            <input type="text" name="title" class="auth-input" required maxlength="80" minlength="2" placeholder="Название набора скриншотов" />
+            <span class="field-counter" data-for="title" data-max="80">0 / 80</span>
           </label>
-          <label class="ws-field"><span>Игра</span>
+          <label class="ws-field"><span>Игра *</span>
             <select name="game_id" id="ws-media-game" class="settings-select" required>
-              <option value="">Загрузка списка…</option>
+              <option value="">Выберите игру</option>
             </select>
           </label>
           <label class="ws-field"><span>Описание</span>
-            <textarea name="description" class="auth-input" rows="3" placeholder="Кратко о скриншотах"></textarea>
+            <textarea name="description" class="auth-input settings-textarea" rows="3" maxlength="400" placeholder="Кратко о скриншотах"></textarea>
+            <span class="field-counter" data-for="description" data-max="400">0 / 400</span>
           </label>
-          <label class="ws-field"><span>Изображения</span>
-            <input type="file" name="images[]" id="ws-media-files" accept="image/*" multiple required />
-            <div class="ws-file-hint" id="ws-media-files-hint">Можно выбрать несколько</div>
-          </label>
+          <div class="ws-field">
+            <span>Изображения *</span>
+            <div class="pub-file-card ws-file-card">
+              <div class="pub-file-preview pub-file-preview--wide" id="ws-media-files-preview">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </div>
+              <label class="pub-file-btn" for="ws-media-files">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Выбрать файлы
+              </label>
+              <input type="file" name="images[]" id="ws-media-files" class="pub-file-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple required />
+              <div class="ws-file-hint" id="ws-media-files-hint">До 12 изображений, PNG/JPG/WebP, до 5 МБ каждое</div>
+            </div>
+          </div>
         </form>
       </div>
       <div class="submit-modal-foot">
         <button type="button" class="hp-btn-edit" data-close-ws-media-form>Отмена</button>
-        <button type="button" class="hp-btn-edit" id="ws-media-submit" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Отправить на модерацию</button>
+        <button type="button" class="hp-btn-save" id="ws-media-submit">Отправить на модерацию</button>
       </div>
     </div>
   </div>
@@ -1948,7 +1950,7 @@ function socialAuth(provider) {
   <!-- ===== Мастерская: форма мода ===== -->
   <div class="submit-modal hidden" id="ws-mod-form-modal">
     <div class="submit-modal-backdrop" data-close-ws-mod-form></div>
-    <div class="submit-modal-box" style="max-width:640px;max-height:90vh;overflow:auto">
+    <div class="submit-modal-box">
       <div class="submit-modal-head">
         <h2>Загрузка мода</h2>
         <button type="button" class="pub-modal-close" data-close-ws-mod-form aria-label="Закрыть">
@@ -1957,57 +1959,92 @@ function socialAuth(provider) {
       </div>
       <div class="submit-modal-body">
         <form id="ws-mod-form" class="ws-pub-form">
-          <label class="ws-field"><span>Название</span>
-            <input type="text" name="title" class="auth-input" required maxlength="255" />
+          <label class="ws-field"><span>Название *</span>
+            <input type="text" name="title" class="auth-input" required maxlength="80" minlength="2" placeholder="Название мода" />
+            <span class="field-counter" data-for="title" data-max="80">0 / 80</span>
           </label>
-          <label class="ws-field"><span>Игра</span>
+          <label class="ws-field"><span>Игра *</span>
             <select name="game_id" id="ws-mod-game" class="settings-select" required>
-              <option value="">Загрузка списка…</option>
+              <option value="">Выберите игру</option>
             </select>
           </label>
           <label class="ws-field"><span>Краткое описание</span>
-            <input type="text" name="short_description" class="auth-input" maxlength="500" placeholder="Одна строка для карточки" />
+            <input type="text" name="short_description" class="auth-input" maxlength="120" placeholder="Одна строка для карточки" />
+            <span class="field-counter" data-for="short_description" data-max="120">0 / 120</span>
           </label>
           <label class="ws-field"><span>Об этом моде</span>
-            <textarea name="about" class="auth-input" rows="3"></textarea>
+            <textarea name="about" class="auth-input settings-textarea" rows="3" maxlength="600"></textarea>
+            <span class="field-counter" data-for="about" data-max="600">0 / 600</span>
           </label>
           <label class="ws-field"><span>Описание</span>
-            <textarea name="description" class="auth-input" rows="4"></textarea>
+            <textarea name="description" class="auth-input settings-textarea" rows="4" maxlength="2000"></textarea>
+            <span class="field-counter" data-for="description" data-max="2000">0 / 2000</span>
           </label>
           <label class="ws-field"><span>Инструкция по установке</span>
-            <textarea name="install_instructions" class="auth-input" rows="3"></textarea>
+            <textarea name="install_instructions" class="auth-input settings-textarea" rows="3" maxlength="1000"></textarea>
+            <span class="field-counter" data-for="install_instructions" data-max="1000">0 / 1000</span>
           </label>
           <label class="ws-field"><span>Основные характеристики</span>
-            <textarea name="features" class="auth-input" rows="2" placeholder="По одному пункту на строку"></textarea>
+            <textarea name="features" class="auth-input settings-textarea" rows="2" maxlength="500" placeholder="По одному пункту на строку"></textarea>
+            <span class="field-counter" data-for="features" data-max="500">0 / 500</span>
           </label>
           <label class="ws-field"><span>Зависимости</span>
-            <textarea name="dependencies" class="auth-input" rows="2"></textarea>
+            <textarea name="dependencies" class="auth-input settings-textarea" rows="2" maxlength="400"></textarea>
+            <span class="field-counter" data-for="dependencies" data-max="400">0 / 400</span>
           </label>
           <label class="ws-field"><span>Путь установки файлов</span>
-            <input type="text" name="install_path" class="auth-input" placeholder="например Data/Meshes/..." />
+            <input type="text" name="install_path" class="auth-input" maxlength="200" placeholder="например Data/Meshes/..." />
           </label>
           <label class="ws-field"><span>Теги</span>
-            <input type="text" name="tags" class="auth-input" placeholder="через запятую" />
+            <input type="text" name="tags" class="auth-input" maxlength="120" placeholder="через запятую, до 8 тегов" />
           </label>
           <div class="ws-field-row">
-            <label class="ws-field"><span>Обложка</span>
-              <input type="file" name="cover" accept="image/*" />
-            </label>
-            <label class="ws-field"><span>Баннер</span>
-              <input type="file" name="banner" accept="image/*" />
-            </label>
+            <div class="ws-field"><span>Обложка</span>
+              <div class="pub-file-card ws-file-card">
+                <label class="pub-file-btn" for="ws-mod-cover">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Выбрать
+                </label>
+                <input type="file" name="cover" id="ws-mod-cover" class="pub-file-input" accept="image/png,image/jpeg,image/webp" />
+                <div class="ws-file-hint" id="ws-mod-cover-hint">до 5 МБ</div>
+              </div>
+            </div>
+            <div class="ws-field"><span>Баннер</span>
+              <div class="pub-file-card ws-file-card">
+                <label class="pub-file-btn" for="ws-mod-banner">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Выбрать
+                </label>
+                <input type="file" name="banner" id="ws-mod-banner" class="pub-file-input" accept="image/png,image/jpeg,image/webp" />
+                <div class="ws-file-hint" id="ws-mod-banner-hint">до 5 МБ</div>
+              </div>
+            </div>
           </div>
-          <label class="ws-field"><span>Скриншоты</span>
-            <input type="file" name="screenshots[]" accept="image/*" multiple />
-          </label>
-          <label class="ws-field"><span>Файл мода</span>
-            <input type="file" name="mod_file" accept=".zip,.rar,.7z,.pak,.mod,application/zip" required />
-          </label>
+          <div class="ws-field"><span>Скриншоты</span>
+            <div class="pub-file-card ws-file-card">
+              <label class="pub-file-btn" for="ws-mod-shots">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Выбрать файлы
+              </label>
+              <input type="file" name="screenshots[]" id="ws-mod-shots" class="pub-file-input" accept="image/png,image/jpeg,image/webp" multiple />
+              <div class="ws-file-hint" id="ws-mod-shots-hint">До 10 шт., до 5 МБ</div>
+            </div>
+          </div>
+          <div class="ws-field"><span>Файл мода *</span>
+            <div class="pub-file-card ws-file-card">
+              <label class="pub-file-btn" for="ws-mod-file">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Выбрать архив
+              </label>
+              <input type="file" name="mod_file" id="ws-mod-file" class="pub-file-input" accept=".zip,.rar,.7z,.pak,.mod,application/zip" required />
+              <div class="ws-file-hint" id="ws-mod-file-hint">ZIP / RAR / 7Z, до 500 МБ</div>
+            </div>
+          </div>
         </form>
       </div>
       <div class="submit-modal-foot">
         <button type="button" class="hp-btn-edit" data-close-ws-mod-form>Отмена</button>
-        <button type="button" class="hp-btn-edit" id="ws-mod-submit" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Отправить на модерацию</button>
+        <button type="button" class="hp-btn-save" id="ws-mod-submit">Отправить на модерацию</button>
       </div>
     </div>
   </div>
@@ -2121,7 +2158,7 @@ function socialAuth(provider) {
   <!-- ===== Создание издательства ===== -->
   <div class="submit-modal hidden" id="pubs-create-modal">
     <div class="submit-modal-backdrop" data-close-pubs-create></div>
-    <div class="submit-modal-box submit-modal-wide pub-modal-box">
+    <div class="submit-modal-box pubs-create-box">
       <div class="submit-modal-head pub-modal-head">
         <div>
           <h2>Новое издательство</h2>
@@ -2132,36 +2169,57 @@ function socialAuth(provider) {
         </button>
       </div>
       <div class="submit-modal-body pub-modal-body">
-        <div class="submit-grid">
-          <label class="settings-label full"><span>Название *</span><input class="auth-input" id="pub-name" maxlength="120" placeholder="Например: Neon Fox Games" /></label>
-          <label class="settings-label full"><span>Описание</span><textarea class="auth-input settings-textarea" id="pub-desc" rows="3" placeholder="Коротко о студии"></textarea></label>
+        <div class="submit-grid pubs-create-grid">
+          <label class="settings-label full">
+            <span>Название *</span>
+            <input class="auth-input" id="pub-name" maxlength="60" minlength="2" placeholder="Например: Neon Fox Games" autocomplete="off" />
+            <span class="field-counter" id="pub-name-count">0 / 60</span>
+          </label>
+          <label class="settings-label full">
+            <span>Описание</span>
+            <textarea class="auth-input settings-textarea" id="pub-desc" rows="3" maxlength="300" placeholder="Коротко о студии"></textarea>
+            <span class="field-counter" id="pub-desc-count">0 / 300</span>
+          </label>
           <div class="settings-label">
             <span>Аватар</span>
             <div class="pub-file-card" style="margin-top:6px">
-              <div class="pub-file-preview pub-file-preview--icon" id="pub-avatar-preview"><span>1:1</span></div>
-              <label class="pub-file-btn" for="pub-avatar">Выбрать</label>
+              <div class="pub-file-preview pub-file-preview--icon" id="pub-avatar-preview">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M6.5 18.5c1.4-2.2 3.3-3.3 5.5-3.3s4.1 1.1 5.5 3.3"/></svg>
+              </div>
+              <label class="pub-file-btn" for="pub-avatar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Выбрать
+              </label>
               <input type="file" id="pub-avatar" class="pub-file-input" accept="image/*" />
             </div>
           </div>
           <div class="settings-label">
             <span>Обложка / баннер</span>
             <div class="pub-file-card" style="margin-top:6px">
-              <div class="pub-file-preview pub-file-preview--wide" id="pub-banner-preview"><span>Широкий</span></div>
-              <label class="pub-file-btn" for="pub-banner">Выбрать</label>
+              <div class="pub-file-preview pub-file-preview--wide" id="pub-banner-preview">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-4.5-4.5L9 18"/></svg>
+              </div>
+              <label class="pub-file-btn" for="pub-banner">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Выбрать
+              </label>
               <input type="file" id="pub-banner" class="pub-file-input" accept="image/*" />
             </div>
           </div>
           <div class="settings-label full">
             <span>Участники</span>
-            <input class="auth-input" id="pub-member-search" placeholder="Поиск пользователя…" autocomplete="off" />
+            <div class="search-field" style="margin-top:6px">
+              <svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+              <input class="auth-input" id="pub-member-search" placeholder="Поиск пользователя…" autocomplete="off" />
+            </div>
             <div id="pub-member-suggest" class="pub-member-suggest hidden"></div>
             <div id="pub-member-chips" class="pub-member-chips"></div>
           </div>
         </div>
       </div>
-      <div class="submit-modal-foot">
+      <div class="submit-modal-foot pubs-create-foot">
         <button type="button" class="hp-btn-edit" data-close-pubs-create>Отмена</button>
-        <button type="button" class="auth-submit" id="pub-create-save">Создать</button>
+        <button type="button" class="hp-btn-save" id="pub-create-save">Создать</button>
       </div>
     </div>
   </div>
