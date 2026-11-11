@@ -1188,6 +1188,41 @@ try {
         exit;
     }
 
+    // ===== ВРЕМЯ ИГРЫ =====
+    if ($method === 'POST' && $action === 'set_playtime') {
+        $user = requireAuth();
+        $body = jsonBody();
+        checkCsrf($body);
+        $gameId = (int)($body['game_id'] ?? 0);
+        $minutes = isset($body['minutes']) ? (int)$body['minutes'] : null;
+        if ($gameId <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Не указана игра'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $chk = $pdo->prepare("SELECT 1 FROM library WHERE user_id = ? AND game_id = ?");
+        $chk->execute([(int)$user['id'], $gameId]);
+        if (!$chk->fetchColumn()) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Игры нет в библиотеке'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($minutes === null) {
+            // «обновить» — добавить 1–5 минут как имитацию сессии
+            $pdo->prepare("UPDATE library SET playtime_minutes = COALESCE(playtime_minutes,0) + ?, last_played = NOW() WHERE user_id = ? AND game_id = ?")
+                ->execute([rand(1, 5), (int)$user['id'], $gameId]);
+        } else {
+            $minutes = max(0, $minutes);
+            $pdo->prepare("UPDATE library SET playtime_minutes = ?, last_played = IF(? > 0, COALESCE(last_played, NOW()), last_played) WHERE user_id = ? AND game_id = ?")
+                ->execute([$minutes, $minutes, (int)$user['id'], $gameId]);
+        }
+        $st = $pdo->prepare("SELECT playtime_minutes FROM library WHERE user_id = ? AND game_id = ?");
+        $st->execute([(int)$user['id'], $gameId]);
+        $pt = (int)$st->fetchColumn();
+        echo json_encode(['ok' => true, 'playtime_minutes' => $pt], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     // ===== ОЦЕНКА ИГРЫ =====
     if ($method === 'POST' && $action === 'rate') {
         $user = requireAuth();

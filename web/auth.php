@@ -3,15 +3,23 @@
 require_once __DIR__ . '/db.php';
 
 // PHP-сессия (CSRF) живёт 30 дней — клиент не будет слетать при каждом запуске
+// Не трогаем cookie/ini/session после того, как уже ушли headers (иначе Warning на XAMPP)
 $sessionLifetime = 60 * 60 * 24 * 30;
-session_set_cookie_params([
-    'lifetime' => $sessionLifetime,
-    'path' => '/',
-    'httponly' => true,
-    'samesite' => 'Lax',
-]);
-ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    if (!headers_sent()) {
+        session_set_cookie_params([
+            'lifetime' => $sessionLifetime,
+            'path' => '/',
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        @ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
+        session_start();
+    } else {
+        // headers уже ушли — пробуем стартовать без смены cookie params
+        @session_start();
+    }
+}
 
 // ========== CSRF ==========
 function generateCsrfToken() {

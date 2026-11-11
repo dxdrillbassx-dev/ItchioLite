@@ -455,24 +455,55 @@ if ($isAuthorized) {
       </section>
 
       <!-- ===== БИБЛИОТЕКА (сетка карточек, как в Hydra) ===== -->
-      <section id="view-library" class="view <?php echo $currentView === 'library' ? 'active' : ''; ?>">
-        <div class="lib-head">
-          <div class="lib-pills" id="library-filters">
-            <button type="button" class="lib-filter active" data-filter="all">Все</button>
-            <button type="button" class="lib-filter" data-filter="game">Игры</button>
-            <button type="button" class="lib-filter" data-filter="asset">Ассеты</button>
-            <button type="button" class="lib-filter" data-filter="installed">✓ Установленные</button>
+                  <section id="view-library" class="view <?php echo $currentView === 'library' ? 'active' : ''; ?>">
+        <div class="library-page">
+          <div class="library-toolbar">
+            <div class="library-toolbar-left">
+              <div class="library-era" id="library-filters" role="group" aria-label="Фильтр библиотеки">
+                <button type="button" class="library-era-btn active" data-filter="all">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                  Все
+                </button>
+                <button type="button" class="library-era-btn" data-filter="modern">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                  Современные
+                </button>
+                <button type="button" class="library-era-btn" data-filter="classics">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M10 8h4M10 12h4M10 16h2"/></svg>
+                  Классика
+                </button>
+              </div>
+              <button type="button" class="library-installed-btn" id="library-installed-only" aria-pressed="false" title="Только установленные">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              </button>
+            </div>
+            <div class="library-toolbar-right">
+              <label class="library-sort-wrap">
+                <span class="library-sort-label">Сортировать по</span>
+                <select id="library-sort" class="sort-select" aria-label="Сортировка библиотеки">
+                  <option value="name">По названию (A-Z)</option>
+                  <option value="name_desc">По названию (Z-A)</option>
+                  <option value="recent">Недавно добавленные</option>
+                  <option value="played">Недавно играли</option>
+                  <option value="playtime">По времени в игре</option>
+                  <option value="installed">Сначала установленные</option>
+                </select>
+              </label>
+              <div class="library-view-toggle" id="library-view-toggle" role="group" aria-label="Вид">
+                <button type="button" class="library-view-btn" data-view="compact" title="Компактный" aria-label="Компактный">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="4" height="4" rx="0.8"/><rect x="10" y="3" width="4" height="4" rx="0.8"/><rect x="17" y="3" width="4" height="4" rx="0.8"/><rect x="3" y="10" width="4" height="4" rx="0.8"/><rect x="10" y="10" width="4" height="4" rx="0.8"/><rect x="17" y="10" width="4" height="4" rx="0.8"/><rect x="3" y="17" width="4" height="4" rx="0.8"/><rect x="10" y="17" width="4" height="4" rx="0.8"/><rect x="17" y="17" width="4" height="4" rx="0.8"/></svg>
+                </button>
+                <button type="button" class="library-view-btn active" data-view="grid" title="Сетка" aria-label="Сетка">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                </button>
+                <button type="button" class="library-view-btn" data-view="large" title="Большой" aria-label="Большой">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="14" rx="1.5"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
-          <label class="sort-label">
-            Сортировать по
-            <select id="library-sort" class="sort-select" aria-label="Сортировка библиотеки">
-              <option value="name">По названию (А-Я)</option>
-              <option value="recent">Недавно добавленные</option>
-              <option value="rating">По оценке</option>
-            </select>
-          </label>
+          <div id="library-grid" class="lib-grid is-grid"><div class="loading">Загрузка библиотеки...</div></div>
         </div>
-        <div id="library-grid" class="lib-grid"><div class="loading">Загрузка библиотеки...</div></div>
       </section>
 
       <!-- ===== ЗАГРУЗКИ (как в Hydra) ===== -->
@@ -2052,7 +2083,7 @@ function socialAuth(provider) {
   <!-- ===== Просмотр медиа ===== -->
   <div class="submit-modal hidden" id="ws-media-view-modal">
     <div class="submit-modal-backdrop" data-close-ws-media-view></div>
-    <div class="submit-modal-box ws-view-box" style="max-width:720px">
+    <div class="submit-modal-box ws-view-box ws-media-view-box">
       <div class="submit-modal-head">
         <h2 id="ws-mv-title">Медиа</h2>
         <button type="button" class="pub-modal-close" data-close-ws-media-view aria-label="Закрыть">
@@ -2060,12 +2091,12 @@ function socialAuth(provider) {
         </button>
       </div>
       <div class="submit-modal-body">
-        <div class="ws-mv-stage">
-          <button type="button" class="ws-mv-nav prev" id="ws-mv-prev" hidden>‹</button>
-          <img id="ws-mv-img" alt="" />
-          <button type="button" class="ws-mv-nav next" id="ws-mv-next" hidden>›</button>
+        <div class="ws-gallery" id="ws-mv-gallery">
+          <div class="ws-gallery-main" id="ws-mv-main">
+            <img id="ws-mv-img" alt="" />
+          </div>
+          <div class="ws-gallery-thumbs" id="ws-mv-thumbs"></div>
         </div>
-        <div class="ws-mv-counter" id="ws-mv-counter"></div>
         <div class="ws-mv-meta">
           <span id="ws-mv-date"></span>
           <span id="ws-mv-author"></span>
@@ -2077,59 +2108,80 @@ function socialAuth(provider) {
     </div>
   </div>
 
-  <!-- ===== Просмотр мода (Nexus-like) ===== -->
+  <!-- ===== Просмотр мода ===== -->
   <div class="submit-modal hidden" id="ws-mod-view-modal">
     <div class="submit-modal-backdrop" data-close-ws-mod-view></div>
-    <div class="submit-modal-box ws-view-box ws-mod-view-box" style="max-width:860px;max-height:92vh;overflow:auto">
-      <div class="ws-modv-hero" id="ws-modv-hero">
-        <div class="ws-modv-hero-bg" id="ws-modv-bg"></div>
-        <div class="ws-modv-hero-inner">
-          <div class="ws-modv-top">
-            <div class="ws-modv-left">
-              <h2 class="ws-modv-title" id="ws-modv-title">Мод</h2>
-              <div class="ws-modv-stats">
-                <span id="ws-modv-views">👁 0</span>
-                <span id="ws-modv-dls">⬇ 0</span>
-                <span id="ws-modv-likes">♥ 0</span>
-              </div>
+    <div class="submit-modal-box ws-view-box ws-mod-view-box">
+      <div class="ws-modv-page">
+        <div class="hp-hero ws-modv-hero" id="ws-modv-hero">
+          <div class="hp-hero-bg" id="ws-modv-bg"></div>
+          <div class="hp-banner">
+            <div class="ws-modv-banner-inner">
+              <h1 class="ws-modv-title" id="ws-modv-title">Мод</h1>
             </div>
-            <button type="button" class="ws-modv-install" id="ws-modv-install">Установить</button>
+            <button type="button" class="pub-modal-close ws-modv-close" data-close-ws-mod-view aria-label="Закрыть">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="hp-toolbar ws-modv-toolbar">
+            <div class="ws-modv-stats" id="ws-modv-stats">
+              <span class="ws-modv-stat" id="ws-modv-views"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> <b>0</b></span>
+              <span class="ws-modv-stat" id="ws-modv-dls"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <b>0</b></span>
+              <span class="ws-modv-stat" id="ws-modv-likes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg> <b>0</b></span>
+            </div>
+            <div class="ws-modv-toolbar-right">
+              <button type="button" class="hp-btn-save ws-modv-install" id="ws-modv-install">Установить</button>
+            </div>
           </div>
         </div>
-        <button type="button" class="pub-modal-close ws-modv-close" data-close-ws-mod-view aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
+        <div class="ws-modv-body">
+          <div class="ws-gallery" id="ws-modv-gallery">
+            <div class="ws-gallery-main" id="ws-modv-main">
+              <img id="ws-modv-main-img" alt="" />
+            </div>
+            <div class="ws-gallery-thumbs" id="ws-modv-thumbs"></div>
+          </div>
+          <div class="ws-modv-section">
+            <h3>Описание</h3>
+            <div class="ws-modv-text" id="ws-modv-desc"></div>
+          </div>
+          <div class="ws-modv-section" id="ws-modv-about-wrap">
+            <h3>Об этом моде</h3>
+            <div class="ws-modv-text" id="ws-modv-about"></div>
+          </div>
+          <div class="ws-modv-section" id="ws-modv-install-wrap">
+            <h3>Инструкция по установке</h3>
+            <div class="ws-modv-text" id="ws-modv-install-txt"></div>
+          </div>
+          <div class="ws-modv-section" id="ws-modv-feat-wrap">
+            <h3>Основные характеристики</h3>
+            <div class="ws-modv-text" id="ws-modv-feat"></div>
+          </div>
+          <div class="ws-modv-section" id="ws-modv-deps-wrap">
+            <h3>Зависимости</h3>
+            <div class="ws-modv-text" id="ws-modv-deps"></div>
+          </div>
+          <div class="ws-modv-meta-row">
+            <span id="ws-modv-author"></span>
+            <span id="ws-modv-game"></span>
+            <button type="button" class="ws-like-btn" id="ws-modv-like">♥ <span>0</span></button>
+          </div>
+        </div>
       </div>
-      <div class="submit-modal-body">
-        <div class="ws-modv-carousel" id="ws-modv-carousel">
-          <button type="button" class="ws-mv-nav prev" id="ws-modv-prev" hidden>‹</button>
-          <div class="ws-modv-shots" id="ws-modv-shots"></div>
-          <button type="button" class="ws-mv-nav next" id="ws-modv-next" hidden>›</button>
-        </div>
-        <div class="ws-modv-section">
-          <h3>Описание</h3>
-          <div class="ws-modv-text" id="ws-modv-desc"></div>
-        </div>
-        <div class="ws-modv-section" id="ws-modv-about-wrap">
-          <h3>Об этом моде</h3>
-          <div class="ws-modv-text" id="ws-modv-about"></div>
-        </div>
-        <div class="ws-modv-section" id="ws-modv-install-wrap">
-          <h3>Инструкция по установке</h3>
-          <div class="ws-modv-text" id="ws-modv-install-txt"></div>
-        </div>
-        <div class="ws-modv-section" id="ws-modv-feat-wrap">
-          <h3>Основные характеристики</h3>
-          <div class="ws-modv-text" id="ws-modv-feat"></div>
-        </div>
-        <div class="ws-modv-section" id="ws-modv-deps-wrap">
-          <h3>Зависимости</h3>
-          <div class="ws-modv-text" id="ws-modv-deps"></div>
-        </div>
-        <div class="ws-modv-meta-row">
-          <span id="ws-modv-author"></span>
-          <span id="ws-modv-game"></span>
-          <button type="button" class="ws-like-btn" id="ws-modv-like">♥ <span>0</span></button>
+    </div>
+  </div>
+
+  <!-- Нет игры для мода -->
+  <div class="submit-modal hidden" id="ws-mod-no-game-modal">
+    <div class="submit-modal-backdrop" data-close-ws-mod-nogame></div>
+    <div class="submit-modal-box app-confirm-box" style="max-width:440px">
+      <div class="submit-modal-body app-confirm-body" style="text-align:left">
+        <h2 class="app-confirm-title" style="text-align:left">Игра не найдена</h2>
+        <p class="app-confirm-sub" style="text-align:left;margin-bottom:16px" id="ws-mod-nogame-text">У вас нет игры для этой модификации. Автоматическая установка невозможна, но можно скачать файл и установить вручную.</p>
+        <div class="app-confirm-actions" style="justify-content:flex-end;flex-wrap:wrap">
+          <button type="button" class="hp-btn-edit" data-close-ws-mod-nogame>Отмена</button>
+          <button type="button" class="hp-btn-edit" id="ws-mod-nogame-buy">Купить</button>
+          <button type="button" class="hp-btn-save" id="ws-mod-nogame-manual">Ручная установка</button>
         </div>
       </div>
     </div>
@@ -2582,6 +2634,11 @@ function socialAuth(provider) {
         </div>
         <h2 class="app-confirm-title" id="app-confirm-title">Подтверждение</h2>
         <p class="app-confirm-sub" id="app-confirm-sub"></p>
+        <div class="app-confirm-pin hidden" id="app-confirm-pin" aria-label="Ввод кода друга">
+          <p class="app-confirm-pin-hint" id="app-confirm-pin-hint">Введите свой код друга</p>
+          <div class="app-confirm-pin-cells" id="app-confirm-pin-cells"></div>
+          <p class="app-confirm-pin-error hidden" id="app-confirm-pin-error">Неверный код</p>
+        </div>
         <div class="app-confirm-actions">
           <button type="button" class="hp-btn-edit" id="app-confirm-cancel" data-confirm-cancel>Отмена</button>
           <button type="button" class="hp-btn-save app-confirm-ok" id="app-confirm-ok">OK</button>
@@ -2800,17 +2857,25 @@ function socialAuth(provider) {
           <div class="sgdb-pane-title">Основные</div>
           <div class="sgdb-info-grid">
             <div class="sgdb-info-row"><span>Название</span><b id="sgdb-info-title">—</b></div>
-            <div class="sgdb-info-row"><span>App ID</span><b id="sgdb-info-appid">—</b></div>
             <div class="sgdb-info-row"><span>ID в CATio</span><b id="sgdb-info-id">—</b></div>
           </div>
-          <p class="settings-hint">Ссылку Steam для импорта используй в админке → Загрузка игр. Здесь только оформление уже добавленной игры.</p>
         </div>
         <div class="sgdb-pane" data-sgdb-pane="path">
-          <div class="sgdb-pane-title">Расположение</div>
-          <div class="sgdb-placeholder">
-            <p>Путь к исполняемому файлу и папке игры</p>
-            <p class="settings-hint">В разработке</p>
+          <div class="sgdb-pane-title">Файл</div>
+          <p class="settings-hint" style="margin:0 0 12px">Путь к файлу, который будет запущен при нажатии на «Играть»</p>
+          <div class="sgdb-path-row">
+            <div class="sgdb-path-field is-readonly" id="sgdb-exe-path" title="Путь к исполняемому файлу">Файл не выбран</div>
+            <button type="button" class="hp-btn-edit sgdb-path-pick" id="sgdb-pick-exe" disabled title="Выбор файла доступен в клиенте">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              Выбрать
+            </button>
           </div>
+          <div class="sgdb-path-saves is-readonly" id="sgdb-saves-path">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>Папка с сохранениями не найдена</span>
+          </div>
+          <div class="sgdb-pane-title" style="margin-top:20px">Установка</div>
+          <div class="sgdb-path-field is-readonly" id="sgdb-install-path" title="Куда установлена игра">—</div>
         </div>
         <div class="sgdb-pane active" data-sgdb-pane="assets">
           <div class="sgdb-asset-tabs">
@@ -2842,22 +2907,73 @@ function socialAuth(provider) {
         </div>
         <div class="sgdb-pane" data-sgdb-pane="downloads">
           <div class="sgdb-pane-title">Загрузки</div>
-          <div class="sgdb-placeholder">
-            <p>Нет активных загрузок</p>
-            <p class="settings-hint">В разработке</p>
-          </div>
+          <p class="settings-hint" style="margin:0 0 14px">Выберите версию, которая будет запускаться, если скачано несколько сборок.</p>
+          <label class="ws-ff" style="margin-bottom:14px">
+            <span>Запускаемая версия</span>
+            <select class="settings-select" id="sgdb-launch-version" style="width:100%">
+              <option value="">Нет установленных версий</option>
+            </select>
+          </label>
+          <p class="settings-hint" id="sgdb-downloads-hint">Проверить наличие обновлений или других версий игры</p>
+          <button type="button" class="hp-btn-edit" id="sgdb-open-sources" style="margin-top:10px">Открыть источники</button>
         </div>
         <div class="sgdb-pane" data-sgdb-pane="danger">
           <div class="sgdb-pane-title">Опасная зона</div>
-          <div class="sgdb-placeholder">
-            <p>Удаление игры из каталога и сброс локальных файлов</p>
-            <p class="settings-hint">В разработке</p>
+          <p class="settings-hint" style="margin:0 0 14px">Вы можете удалить эту игру из библиотеки или локальные файлы на устройстве.</p>
+          <div class="sgdb-danger-actions" id="sgdb-danger-actions">
+            <button type="button" class="btn-danger" id="sgdb-remove-library">Удалить из библиотеки</button>
+            <button type="button" class="btn-danger" id="sgdb-refresh-playtime">Обновить время игры</button>
+            <button type="button" class="btn-danger" id="sgdb-reset-playtime">Сбросить время игры</button>
+            <button type="button" class="btn-danger" id="sgdb-delete-files">Удалить файлы</button>
+          </div>
+          <div class="sgdb-pane-title" style="margin-top:22px">Мои скриншоты</div>
+          <div class="sgdb-danger-actions" id="sgdb-shots-actions">
+            <button type="button" class="btn-danger" id="sgdb-del-all-shots" disabled title="Нет скриншотов">Удалить все скриншоты</button>
+            <button type="button" class="btn-danger" id="sgdb-del-pub-shots" disabled title="Нет опубликованных">Удалить все опубликованные скриншоты</button>
+            <button type="button" class="btn-danger" id="sgdb-del-local-shots" disabled title="Нет локальных">Удалить локальные скриншоты</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 </div>
+
+
+  <!-- Модалка: обновить время игры -->
+  <div class="submit-modal hidden" id="playtime-edit-modal">
+    <div class="submit-modal-backdrop" data-close-playtime></div>
+    <div class="submit-modal-box app-confirm-box" style="max-width:440px">
+      <div class="submit-modal-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 0">
+        <div>
+          <h2 class="app-confirm-title" style="margin:0 0 4px;text-align:left" id="playtime-edit-title">Обновить время игры</h2>
+          <p class="app-confirm-sub" style="margin:0;text-align:left" id="playtime-edit-sub">Вручную обновите время игры</p>
+        </div>
+        <button type="button" class="pub-modal-close" data-close-playtime aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body" style="padding:16px 20px 20px">
+        <div class="playtime-warn">
+          <span aria-hidden="true">⚠</span>
+          <span>Ваши часы будут отмечены как обновлённые вручную. Убрать эту отметку можно только сбросив время игры.</span>
+        </div>
+        <div class="playtime-fields">
+          <label class="ws-ff">
+            <span>часов</span>
+            <input type="number" min="0" max="99999" step="1" id="playtime-hours" class="settings-input" value="0" />
+          </label>
+          <label class="ws-ff">
+            <span>минут</span>
+            <input type="number" min="0" max="59" step="1" id="playtime-minutes" class="settings-input" value="0" />
+          </label>
+        </div>
+        <div class="app-confirm-actions" style="justify-content:flex-end;margin-top:16px">
+          <button type="button" class="hp-btn-edit" data-close-playtime>Отменить</button>
+          <button type="button" class="btn-danger" id="playtime-edit-save">Обновить время игры</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
 <!-- ===== Модалка установки игры ===== -->
 <div class="submit-modal hidden" id="install-modal">

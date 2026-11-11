@@ -1148,29 +1148,86 @@ function sideLibRemoveOptimistic(gameId) {
     sideLibCache = sideLibCache.filter(g => +g.id !== id);
     try { renderSideLibrary($('#side-lib-search')?.value || ''); } catch (e) {}
   }
-  // убрать из кэша каталога / карточек
+  // покупка остаётся — только убрали из библиотеки
   try {
     if (Array.isArray(storeCache)) {
       const g = storeCache.find(x => +x.id === id);
-      if (g) g.owned = false;
+      if (g) { g.owned = false; g.purchased = true; }
+    }
+    if (window.__currentGame && +window.__currentGame.id === id) {
+      window.__currentGame.owned = false;
+      window.__currentGame.purchased = true;
     }
   } catch (e) {}
-  // перерисовать плюсики в открытом каталоге
+  // кнопки в каталоге: «В библиотеку» (вернуть), не «В корзину»
   try {
     $$(`.game-item__plus-wrapper[data-id="${id}"], .btn-get[data-id="${id}"]`).forEach(btn => {
       btn.disabled = false;
       btn.classList.remove('is-owned', 'owned');
-      btn.classList.add('is-add');
-      btn.title = 'В корзину';
+      btn.classList.add('is-add', 'is-restore');
+      btn.title = 'В библиотеку';
       if (btn.classList.contains('game-item__plus-wrapper')) {
         btn.innerHTML = '<svg class="gi-icon gi-plus" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
       } else {
-        btn.textContent = 'В корзину';
+        btn.textContent = 'В библиотеку';
       }
     });
+    // страница игры
+    if (typeof refreshBuyButton === 'function' && window.__currentGame && +window.__currentGame.id === id) {
+      // purchased but not owned → restore mode via buy API
+      refreshBuyButton(window.__currentGame);
+      const btn = document.getElementById('btn-buy-game');
+      if (btn && !window.__currentGame.owned) {
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M5 12h14"/></svg> В библиотеку`;
+        btn.dataset.mode = 'restore';
+        btn.classList.remove('owned', 'in-cart');
+      }
+    }
   } catch (e) {}
-  // фоновая синхронизация
   try { loadSideLibrary(); } catch (e) {}
+}
+
+function applyPlaytimeEverywhere(gameId, minutes) {
+  const id = +gameId;
+  minutes = Math.max(0, parseInt(minutes, 10) || 0);
+  try {
+    if (Array.isArray(libraryCache)) {
+      const g = libraryCache.find(x => +x.id === id);
+      if (g) g.playtime_minutes = minutes;
+    }
+  } catch (e) {}
+  try {
+    if (Array.isArray(sideLibCache)) {
+      const g = sideLibCache.find(x => +x.id === id);
+      if (g) g.playtime_minutes = minutes;
+    }
+  } catch (e) {}
+  try {
+    if (window.__currentGame && +window.__currentGame.id === id) {
+      window.__currentGame.playtime_minutes = minutes;
+    }
+  } catch (e) {}
+  // карточки библиотеки
+  try { if (typeof renderLibraryGrid === 'function') renderLibraryGrid(); } catch (e) {}
+  // профиль / hp-game-time
+  try {
+    $$(`.hp-game-card[data-id="${id}"] .hp-game-time`).forEach(el => {
+      const label = typeof formatPlaytimeShort === 'function' ? formatPlaytimeShort(minutes) : (minutes + ' м');
+      const svg = el.querySelector('svg');
+      el.innerHTML = (svg ? svg.outerHTML + ' ' : '') + label;
+    });
+    $$(`.lib-card[data-id="${id}"] .lib-card-time`).forEach(el => {
+      const label = typeof formatLibPlaytime === 'function' ? formatLibPlaytime(minutes) : (minutes + ' м');
+      el.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ${label}`;
+    });
+  } catch (e) {}
+  // страница игры
+  try {
+    const pt = document.querySelector('.gp-playtime');
+    if (pt && window.__currentGame && +window.__currentGame.id === id) {
+      // leave status text; playtime often elsewhere
+    }
+  } catch (e) {}
 }
 
 
@@ -3133,6 +3190,12 @@ function refreshBuyButton(g) {
     btn.classList.add('in-cart');
     btn.classList.remove('owned');
     if (mod) mod.classList.add('is-in-cart');
+  } else if (g.purchased) {
+    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M5 12h14"/></svg> В библиотеку`;
+    btn.dataset.mode = 'restore';
+    btn.classList.remove('owned', 'in-cart');
+    if (mod) mod.classList.remove('is-in-cart');
+    if (note) note.textContent = 'Куплено — можно вернуть в библиотеку';
   } else {
     if (price.className === 'free') {
       btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M5 12h14"/></svg> Получить бесплатно`;
@@ -3696,9 +3759,10 @@ function ensurePublishAdminFooter(formModal, opts, g) {
     if (!ok1) return;
     const ok2 = await appConfirm({
       title: 'Точно удалить?',
-      message: 'Это действие нельзя отменить.',
+      message: 'Это действие нельзя отменить. Введите свой код друга, чтобы подтвердить.',
       okText: 'Удалить навсегда',
-      danger: true
+      danger: true,
+      requireFriendCode: true
     });
     if (!ok2) return;
     delBtn.disabled = true;
@@ -4206,6 +4270,11 @@ function openGameAssetsModal(g) {
       if (typeof window.loadSgdbAssetsGlobal === 'function') window.loadSgdbAssetsGlobal('icons');
       else if (typeof loadSgdbAssets === 'function') loadSgdbAssets('icons');
     } catch (e) { console.warn(e); }
+    try {
+      fillGameSettingsPath(g);
+      fillGameSettingsDownloads(g.id);
+      fillGameSettingsDanger(g.id);
+    } catch (e) {}
     return;
   }
 
@@ -4268,6 +4337,11 @@ function openGameAssetsModal(g) {
   const srcLabel = modal.querySelector('.sgdb-source-label');
   if (srcLabel) srcLabel.textContent = 'CATioGridDB';
 
+  try {
+    fillGameSettingsPath(g);
+    fillGameSettingsDownloads(g.id);
+    fillGameSettingsDanger(g.id);
+  } catch (e) {}
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
   // если в пакете были CATioGridDB ассеты — подставить в кэш
@@ -4387,103 +4461,241 @@ function initCommentForm(g, viewer) {
 }
 
 // ============================================================
-//  БИБЛИОТЕКА (сетка карточек, как в Hydra)
+//  БИБЛИОТЕКА (Hydra-like)
 // ============================================================
 let libraryCache = [];
-let libraryFilter = 'all';
+let libraryFilter = 'all'; // all | modern | classics
+let libraryInstalledOnly = false;
 let librarySearch = '';
 let librarySort = 'name';
+let libraryView = localStorage.getItem('catio_library_view') || 'grid';
+
+function libraryCountLabel(n) {
+  const k = n % 100;
+  const k1 = n % 10;
+  if (k > 10 && k < 20) return n + ' игр';
+  if (k1 === 1) return n + ' игра';
+  if (k1 >= 2 && k1 <= 4) return n + ' игры';
+  return n + ' игр';
+}
+
+function isClassicGame(g) {
+  // классика: тег/жанр retro/classic/emulator или category classics
+  const blob = [
+    g.category, g.genre, g.tags, g.era, g.platform
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (/\b(classic|classics|retro|emulator|эмулятор|классик|ретро)\b/.test(blob)) return true;
+  const year = parseInt(g.release_year || g.year || 0, 10);
+  if (year && year > 0 && year < 2008) return true;
+  return false;
+}
 
 async function loadLibrary() {
   const grid = $('#library-grid');
   if (!grid) return;
-  grid.innerHTML = '<div class="loading">Загрузка библиотеки...</div>';
+  grid.innerHTML = '<div class="library-loading"><div class="loading">Загрузка библиотеки...</div></div>';
 
   try {
     const data = await fetchJSON(`${API_BASE}?action=library`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
-
     libraryCache = data.library || [];
     renderLibraryGrid();
+    try { if (typeof loadSideLibrary === 'function') loadSideLibrary(); } catch (e) {}
   } catch (err) {
     if (isOffline(err)) {
       renderOffline(grid, loadLibrary, 'Кот ушёл в запой');
     } else {
-      grid.innerHTML = `<div class="loading">Ошибка загрузки<br><small>${escapeHtml(err.message)}</small></div>`;
+      grid.innerHTML = `<div class="library-empty library-empty-centered">
+        <p class="library-empty-title">Ошибка загрузки</p>
+        <p class="library-empty-sub">${escapeHtml(err.message || '')}</p>
+        <button type="button" class="btn-primary" id="library-retry">Повторить</button>
+      </div>`;
+      grid.querySelector('#library-retry')?.addEventListener('click', loadLibrary);
     }
   }
+}
+
+function getFilteredLibraryItems() {
+  let items = libraryCache.slice();
+  const installedIds = getInstalledIds();
+
+  if (libraryFilter === 'modern') {
+    items = items.filter(g => !isClassicGame(g));
+  } else if (libraryFilter === 'classics') {
+    items = items.filter(g => isClassicGame(g));
+  }
+
+  if (libraryInstalledOnly) {
+    items = items.filter(g => installedIds.includes(+g.id));
+  }
+
+  // header search or local
+  const qHead = (document.querySelector('#head-search, .head-search input, input[name="q"]')?.value || '').trim();
+  const q = (librarySearch || qHead).toLowerCase();
+  if (q) {
+    items = items.filter(g =>
+      (g.title || '').toLowerCase().includes(q) ||
+      (g.genre || '').toLowerCase().includes(q) ||
+      (g.developer_name || '').toLowerCase().includes(q)
+    );
+  }
+
+  const isInst = (g) => installedIds.includes(+g.id);
+
+  if (librarySort === 'name') {
+    items.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
+  } else if (librarySort === 'name_desc') {
+    items.sort((a, b) => (b.title || '').localeCompare(a.title || '', 'ru'));
+  } else if (librarySort === 'playtime') {
+    items.sort((a, b) => (parseInt(b.playtime_minutes, 10) || 0) - (parseInt(a.playtime_minutes, 10) || 0));
+  } else if (librarySort === 'played') {
+    items.sort((a, b) => String(b.last_played || '').localeCompare(String(a.last_played || '')));
+  } else if (librarySort === 'installed') {
+    items.sort((a, b) => (isInst(b) ? 1 : 0) - (isInst(a) ? 1 : 0) || (a.title || '').localeCompare(b.title || '', 'ru'));
+  }
+
+  return items;
+}
+
+function formatLibPlaytime(mins) {
+  mins = parseInt(mins, 10) || 0;
+  if (mins <= 0) return '0 м';
+  if (mins < 60) return mins + ' м';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h >= 100) return h + ' ч';
+  return m ? (h + ' ч ' + m + ' м') : (h + ' ч');
 }
 
 function renderLibraryGrid() {
   const grid = $('#library-grid');
   if (!grid) return;
 
-  let items = libraryCache;
-  if (libraryFilter === 'installed') {
-    const ids = getInstalledIds();
-    items = items.filter(g => ids.includes(+g.id));
-  } else if (libraryFilter !== 'all') {
-    items = items.filter(g => g.category === libraryFilter);
-  }
-  if (librarySearch) {
-    const q = librarySearch.toLowerCase();
-    items = items.filter(g => (g.title || '').toLowerCase().includes(q));
-  }
-  if (librarySort === 'name') {
-    items = [...items].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
-  } else if (librarySort === 'rating') {
-    items = [...items].sort((a, b) => parseFloat(b.rating || 0) - parseFloat(a.rating || 0));
-  }
-  // 'recent' — порядок из API (недавно добавленные)
+  grid.classList.remove('is-grid', 'is-compact', 'is-large');
+  grid.classList.add(libraryView === 'compact' ? 'is-compact' : (libraryView === 'large' ? 'is-large' : 'is-grid'));
+
+  const items = getFilteredLibraryItems();
 
   if (!items.length) {
-    grid.innerHTML = libraryCache.length
-      ? '<div class="loading">Ничего не найдено</div>'
-      : `<div class="library-empty">
-          <p>Библиотека пуста.</p>
-          <button type="button" class="btn-primary" onclick="gotoView('store')">В каталог</button>
+    const filtered = libraryCache.length > 0;
+    grid.innerHTML = filtered
+      ? `<div class="library-empty library-empty-centered">
+          <div class="library-empty-icon" aria-hidden="true">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </div>
+          <p class="library-empty-title">Ничего не найдено</p>
+          <p class="library-empty-sub">Попробуйте другой фильтр</p>
+        </div>`
+      : `<div class="library-empty library-empty-centered">
+          <div class="library-empty-icon" aria-hidden="true">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          </div>
+          <p class="library-empty-title">Библиотека пуста</p>
+          <p class="library-empty-sub">Здесь появятся игры, которые вы купите или получите</p>
+          <button type="button" class="btn-primary" id="library-go-store">В каталог</button>
         </div>`;
+    grid.querySelector('#library-go-store')?.addEventListener('click', () => gotoView('store'));
     return;
   }
 
   const installed = getInstalledIds();
   grid.innerHTML = '';
+  const frag = document.createDocumentFragment();
+
   items.forEach(g => {
+    const isInstalled = installed.includes(+g.id);
+    const mins = parseInt(g.playtime_minutes, 10) || 0;
+    const timeLabel = formatLibPlaytime(mins);
+    // как в профиле: cover, не icon (icon часто от другой/steam-игры)
+    const cover = g.cover_src || g.cover_url || ('media.php?type=cover&id=' + g.id);
+    const achU = parseInt(g.ach_unlocked, 10) || 0;
+    const achT = parseInt(g.ach_total, 10) || 0;
+    const hasAch = achT > 0;
+    const achPct = hasAch ? Math.min(100, Math.round((achU / achT) * 100)) : 0;
+    const achLeft = hasAch
+      ? `<span class="hp-game-ach-count"><svg class="hp-game-ach-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h12v2a4 4 0 0 1-4 4h-1v2.26A6.5 6.5 0 0 1 16.5 20H15a3 3 0 0 0-6 0H7.5A6.5 6.5 0 0 1 11 12.26V10H10a4 4 0 0 1-4-4V4zm2 2v.5A2 2 0 0 0 10 8.5h4A2 2 0 0 0 16 6.5V6H8z"/></svg>${achU}/${achT}</span>`
+      : `<span class="hp-game-ach-count muted">Нет ачивок</span>`;
+
     const card = document.createElement('article');
-    card.className = 'lib-card';
+    card.className = 'lib-card' + (isInstalled ? ' is-installed' : '');
     card.dataset.id = g.id;
+    card.tabIndex = 0;
     card.innerHTML = `
       <div class="lib-card-cover">
-        <img src="media.php?type=cover&id=${g.id}" alt="${escapeHtml(g.title)}" loading="lazy" />
-        ${installed.includes(+g.id) ? '<span class="lib-card-badge">✓ установлена</span>' : ''}
-      </div>
-      <div class="lib-card-info">
-        <div class="lib-card-title">${escapeHtml(g.title)}</div>
-        <div class="lib-card-meta">${g.category === 'asset' ? 'Ассет' : escapeHtml(g.genre || '')}</div>
+        <img src="${escapeHtml(cover)}" alt="${escapeHtml(g.title || '')}" loading="lazy" />
+        <div class="lib-card-time" title="Время в игре">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          ${escapeHtml(timeLabel)}
+        </div>
+        ${isInstalled ? '<span class="lib-card-badge" title="Установлена"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></span>' : ''}
+        <div class="hp-game-ach">
+          <div class="hp-game-ach-row">
+            ${achLeft}
+            <span class="hp-game-ach-pct">${achPct}%</span>
+          </div>
+          <div class="hp-game-ach-bar"><span style="width:${achPct}%"></span></div>
+        </div>
       </div>
     `;
     card.addEventListener('click', () => gotoGame(g.id));
-    grid.appendChild(card);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        gotoGame(g.id);
+      }
+    });
+    frag.appendChild(card);
   });
+  grid.appendChild(frag);
 }
 
 function initLibraryControls() {
   const filters = $('#library-filters');
-  if (filters) {
-    $$('.lib-filter', filters).forEach(btn => {
+  if (filters && filters.dataset.bound !== '1') {
+    filters.dataset.bound = '1';
+    $$('.library-era-btn', filters).forEach(btn => {
       btn.addEventListener('click', () => {
-        $$('.lib-filter', filters).forEach(b => b.classList.remove('active'));
+        $$('.library-era-btn', filters).forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        libraryFilter = btn.dataset.filter;
+        libraryFilter = btn.dataset.filter || 'all';
         renderLibraryGrid();
       });
     });
   }
+
+  const instBtn = $('#library-installed-only');
+  if (instBtn && instBtn.dataset.bound !== '1') {
+    instBtn.dataset.bound = '1';
+    instBtn.addEventListener('click', () => {
+      libraryInstalledOnly = !libraryInstalledOnly;
+      instBtn.classList.toggle('active', libraryInstalledOnly);
+      instBtn.setAttribute('aria-pressed', libraryInstalledOnly ? 'true' : 'false');
+      renderLibraryGrid();
+    });
+  }
+
   const sort = $('#library-sort');
-  if (sort) {
+  if (sort && sort.dataset.bound !== '1') {
+    sort.dataset.bound = '1';
+    sort.value = librarySort;
     sort.addEventListener('change', () => {
       librarySort = sort.value;
       renderLibraryGrid();
+    });
+  }
+
+  const viewToggle = $('#library-view-toggle');
+  if (viewToggle && viewToggle.dataset.bound !== '1') {
+    viewToggle.dataset.bound = '1';
+    $$('.library-view-btn', viewToggle).forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === libraryView);
+      btn.addEventListener('click', () => {
+        $$('.library-view-btn', viewToggle).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        libraryView = btn.dataset.view || 'grid';
+        try { localStorage.setItem('catio_library_view', libraryView); } catch (e) {}
+        renderLibraryGrid();
+      });
     });
   }
 }
@@ -9086,10 +9298,18 @@ async function fillSubmitFromSteam() {
 
 
 /**
- * Стилизованный confirm вместо window.confirm
+ * Стилизованный confirm вместо window.confirm.
+ * requireFriendCode: true — нужно посимвольно ввести свой код друга.
  * @returns {Promise<boolean>}
  */
-function appConfirm({ title = 'Подтверждение', message = '', okText = 'OK', cancelText = 'Отмена', danger = false } = {}) {
+function appConfirm({
+  title = 'Подтверждение',
+  message = '',
+  okText = 'OK',
+  cancelText = 'Отмена',
+  danger = false,
+  requireFriendCode = false
+} = {}) {
   return new Promise((resolve) => {
     const modal = document.getElementById('app-confirm-modal');
     if (!modal) {
@@ -9101,6 +9321,17 @@ function appConfirm({ title = 'Подтверждение', message = '', okText
     const ok = document.getElementById('app-confirm-ok');
     const cancel = document.getElementById('app-confirm-cancel');
     const icon = document.getElementById('app-confirm-icon');
+    const pinWrap = document.getElementById('app-confirm-pin');
+    const pinCells = document.getElementById('app-confirm-pin-cells');
+    const pinHint = document.getElementById('app-confirm-pin-hint');
+    const pinErr = document.getElementById('app-confirm-pin-error');
+
+    const expectedCode = String(
+      (typeof getMyFriendCode === 'function' ? getMyFriendCode() : '') ||
+      (window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.friend_code) ||
+      ''
+    ).toUpperCase().replace(/[^A-Z0-9]/g, '');
+
     if (t) t.textContent = title;
     if (s) {
       s.textContent = message || '';
@@ -9113,20 +9344,362 @@ function appConfirm({ title = 'Подтверждение', message = '', okText
     if (cancel) cancel.textContent = cancelText;
     if (icon) icon.classList.toggle('is-warn', !!danger);
 
+    const needPin = !!(requireFriendCode && expectedCode && pinWrap && pinCells);
+    let inputs = [];
+
+    const getEntered = () => inputs.map(i => (i.value || '').toUpperCase()).join('');
+
+    const syncOkEnabled = () => {
+      if (!ok) return;
+      if (!needPin) {
+        ok.disabled = false;
+        ok.classList.remove('is-disabled');
+        return;
+      }
+      const ready = getEntered().length === expectedCode.length;
+      ok.disabled = !ready;
+      ok.classList.toggle('is-disabled', !ready);
+    };
+
+    const clearPinError = () => {
+      if (pinErr) pinErr.classList.add('hidden');
+      pinCells && pinCells.classList.remove('is-error');
+    };
+
+    if (pinWrap) pinWrap.classList.toggle('hidden', !needPin);
+    if (pinCells) pinCells.innerHTML = '';
+    clearPinError();
+
+    if (needPin) {
+      if (pinHint) {
+        pinHint.textContent = 'Введите «' + expectedCode + '» по символам';
+      }
+      for (let i = 0; i < expectedCode.length; i++) {
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.inputMode = 'text';
+        inp.autocomplete = 'off';
+        inp.spellcheck = false;
+        inp.maxLength = 1;
+        inp.className = 'app-confirm-pin-cell';
+        inp.setAttribute('aria-label', 'Символ ' + (i + 1));
+        inp.addEventListener('input', () => {
+          clearPinError();
+          let v = (inp.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          inp.value = v.slice(0, 1);
+          if (inp.value && i < inputs.length - 1) inputs[i + 1].focus();
+          syncOkEnabled();
+        });
+        inp.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !inp.value && i > 0) {
+            inputs[i - 1].focus();
+            inputs[i - 1].value = '';
+            syncOkEnabled();
+          }
+          if (e.key === 'Enter' && !ok.disabled) ok.click();
+        });
+        inp.addEventListener('paste', (e) => {
+          e.preventDefault();
+          clearPinError();
+          const text = String((e.clipboardData || window.clipboardData).getData('text') || '')
+            .toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (!text) return;
+          for (let j = 0; j < expectedCode.length; j++) {
+            inputs[j].value = text[j] || '';
+          }
+          const focusIdx = Math.min(text.length, expectedCode.length) - 1;
+          if (focusIdx >= 0) inputs[Math.min(focusIdx + 1, expectedCode.length - 1)].focus();
+          syncOkEnabled();
+        });
+        pinCells.appendChild(inp);
+        inputs.push(inp);
+      }
+      ok.disabled = true;
+      ok.classList.add('is-disabled');
+    } else {
+      if (ok) {
+        ok.disabled = false;
+        ok.classList.remove('is-disabled');
+      }
+    }
+
     const finish = (val) => {
       modal.classList.add('hidden');
+      if (pinCells) pinCells.innerHTML = '';
       modal.querySelectorAll('[data-confirm-cancel], #app-confirm-ok').forEach(el => {
         el.onclick = null;
       });
       resolve(val);
     };
-    ok.onclick = () => finish(true);
+
+    ok.onclick = () => {
+      if (needPin) {
+        const entered = getEntered();
+        if (entered !== expectedCode) {
+          if (pinErr) {
+            pinErr.textContent = 'Неверный код друга';
+            pinErr.classList.remove('hidden');
+          }
+          pinCells.classList.add('is-error');
+          inputs.forEach(i => { i.value = ''; });
+          if (inputs[0]) inputs[0].focus();
+          syncOkEnabled();
+          return;
+        }
+      }
+      finish(true);
+    };
     modal.querySelectorAll('[data-confirm-cancel]').forEach(el => {
       el.onclick = () => finish(false);
     });
     modal.classList.remove('hidden');
+    if (needPin && inputs[0]) setTimeout(() => inputs[0].focus(), 40);
   });
 }
+
+function clearInstalledGame(gameId) {
+  const m = getInstallMap();
+  delete m[String(gameId)];
+  setInstallMap(m);
+  try {
+    const ids = getInstalledIds().filter(id => +id !== +gameId);
+    localStorage.setItem('catio_installed', JSON.stringify(ids));
+  } catch (e) {}
+}
+
+
+function fillGameSettingsPath(g) {
+  const gameId = g && g.id ? g.id : window.__steamEditGameId;
+  const title = (g && g.title) || 'game';
+  const slug = (g && g.slug) || ('game_' + gameId);
+  const versions = getInstalledVersions(gameId) || {};
+  const pref = getPreferredVersion(gameId);
+  const hasInst = Object.keys(versions).length > 0;
+  const base = 'AppData\\\\Roaming\\\\CATio\\\\games\\\\' + String(slug).replace(/[^\\w\\-]+/g, '_');
+  const exeEl = document.getElementById('sgdb-exe-path');
+  const instEl = document.getElementById('sgdb-install-path');
+  const savesEl = document.getElementById('sgdb-saves-path');
+  if (exeEl) {
+    if (hasInst && pref) {
+      exeEl.textContent = base + '\\\\' + pref + '\\\\' + (title.replace(/[^\\w\\-\\. ]+/g, '').trim() || 'game') + '.exe';
+      exeEl.classList.add('has-value');
+    } else {
+      exeEl.textContent = 'Файл не выбран';
+      exeEl.classList.remove('has-value');
+    }
+  }
+  if (instEl) {
+    instEl.textContent = hasInst ? base + (pref ? ('\\\\' + pref) : '') : 'Игра ещё не установлена';
+  }
+  if (savesEl) {
+    const span = savesEl.querySelector('span');
+    if (span) span.textContent = 'Папка с сохранениями не найдена';
+  }
+}
+
+function openPlaytimeEditModal(gameId, title) {
+  const modal = document.getElementById('playtime-edit-modal');
+  if (!modal) return;
+  window.__playtimeEditGameId = +gameId;
+  const sub = document.getElementById('playtime-edit-sub');
+  if (sub) sub.textContent = 'Вручную обновите время игры' + (title ? (' для ' + title) : '');
+  let mins = 0;
+  try {
+    const g = (libraryCache || []).find(x => +x.id === +gameId);
+    if (g) mins = parseInt(g.playtime_minutes, 10) || 0;
+  } catch (e) {}
+  const hEl = document.getElementById('playtime-hours');
+  const mEl = document.getElementById('playtime-minutes');
+  if (hEl) hEl.value = String(Math.floor(mins / 60));
+  if (mEl) mEl.value = String(mins % 60);
+  modal.classList.remove('hidden');
+}
+
+function bindPlaytimeEditModal() {
+  const modal = document.getElementById('playtime-edit-modal');
+  if (!modal || modal.dataset.bound === '1') return;
+  modal.dataset.bound = '1';
+  modal.querySelectorAll('[data-close-playtime]').forEach(el => {
+    el.addEventListener('click', () => modal.classList.add('hidden'));
+  });
+  document.getElementById('playtime-edit-save')?.addEventListener('click', async () => {
+    const gameId = +window.__playtimeEditGameId;
+    if (!gameId) return;
+    const h = Math.max(0, parseInt(document.getElementById('playtime-hours')?.value || '0', 10) || 0);
+    const m = Math.max(0, Math.min(59, parseInt(document.getElementById('playtime-minutes')?.value || '0', 10) || 0));
+    const minutes = h * 60 + m;
+    const btn = document.getElementById('playtime-edit-save');
+    if (btn) btn.disabled = true;
+    try {
+      const data = await postJSON((typeof API_BASE !== 'undefined' ? API_BASE : 'api/games.php') + '?action=set_playtime', {
+        game_id: gameId,
+        minutes
+      });
+      if (!data.ok) throw new Error(data.error || 'Ошибка');
+      applyPlaytimeEverywhere(gameId, data.playtime_minutes != null ? data.playtime_minutes : minutes);
+      toast('Время игры обновлено');
+      modal.classList.add('hidden');
+    } catch (e) {
+      toast(e.message || 'Не удалось обновить');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+}
+
+function fillGameSettingsDownloads(gameId) {
+  const sel = document.getElementById('sgdb-launch-version');
+  if (!sel) return;
+  const versions = getInstalledVersions(gameId);
+  const keys = Object.keys(versions || {});
+  const preferred = getPreferredVersion(gameId);
+  sel.innerHTML = '';
+  if (!keys.length) {
+    sel.innerHTML = '<option value=\"\">Нет установленных версий</option>';
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+    keys.sort().forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      const meta = versions[v] || {};
+      opt.textContent = 'v' + v + (meta.size ? (' · ' + (typeof formatBytes === 'function' ? formatBytes(meta.size) : '')) : '');
+      if (String(preferred) === String(v)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+  sel.onchange = () => {
+    if (sel.value) setPreferredVersion(gameId, sel.value);
+    if (typeof toast === 'function') toast('Запускаемая версия: v' + sel.value);
+  };
+  const srcBtn = document.getElementById('sgdb-open-sources');
+  if (srcBtn && !srcBtn.dataset.bound) {
+    srcBtn.dataset.bound = '1';
+    srcBtn.addEventListener('click', () => {
+      try { if (typeof gotoGame === 'function') gotoGame(gameId); } catch (e) {}
+      document.getElementById('steam-import-modal')?.classList.add('hidden');
+      toast('Откройте страницу игры, чтобы скачать другую версию');
+    });
+  }
+}
+
+function fillGameSettingsDanger(gameId) {
+  window.__steamEditGameId = Number(gameId) || window.__steamEditGameId;
+  const gid = () => Number(window.__steamEditGameId) || Number(gameId);
+  const installed = getInstalledIds().includes(+gid());
+  const hasVersions = Object.keys(getInstalledVersions(gid()) || {}).length > 0;
+  const isInstalled = installed || hasVersions;
+
+  const setBtn = (id, enabled, title) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.disabled = !enabled;
+    b.classList.toggle('is-disabled', !enabled);
+    if (title) b.title = title;
+    else b.removeAttribute('title');
+  };
+
+  setBtn('sgdb-remove-library', true, '');
+  setBtn('sgdb-refresh-playtime', true, '');
+  setBtn('sgdb-reset-playtime', true, '');
+  setBtn('sgdb-delete-files', isInstalled, isInstalled ? '' : 'Игра не установлена');
+  setBtn('sgdb-del-all-shots', false, 'Нет скриншотов');
+  setBtn('sgdb-del-pub-shots', false, 'Нет опубликованных скриншотов');
+  setBtn('sgdb-del-local-shots', false, 'Нет локальных скриншотов');
+
+  const bindOnce = (id, fn) => {
+    const b = document.getElementById(id);
+    if (!b || b.dataset.dangerBound === '1') return;
+    b.dataset.dangerBound = '1';
+    b.addEventListener('click', () => fn(b));
+  };
+
+  bindOnce('sgdb-remove-library', async (btn) => {
+    const gameId = gid();
+    const ok = await appConfirm({
+      title: 'Удалить из библиотеки?',
+      message: 'Игра исчезнет из вашей библиотеки. Покупка сохранится.',
+      okText: 'Удалить',
+      danger: true
+    });
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      const data = await postJSON((typeof API_BASE !== 'undefined' ? API_BASE : 'api/games.php') + '?action=remove', { game_id: +gameId });
+      if (!data.ok) throw new Error(data.error || 'Ошибка');
+      toast('Игра удалена из библиотеки');
+      libraryCache = (libraryCache || []).filter(g => +g.id !== +gameId);
+      try { sideLibRemoveOptimistic(gameId); } catch (e) {}
+      try { renderLibraryGrid(); } catch (e) {}
+      document.getElementById('steam-import-modal')?.classList.add('hidden');
+    } catch (e) {
+      toast(e.message || 'Не удалось удалить');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  bindOnce('sgdb-refresh-playtime', async (btn) => {
+    const gameId = gid();
+    let title = '';
+    try {
+      title = (libraryCache || []).find(x => +x.id === +gameId)?.title
+        || window.__steamEditGameData?.title
+        || document.getElementById('sgdb-info-title')?.textContent
+        || '';
+    } catch (e) {}
+    bindPlaytimeEditModal();
+    openPlaytimeEditModal(gameId, title);
+  });
+
+  bindOnce('sgdb-reset-playtime', async (btn) => {
+    const gameId = gid();
+    const ok = await appConfirm({
+      title: 'Сбросить время игры?',
+      message: 'Счётчик времени игры будет обнулён.',
+      okText: 'Сбросить',
+      danger: true
+    });
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      const data = await postJSON((typeof API_BASE !== 'undefined' ? API_BASE : 'api/games.php') + '?action=set_playtime', { game_id: +gameId, minutes: 0 });
+      if (!data.ok) throw new Error(data.error || 'Ошибка');
+      applyPlaytimeEverywhere(gameId, 0);
+      toast('Время игры сброшено');
+    } catch (e) {
+      toast(e.message || 'Не удалось сбросить');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  bindOnce('sgdb-delete-files', async (btn) => {
+    if (btn.disabled) return;
+    const gameId = gid();
+    const ok = await appConfirm({
+      title: 'Удалить файлы игры?',
+      message: 'Локальные файлы и отметки установки будут удалены. Игра останется в библиотеке.',
+      okText: 'Удалить файлы',
+      danger: true
+    });
+    if (!ok) return;
+    clearInstalledGame(gameId);
+    toast('Файлы удалены');
+    try { fillGameSettingsPath({ id: gameId }); } catch (e) {}
+    fillGameSettingsDownloads(gameId);
+    fillGameSettingsDanger(gameId);
+    // кнопка Играть → Установить
+    try {
+      if (window.__currentGame && +window.__currentGame.id === +gameId && typeof refreshBuyButton === 'function') {
+        refreshBuyButton(window.__currentGame);
+      }
+      if (typeof renderLibraryGrid === 'function') renderLibraryGrid();
+    } catch (e) {}
+  });
+}
+
+
 window.appConfirm = appConfirm;
 
 async function submitGameForm() {
@@ -13537,10 +14110,6 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  if (t.closest('#ws-mv-prev')) { wsMvStep(-1); return; }
-  if (t.closest('#ws-mv-next')) { wsMvStep(1); return; }
-  if (t.closest('#ws-modv-prev')) { wsModvStep(-1); return; }
-  if (t.closest('#ws-modv-next')) { wsModvStep(1); return; }
 
   if (t.closest('#ws-mv-like')) {
     e.preventDefault();
@@ -13553,34 +14122,10 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (t.closest('#ws-modv-install')) {
-    e.preventDefault();
-    if (window.__wsModvFile) {
-      window.open(window.__wsModvFile, '_blank');
-    } else {
-      toast('Файл мода недоступен');
-    }
+    handleModInstallClick();
     return;
   }
 });
-
-function bindWsFormCounters(form) {
-  if (!form || form.dataset.countersBound) return;
-  form.dataset.countersBound = '1';
-  form.querySelectorAll('.field-counter[data-for]').forEach(counter => {
-    const name = counter.getAttribute('data-for');
-    const max = parseInt(counter.getAttribute('data-max') || '0', 10) || 0;
-    const field = form.querySelector(`[name="${name}"]`);
-    if (!field) return;
-    const upd = () => {
-      const n = (field.value || '').length;
-      counter.textContent = n + ' / ' + max;
-      counter.classList.toggle('is-warn', max > 0 && n >= max * 0.85);
-      counter.classList.toggle('is-over', max > 0 && n >= max);
-    };
-    field.addEventListener('input', upd);
-    upd();
-  });
-}
 
 function bindWsFileHint(inputId, hintId, opts) {
   const input = document.getElementById(inputId);
@@ -13830,15 +14375,177 @@ function wsMvStep(dir) {
   if (c) c.textContent = (window.__wsMvIdx + 1) + ' / ' + imgs.length;
 }
 
-function wsModvStep(dir) {
-  const shots = window.__wsModvShots || [];
-  if (shots.length < 2) return;
-  window.__wsModvIdx = (window.__wsModvIdx + dir + shots.length) % shots.length;
-  const box = document.getElementById('ws-modv-shots');
-  if (box) {
-    const el = box.children[window.__wsModvIdx];
-    if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+function wsTextOrEmpty(v) {
+  const s = String(v || '').trim();
+  return s || 'Не указано автором';
+}
+
+function wsBuildGallery(mainEl, thumbsEl, images, onMainClick) {
+  const imgs = (images || []).filter(Boolean);
+  if (mainEl) {
+    if (!imgs.length) {
+      mainEl.innerHTML = '<div class="ws-gallery-empty">Нет изображений</div>';
+    } else {
+      mainEl.innerHTML = `<img src="${escapeHtml(imgs[0])}" alt="" data-ws-gallery-main />`;
+      const img = mainEl.querySelector('img');
+      if (img && onMainClick) {
+        img.style.cursor = 'zoom-in';
+        img.addEventListener('click', () => onMainClick(img.src));
+      }
+    }
   }
+  if (thumbsEl) {
+    if (imgs.length < 2) {
+      thumbsEl.innerHTML = '';
+      thumbsEl.style.display = 'none';
+    } else {
+      thumbsEl.style.display = '';
+      thumbsEl.innerHTML = imgs.map((src, i) => `
+        <button type="button" class="ws-gallery-thumb ${i === 0 ? 'active' : ''}" data-src="${escapeHtml(src)}">
+          <img src="${escapeHtml(src)}" alt="" loading="lazy" />
+        </button>`).join('');
+      thumbsEl.querySelectorAll('.ws-gallery-thumb').forEach(btn => {
+        btn.addEventListener('click', () => {
+          thumbsEl.querySelectorAll('.ws-gallery-thumb').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const src = btn.getAttribute('data-src') || '';
+          if (mainEl) {
+            mainEl.innerHTML = `<img src="${escapeHtml(src)}" alt="" data-ws-gallery-main />`;
+            const img = mainEl.querySelector('img');
+            if (img && onMainClick) {
+              img.style.cursor = 'zoom-in';
+              img.addEventListener('click', () => onMainClick(img.src));
+            }
+          }
+        });
+      });
+    }
+  }
+}
+
+function getInstalledModIds() {
+  try {
+    return JSON.parse(localStorage.getItem('catio_installed_mods') || '[]').map(Number).filter(Boolean);
+  } catch (e) { return []; }
+}
+function setInstalledModIds(ids) {
+  try { localStorage.setItem('catio_installed_mods', JSON.stringify(ids)); } catch (e) {}
+}
+function isModInstalled(modId) {
+  return getInstalledModIds().includes(+modId);
+}
+function markModInstalled(modId, on) {
+  let ids = getInstalledModIds();
+  ids = ids.filter(id => +id !== +modId);
+  if (on) ids.push(+modId);
+  setInstalledModIds(ids);
+}
+
+function userOwnsGameId(gameId) {
+  gameId = +gameId;
+  if (!gameId) return false;
+  try {
+    if (Array.isArray(libraryCache) && libraryCache.some(g => +g.id === gameId)) return true;
+  } catch (e) {}
+  try {
+    if (Array.isArray(sideLibCache) && sideLibCache.some(g => +g.id === gameId)) return true;
+  } catch (e) {}
+  try {
+    if (window.__currentGame && +window.__currentGame.id === gameId && window.__currentGame.owned) return true;
+  } catch (e) {}
+  return false;
+}
+
+function updateModInstallButton(mod) {
+  const btn = document.getElementById('ws-modv-install');
+  if (!btn || !mod) return;
+  const installed = isModInstalled(mod.id);
+  btn.classList.toggle('is-danger', installed);
+  btn.classList.toggle('hp-btn-save', !installed);
+  btn.textContent = installed ? 'Удалить' : 'Установить';
+  btn.dataset.mode = installed ? 'remove' : 'install';
+}
+
+function openModNoGameModal(mod) {
+  const modal = document.getElementById('ws-mod-no-game-modal');
+  if (!modal) return;
+  window.__wsModNoGame = mod;
+  const text = document.getElementById('ws-mod-nogame-text');
+  if (text) {
+    text.textContent = 'У вас нет игры «' + (mod.game_title || 'для этой модификации') + '». Автоматическая установка невозможна, но можно скачать файл и установить вручную.';
+  }
+  modal.classList.remove('hidden');
+}
+
+function bindModNoGameModal() {
+  const modal = document.getElementById('ws-mod-no-game-modal');
+  if (!modal || modal.dataset.bound === '1') return;
+  modal.dataset.bound = '1';
+  modal.querySelectorAll('[data-close-ws-mod-nogame]').forEach(el => {
+    el.addEventListener('click', () => modal.classList.add('hidden'));
+  });
+  document.getElementById('ws-mod-nogame-buy')?.addEventListener('click', () => {
+    const mod = window.__wsModNoGame;
+    modal.classList.add('hidden');
+    if (mod && mod.game_id && typeof gotoGame === 'function') gotoGame(mod.game_id);
+  });
+  document.getElementById('ws-mod-nogame-manual')?.addEventListener('click', () => {
+    const mod = window.__wsModNoGame;
+    modal.classList.add('hidden');
+    if (mod) wsDownloadModFile(mod);
+  });
+}
+
+function wsDownloadModFile(mod) {
+  if (!mod) return;
+  const url = mod.file_url || window.__wsModvFile || '';
+  if (!url) {
+    toast('Файл мода недоступен');
+    return;
+  }
+  // в очередь загрузок, если есть
+  try {
+    if (typeof dm !== 'undefined' && dm && Array.isArray(dm.queue)) {
+      dm.queue.push({
+        buildId: 'mod-' + mod.id,
+        title: (mod.title || 'Мод') + ' (мод)',
+        platform: 'mod',
+        version: '1',
+        size: 0,
+        status: 'queued',
+        url
+      });
+      if (typeof renderDownloads === 'function') renderDownloads();
+      if (typeof processDownloadQueue === 'function') processDownloadQueue();
+      toast('Мод добавлен в загрузки');
+      return;
+    }
+  } catch (e) {}
+  window.open(url, '_blank');
+  toast('Скачивание файла мода');
+}
+
+async function handleModInstallClick() {
+  const mod = window.__wsModvData;
+  if (!mod) return;
+  const btn = document.getElementById('ws-modv-install');
+  const mode = btn?.dataset.mode || 'install';
+  if (mode === 'remove') {
+    markModInstalled(mod.id, false);
+    updateModInstallButton(mod);
+    toast('Мод удалён');
+    return;
+  }
+  if (!userOwnsGameId(mod.game_id)) {
+    bindModNoGameModal();
+    openModNoGameModal(mod);
+    return;
+  }
+  // авто-установка: скачать + пометить
+  markModInstalled(mod.id, true);
+  updateModInstallButton(mod);
+  wsDownloadModFile(mod);
+  toast('Мод установлен');
 }
 
 async function openWorkshopMediaView(id) {
@@ -13854,15 +14561,12 @@ async function openWorkshopMediaView(id) {
     window.__wsMvIdx = 0;
     const title = document.getElementById('ws-mv-title');
     if (title) title.textContent = m.title || 'Скриншот';
-    const img = document.getElementById('ws-mv-img');
-    if (img) img.src = imgs[0] || '';
-    const prev = document.getElementById('ws-mv-prev');
-    const next = document.getElementById('ws-mv-next');
-    const multi = imgs.length > 1;
-    if (prev) prev.hidden = !multi;
-    if (next) next.hidden = !multi;
-    const counter = document.getElementById('ws-mv-counter');
-    if (counter) counter.textContent = multi ? ('1 / ' + imgs.length) : '';
+    wsBuildGallery(
+      document.getElementById('ws-mv-main'),
+      document.getElementById('ws-mv-thumbs'),
+      imgs,
+      (src) => openLightbox(src)
+    );
     const date = document.getElementById('ws-mv-date');
     if (date) date.textContent = m.created_at ? ('Опубликовано: ' + wsFormatDate(m.created_at)) : '';
     const author = document.getElementById('ws-mv-author');
@@ -13876,7 +14580,7 @@ async function openWorkshopMediaView(id) {
       if (sp) sp.textContent = wsFormatNum(m.likes);
     }
     const desc = document.getElementById('ws-mv-desc');
-    if (desc) desc.textContent = m.description || '';
+    if (desc) desc.textContent = wsTextOrEmpty(m.description);
     wsOpenModal('ws-media-view-modal');
   } catch (e) {
     toast(e.message || 'Ошибка');
@@ -13891,6 +14595,7 @@ async function openWorkshopModView(id) {
     const data = await fetchJSON(WS_API + '?action=mod&id=' + id);
     if (!data || !data.ok || !data.mod) throw new Error((data && data.error) || 'Не найдено');
     const m = data.mod;
+    window.__wsModvData = m;
     const shots = m.screenshots_list || [];
     window.__wsModvShots = shots;
     window.__wsModvIdx = 0;
@@ -13898,51 +14603,44 @@ async function openWorkshopModView(id) {
 
     const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v || ''; };
     setTxt('ws-modv-title', m.title || 'Мод');
-    setTxt('ws-modv-views', '👁 ' + wsFormatNum(m.views));
-    setTxt('ws-modv-dls', '⬇ ' + wsFormatNum(m.downloads));
-    setTxt('ws-modv-likes', '♥ ' + wsFormatNum(m.likes));
-    setTxt('ws-modv-author', m.author_name ? ('Автор: ' + m.author_name) : '');
-    setTxt('ws-modv-game', m.game_title ? ('Игра: ' + m.game_title) : '');
+    const setStat = (id, n) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const b = el.querySelector('b');
+      if (b) b.textContent = wsFormatNum(n);
+      else el.textContent = wsFormatNum(n);
+    };
+    setStat('ws-modv-views', m.views);
+    setStat('ws-modv-dls', m.downloads);
+    setStat('ws-modv-likes', m.likes);
+    setTxt('ws-modv-author', m.author_name ? ('Автор: ' + m.author_name) : 'Автор: Не указано автором');
+    setTxt('ws-modv-game', m.game_title ? ('Игра: ' + m.game_title) : 'Игра: Не указано автором');
 
     const bg = document.getElementById('ws-modv-bg');
     if (bg) {
       const url = m.banner_url || m.cover_url || m.game_cover || '';
-      bg.style.backgroundImage = url ? "url('" + String(url).replace(/'/g, '%27') + "')" : '';
+      bg.style.backgroundImage = url ? ("url('" + String(url).replace(/'/g, '%27') + "')") : '';
+      bg.style.backgroundSize = 'cover';
+      bg.style.backgroundPosition = 'center';
     }
 
-    const desc = m.description || m.about || m.short_description || '';
-    setTxt('ws-modv-desc', desc);
-    const about = document.getElementById('ws-modv-about');
-    const aboutWrap = document.getElementById('ws-modv-about-wrap');
-    if (about) about.textContent = m.about || '';
-    if (aboutWrap) aboutWrap.style.display = m.about ? '' : 'none';
+    setTxt('ws-modv-desc', wsTextOrEmpty(m.description || m.short_description));
+    setTxt('ws-modv-about', wsTextOrEmpty(m.about));
+    setTxt('ws-modv-install-txt', wsTextOrEmpty(m.install_instructions));
+    setTxt('ws-modv-feat', wsTextOrEmpty(m.features));
+    setTxt('ws-modv-deps', wsTextOrEmpty(m.dependencies));
+    // секции всегда видны
+    ['ws-modv-about-wrap','ws-modv-install-wrap','ws-modv-feat-wrap','ws-modv-deps-wrap'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
 
-    const inst = document.getElementById('ws-modv-install-txt');
-    const instWrap = document.getElementById('ws-modv-install-wrap');
-    if (inst) inst.textContent = m.install_instructions || '';
-    if (instWrap) instWrap.style.display = m.install_instructions ? '' : 'none';
-
-    const feat = document.getElementById('ws-modv-feat');
-    const featWrap = document.getElementById('ws-modv-feat-wrap');
-    if (feat) feat.textContent = m.features || '';
-    if (featWrap) featWrap.style.display = m.features ? '' : 'none';
-
-    const deps = document.getElementById('ws-modv-deps');
-    const depsWrap = document.getElementById('ws-modv-deps-wrap');
-    if (deps) deps.textContent = m.dependencies || '';
-    if (depsWrap) depsWrap.style.display = m.dependencies ? '' : 'none';
-
-    const box = document.getElementById('ws-modv-shots');
-    if (box) {
-      box.innerHTML = shots.length
-        ? shots.map(s => `<img src="${escapeHtml(s)}" alt="" loading="lazy" />`).join('')
-        : '<div class="settings-hint">Нет скриншотов</div>';
-    }
-    const prev = document.getElementById('ws-modv-prev');
-    const next = document.getElementById('ws-modv-next');
-    const multi = shots.length > 1;
-    if (prev) prev.hidden = !multi;
-    if (next) next.hidden = !multi;
+    wsBuildGallery(
+      document.getElementById('ws-modv-main'),
+      document.getElementById('ws-modv-thumbs'),
+      shots,
+      (src) => openLightbox(src)
+    );
 
     const likeBtn = document.getElementById('ws-modv-like');
     if (likeBtn) {
@@ -13951,6 +14649,7 @@ async function openWorkshopModView(id) {
       if (sp) sp.textContent = wsFormatNum(m.likes);
     }
 
+    updateModInstallButton(m);
     wsOpenModal('ws-mod-view-modal');
   } catch (e) {
     toast(e.message || 'Ошибка');
