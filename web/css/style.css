@@ -1728,14 +1728,16 @@ button.avatar:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: inherit;
-  margin: 0 auto 16px;
-  opacity: 0.7;
+  font-size: 4.5rem;
+  line-height: 1;
+  margin: 0 auto 20px;
+  opacity: 0.55;
 }
 .downloads-empty-icon svg {
   display: block;
-  width: 48px;
-  height: 48px;
+  width: 88px !important;
+  height: 88px !important;
+  stroke-width: 2.4;
 }
 .downloads-empty-title { font-size: 1.1rem; font-weight: 700; color: var(--text-bright); margin-bottom: 6px; }
 .downloads-empty-sub { color: var(--text-muted); font-size: 0.88rem; }
@@ -14713,8 +14715,24 @@ body.client .content > .main > #view-home.active {
   letter-spacing: 0.04em;
   margin: 0 0 14px;
 }
-#submit-form-modal .pub-section-head,
-#submit-form-modal .pub-section-ico { display: none !important; }
+/* секции публикации — заголовки ВИДНЫ (раньше скрывались под tab-layout) */
+#submit-form-modal .pub-section-head {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-bottom: 12px !important;
+}
+#submit-form-modal .pub-section-ico {
+  display: flex !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 7px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(239, 91, 44, 0.12) !important;
+  color: var(--accent) !important;
+  flex-shrink: 0 !important;
+}
 
 /* горизонтальные табы медиа — как Иконка/Логотип/Баннер/Обложка */
 #submit-form-modal .pub-media-tabs {
@@ -15033,8 +15051,7 @@ body.client .content > .main > #view-home.active {
 
 
 /* ============================================================
-   FIX: простая модалка публикации (секции списком) — скролл + размер
-   Перебивает старые правила tab-layout для #submit-form-modal
+   Публикация / Редактирование / Модерация — минимализм
    ============================================================ */
 #submit-form-modal.submit-modal:not(.hidden),
 #submit-form-modal:not(.hidden) {
@@ -15044,26 +15061,87 @@ body.client .content > .main > #view-home.active {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  padding: 24px !important;
+  padding: 28px 20px !important;
   box-sizing: border-box !important;
+  background: transparent !important;
+}
+#submit-form-modal .submit-modal-backdrop {
+  background: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 #submit-form-modal .submit-modal-box,
 #submit-form-modal .submit-modal-box.pub-modal-box,
 #submit-form-modal .submit-modal-wide {
-  width: min(720px, 94vw) !important;
-  max-width: min(720px, 94vw) !important;
+  width: min(640px, 94vw) !important;
+  max-width: min(640px, 94vw) !important;
   height: auto !important;
-  max-height: min(88vh, 820px) !important;
+  max-height: min(86vh, 780px) !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
   padding: 0 !important;
   margin: 0 !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  background: #1c1b18 !important;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.03) !important;
 }
+
+/* Header */
 #submit-form-modal .submit-modal-head,
 #submit-form-modal .pub-modal-head {
   flex: 0 0 auto !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  padding: 20px 22px 16px !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  background: transparent !important;
 }
+#submit-form-modal .pub-modal-head h2,
+#submit-form-modal .submit-modal-head h2 {
+  margin: 0 !important;
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
+  color: rgba(255,255,255,0.96) !important;
+  line-height: 1.3 !important;
+}
+#submit-form-modal .pub-modal-sub {
+  display: block !important;
+  margin: 4px 0 0 !important;
+  font-size: 0.8rem !important;
+  font-weight: 400 !important;
+  line-height: 1.4 !important;
+  color: rgba(255,255,255,0.42) !important;
+}
+#submit-form-modal .pub-modal-close {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  background: rgba(255,255,255,0.06) !important;
+  color: rgba(255,255,255,0.55) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  transition: background 0.15s ease, color 0.15s ease !important;
+  padding: 0 !important;
+}
+#submit-form-modal .pub-modal-close:hover {
+  background: rgba(255,255,255,0.1) !important;
+  color: rgba(255,255,255,0.9) !important;
+}
+#submit-form-modal .pub-modal-close svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* Body scroll */
 #submit-form-modal .submit-modal-body,
 #submit-form-modal .submit-modal-body.pub-modal-body,
 #submit-form-modal .pub-modal-body {
@@ -15072,9 +15150,18 @@ body.client .content > .main > #view-home.active {
   max-height: none !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
-  padding: 16px 18px !important;
+  padding: 8px 22px 20px !important;
   display: block !important;
+  background: transparent !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
 }
+#submit-form-modal .submit-modal-body::-webkit-scrollbar { width: 6px; }
+#submit-form-modal .submit-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+  border-radius: 99px;
+}
+
 #submit-form-modal #submit-game-form.pub-form,
 #submit-form-modal #submit-game-form {
   display: block !important;
@@ -15082,40 +15169,612 @@ body.client .content > .main > #view-home.active {
   height: auto !important;
   max-height: none !important;
   flex: none !important;
-  min-height: 0 !important;
   margin: 0 !important;
 }
 #submit-form-modal .pub-form-layout,
 #submit-form-modal .pub-form-nav,
 #submit-form-modal .pub-form-main,
 #submit-form-modal .pub-pane {
-  display: contents !important; /* if leftover wrappers exist, don't trap layout */
+  display: contents !important;
 }
+#submit-form-modal .pub-form-nav { display: none !important; }
+
+/* Sections */
+#submit-form-modal .pub-section {
+  padding: 18px 0 20px !important;
+  border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+  margin: 0 !important;
+}
+#submit-form-modal .pub-section:first-child { padding-top: 12px !important; }
+#submit-form-modal .pub-section:last-child {
+  border-bottom: none !important;
+  padding-bottom: 8px !important;
+}
+#submit-form-modal .pub-section-head {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin: 0 0 14px !important;
+}
+#submit-form-modal .pub-section-head h3 {
+  margin: 0 !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  color: rgba(255,255,255,0.38) !important;
+}
+#submit-form-modal .pub-section-ico {
+  display: none !important; /* quieter: no icon noise */
+}
+
+/* Fields */
+#submit-form-modal .submit-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 14px 12px !important;
+  align-items: start !important;
+}
+#submit-form-modal .submit-grid .full,
+#submit-form-modal .settings-label.full {
+  grid-column: 1 / -1 !important;
+}
+#submit-form-modal .settings-label {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+}
+#submit-form-modal .settings-label > span {
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  color: rgba(255,255,255,0.45) !important;
+  letter-spacing: 0.01em !important;
+}
+#submit-form-modal .settings-label > span em,
+#submit-form-modal .pub-field-hint {
+  font-style: normal !important;
+  font-weight: 400 !important;
+  color: rgba(255,255,255,0.28) !important;
+}
+
+#submit-form-modal .auth-input,
+#submit-form-modal .settings-select,
+#submit-form-modal select.auth-input,
+#submit-form-modal #sg-publisher-id {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  background: rgba(255,255,255,0.04) !important;
+  color: rgba(255,255,255,0.92) !important;
+  font-size: 0.875rem !important;
+  font-family: inherit !important;
+  outline: none !important;
+  transition: border-color 0.15s ease, background 0.15s ease !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  left: auto !important;
+  pointer-events: auto !important;
+}
+#submit-form-modal .auth-input::placeholder {
+  color: rgba(255,255,255,0.28) !important;
+}
+#submit-form-modal .auth-input:hover,
+#submit-form-modal .settings-select:hover,
+#submit-form-modal #sg-publisher-id:hover {
+  background: rgba(255,255,255,0.055) !important;
+  border-color: rgba(255,255,255,0.12) !important;
+}
+#submit-form-modal .auth-input:focus,
+#submit-form-modal .settings-select:focus,
+#submit-form-modal #sg-publisher-id:focus {
+  border-color: rgba(239, 91, 44, 0.55) !important;
+  background: rgba(255,255,255,0.06) !important;
+  box-shadow: 0 0 0 3px rgba(239, 91, 44, 0.12) !important;
+}
+#submit-form-modal textarea.auth-input,
+#submit-form-modal textarea.settings-textarea {
+  height: auto !important;
+  min-height: 88px !important;
+  padding: 10px 12px !important;
+  line-height: 1.45 !important;
+  resize: vertical !important;
+}
+
+/* Hints */
+#submit-form-modal .pub-hint {
+  margin: 0 0 12px !important;
+  font-size: 0.78rem !important;
+  color: rgba(255,255,255,0.36) !important;
+  line-height: 1.45 !important;
+}
+
+/* Genre chips */
+#submit-form-modal .pub-genre-grid {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+#submit-form-modal .pub-genre-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+}
+#submit-form-modal .pub-genre-chip input { display: none !important; }
+#submit-form-modal .pub-genre-chip span {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 30px !important;
+  padding: 0 12px !important;
+  border-radius: 99px !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  background: rgba(255,255,255,0.03) !important;
+  color: rgba(255,255,255,0.62) !important;
+  font-size: 0.78rem !important;
+  font-weight: 500 !important;
+  transition: all 0.15s ease !important;
+}
+#submit-form-modal .pub-genre-chip:hover span {
+  border-color: rgba(255,255,255,0.14) !important;
+  color: rgba(255,255,255,0.85) !important;
+}
+#submit-form-modal .pub-genre-chip:has(input:checked) span {
+  background: rgba(239, 91, 44, 0.16) !important;
+  border-color: rgba(239, 91, 44, 0.4) !important;
+  color: #ffb89a !important;
+}
+
+/* Content flags */
+#submit-form-modal .pub-content-flags {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+#submit-form-modal .pub-flag {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 8px 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  background: rgba(255,255,255,0.03) !important;
+  cursor: pointer !important;
+  transition: border-color 0.15s ease, background 0.15s ease !important;
+}
+#submit-form-modal .pub-flag:hover {
+  border-color: rgba(255,255,255,0.12) !important;
+  background: rgba(255,255,255,0.05) !important;
+}
+#submit-form-modal .pub-flag:has(input:checked) {
+  border-color: rgba(239, 91, 44, 0.35) !important;
+  background: rgba(239, 91, 44, 0.1) !important;
+}
+#submit-form-modal .pub-flag span {
+  font-size: 0.8rem !important;
+  color: rgba(255,255,255,0.72) !important;
+  font-weight: 500 !important;
+}
+#submit-form-modal .pub-flag input {
+  accent-color: #ef5b2c !important;
+}
+
+/* File cards */
+#submit-form-modal .pub-files-row,
+#submit-form-modal .pub-media-files {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+}
+#submit-form-modal .pub-file-card {
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  background: rgba(255,255,255,0.025) !important;
+  padding: 12px !important;
+  gap: 10px !important;
+}
+#submit-form-modal .pub-file-preview,
+#submit-form-modal .pub-file-preview--icon {
+  border-radius: 10px !important;
+  border: 1px dashed rgba(255,255,255,0.1) !important;
+  background: rgba(0,0,0,0.2) !important;
+}
+#submit-form-modal .pub-file-btn {
+  height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  background: rgba(255,255,255,0.05) !important;
+  color: rgba(255,255,255,0.85) !important;
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
+}
+#submit-form-modal .pub-file-btn:hover {
+  background: rgba(255,255,255,0.08) !important;
+  border-color: rgba(255,255,255,0.16) !important;
+}
+
+/* Build / misc rows */
+#submit-form-modal .ws-ff {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin-bottom: 12px !important;
+}
+#submit-form-modal .ws-ff > span {
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  color: rgba(255,255,255,0.45) !important;
+}
+
+/* Sysreq tabs soft */
+#submit-form-modal .sysreq-tabs {
+  display: flex !important;
+  gap: 4px !important;
+  margin-bottom: 12px !important;
+  padding: 3px !important;
+  border-radius: 10px !important;
+  background: rgba(255,255,255,0.04) !important;
+  width: fit-content !important;
+}
+#submit-form-modal .sysreq-tab {
+  border: none !important;
+  background: transparent !important;
+  color: rgba(255,255,255,0.45) !important;
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  font-family: inherit !important;
+}
+#submit-form-modal .sysreq-tab.active {
+  background: rgba(255,255,255,0.08) !important;
+  color: rgba(255,255,255,0.92) !important;
+}
+#submit-form-modal .sysreq-fields {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+
+/* Media tabs */
+#submit-form-modal .pub-media-tabs {
+  display: flex !important;
+  gap: 0 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  margin: 0 0 14px !important;
+}
+#submit-form-modal .pub-media-tab {
+  background: none !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  color: rgba(255,255,255,0.4) !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  padding: 8px 12px !important;
+  cursor: pointer !important;
+  font-family: inherit !important;
+  margin-bottom: -1px !important;
+}
+#submit-form-modal .pub-media-tab:hover { color: rgba(255,255,255,0.7) !important; }
+#submit-form-modal .pub-media-tab.active {
+  color: rgba(255,255,255,0.95) !important;
+  border-bottom-color: #ef5b2c !important;
+}
+
+/* Footer */
 #submit-form-modal .submit-modal-foot {
   flex: 0 0 auto !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+  padding: 14px 22px !important;
+  border-top: 1px solid rgba(255,255,255,0.06) !important;
+  background: rgba(0,0,0,0.18) !important;
+  margin: 0 !important;
+}
+#submit-form-modal .submit-foot-left,
+#submit-form-modal .submit-foot-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+#submit-form-modal .submit-foot-right {
+  margin-left: auto !important;
+}
+
+#submit-form-modal .submit-modal-foot .hp-btn-edit {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  background: rgba(255,255,255,0.05) !important;
+  color: rgba(255,255,255,0.88) !important;
+  font-size: 0.84rem !important;
+  font-weight: 500 !important;
+}
+#submit-form-modal .submit-modal-foot .hp-btn-edit:hover {
+  background: rgba(255,255,255,0.09) !important;
+}
+#submit-form-modal #submit-game-send,
+#submit-form-modal #submit-game-send.hp-btn-edit,
+#submit-form-modal .submit-modal-foot .hp-btn-save {
+  background: #ef5b2c !important;
+  border-color: #ef5b2c !important;
+  color: #12110e !important;
+  font-weight: 600 !important;
+}
+#submit-form-modal #submit-game-send:hover,
+#submit-form-modal .submit-modal-foot .hp-btn-save:hover {
+  filter: brightness(1.06) !important;
+}
+
+/* Don't trap sections */
+#submit-form-modal [data-pub-pane],
+#submit-form-modal .sgdb-pane,
+#submit-form-modal .pub-section {
+  display: block !important;
+  visibility: visible !important;
+  position: relative !important;
+  left: auto !important;
+  width: auto !important;
+  height: auto !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+@media (max-width: 640px) {
+  #submit-form-modal .submit-grid,
+  #submit-form-modal .pub-files-row,
+  #submit-form-modal .pub-media-files,
+  #submit-form-modal .sysreq-fields {
+    grid-template-columns: 1fr !important;
+  }
+  #submit-form-modal .submit-modal-box,
+  #submit-form-modal .submit-modal-box.pub-modal-box {
+    width: min(100%, 96vw) !important;
+    max-height: 92vh !important;
+    border-radius: 14px !important;
+  }
+}
+
+
+/* --- тема приложения + RTE + футер + файл сборки --- */
+#submit-form-modal .submit-modal-box,
+#submit-form-modal .submit-modal-box.pub-modal-box {
+  background: var(--bg-elevated, #1a1814) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+#submit-form-modal .pub-modal-head h2,
+#submit-form-modal .submit-modal-head h2 {
+  color: var(--text-bright) !important;
+}
+#submit-form-modal .pub-modal-sub {
+  color: var(--text-muted) !important;
+}
+#submit-form-modal .submit-modal-body {
+  background: var(--bg-elevated, #1a1814) !important;
+}
+#submit-form-modal .pub-section-head h3 {
+  color: var(--text-muted) !important;
+}
+#submit-form-modal .settings-label > span {
+  color: var(--text-muted) !important;
+}
+#submit-form-modal .auth-input,
+#submit-form-modal .settings-select,
+#submit-form-modal select.auth-input,
+#submit-form-modal #sg-publisher-id {
+  background: var(--bg, #12110e) !important;
+  border-color: var(--border) !important;
+  color: var(--text-bright) !important;
+}
+#submit-form-modal .auth-input:focus,
+#submit-form-modal .settings-select:focus,
+#submit-form-modal #sg-publisher-id:focus {
+  border-color: var(--accent, #ef5b2c) !important;
+  box-shadow: 0 0 0 3px rgba(239, 91, 44, 0.15) !important;
+}
+#submit-form-modal .submit-modal-foot {
+  background: var(--bg, #12110e) !important;
+  border-top-color: var(--border) !important;
+  align-items: center !important;
+}
+#submit-form-modal .submit-foot-left,
+#submit-form-modal .submit-foot-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+#submit-form-modal .submit-foot-right { margin-left: auto !important; }
+#submit-form-modal .submit-modal-foot .hp-btn-edit,
+#submit-form-modal .submit-modal-foot .hp-btn-save,
+#submit-form-modal .submit-modal-foot #submit-game-send {
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  margin: 0 !important;
+  margin-top: 0 !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  vertical-align: middle !important;
+  position: relative !important;
+  top: 0 !important;
+}
+/* не глушим клик — иначе нельзя понять, чего не хватает */
+#submit-form-modal #submit-game-send.is-disabled,
+#submit-form-modal #submit-game-send:disabled {
+  opacity: 0.55 !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  filter: none !important;
+}
+
+/* RTE — нормальная высота */
+#submit-form-modal .pub-rte {
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  background: var(--bg, #12110e) !important;
+  overflow: hidden !important;
+  margin-top: 6px !important;
+}
+#submit-form-modal .pub-rte-toolbar {
+  background: rgba(255,255,255,0.03) !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 8px 10px !important;
+}
+#submit-form-modal .pub-rte-btn {
+  color: var(--text-muted) !important;
+}
+#submit-form-modal .pub-rte-btn:hover {
+  color: var(--text-bright) !important;
+  background: rgba(255,255,255,0.06) !important;
+}
+#submit-form-modal .pub-rte-editor,
+#submit-form-modal #sg-desc-editor {
+  min-height: 220px !important;
+  max-height: 420px !important;
+  height: auto !important;
+  padding: 14px 16px !important;
+  background: var(--bg, #12110e) !important;
+  color: var(--text-bright) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  line-height: 1.55 !important;
+  font-size: 0.9rem !important;
+}
+#submit-form-modal .pub-rte-editor:empty:before {
+  color: var(--text-muted) !important;
+}
+
+/* имя выбранного файла сборки */
+#submit-form-modal #sg-build-file-name {
+  display: inline-block !important;
+  margin-left: 4px !important;
+  font-size: 0.82rem !important;
+  color: var(--text-bright) !important;
+  max-width: 260px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+}
+#submit-form-modal #sg-build-file-name.is-empty,
+#submit-form-modal #sg-build-file-name:empty {
+  color: var(--text-muted) !important;
+}
+
+
+/* --- модалка «Игра отправлена» + confirm --- */
+#submit-done-modal .submit-done-box,
+#app-confirm-modal .app-confirm-box {
+  max-width: 400px !important;
+  width: min(400px, 92vw) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  background: var(--bg-elevated, #1a1814) !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
+  overflow: hidden !important;
+}
+#submit-done-modal .submit-done-body,
+#app-confirm-modal .app-confirm-body {
+  text-align: center !important;
+  padding: 36px 28px 28px !important;
+}
+#submit-done-modal .submit-done-icon,
+#app-confirm-modal .app-confirm-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 auto 18px !important;
+  width: auto !important;
+  height: auto !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--accent, #ef5b2c) !important;
+  opacity: 0.95 !important;
+}
+#submit-done-modal .submit-done-icon svg,
+#app-confirm-modal .app-confirm-icon svg {
+  display: block !important;
+  width: 48px !important;
+  height: 48px !important;
+}
+#submit-done-modal .submit-done-title,
+#app-confirm-modal .app-confirm-title {
+  margin: 0 0 8px !important;
+  font-size: 1.05rem !important;
+  font-weight: 650 !important;
+  color: var(--text-bright) !important;
+  line-height: 1.3 !important;
+}
+#submit-done-modal .submit-done-sub,
+#app-confirm-modal .app-confirm-sub {
+  margin: 0 0 22px !important;
+  font-size: 0.88rem !important;
+  line-height: 1.45 !important;
+  color: var(--text-muted) !important;
+}
+#submit-done-modal .submit-done-btn,
+#submit-done-modal .submit-done-body .hp-btn-save,
+#app-confirm-modal .app-confirm-ok,
+#app-confirm-modal .app-confirm-actions .hp-btn-save {
+  margin: 0 !important;
+  min-width: 120px !important;
+  height: 36px !important;
+  border-radius: 10px !important;
+  border: 1px solid transparent !important;
+  background: var(--ember, #ef5b2c) !important;
+  color: #12110e !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  padding: 0 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+#app-confirm-modal .app-confirm-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   gap: 10px !important;
   flex-wrap: wrap !important;
 }
-#submit-form-modal .pub-modal-sub {
-  display: block !important;
-  margin: 4px 0 0 !important;
-  font-size: 0.8rem !important;
-  color: var(--text-muted) !important;
-  font-weight: 400 !important;
+#app-confirm-modal .app-confirm-actions .hp-btn-edit {
+  height: 36px !important;
+  min-height: 36px !important;
+  margin: 0 !important;
+  border-radius: 10px !important;
+  padding: 0 16px !important;
 }
-#submit-form-modal #sg-publisher-id {
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  width: 100% !important;
-  min-height: 38px !important;
-  pointer-events: auto !important;
-  position: relative !important;
-  left: auto !important;
-  appearance: auto !important;
+#app-confirm-modal .app-confirm-icon.is-warn {
+  color: var(--text-muted) !important;
+}
+#app-confirm-modal .app-confirm-ok.is-danger {
+  background: #c45c4a !important;
+  color: #fff !important;
 }
 
 /* ============================================================

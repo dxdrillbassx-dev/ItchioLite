@@ -609,7 +609,7 @@ if ($isAuthorized) {
           <div class="downloads-active" id="downloads-active">
             <div class="downloads-empty" id="downloads-empty">
               <div class="downloads-empty-icon" aria-hidden="true">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="88" height="88" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 3v12"/>
                   <path d="M7 11l5 5 5-5"/>
                   <path d="M5 19h14"/>
@@ -2535,14 +2535,14 @@ function socialAuth(provider) {
 
         </form>
       </div>
-            <div class="submit-modal-foot" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div style="display:flex;gap:8px;align-items:center">
+      <div class="submit-modal-foot">
+        <div class="submit-foot-left">
           <input type="file" id="sg-import-pack" accept=".zip,application/zip" hidden />
           <button type="button" class="hp-btn-edit" id="sg-import-pack-btn" title="Импорт ZIP-пакета игры">Импорт</button>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+        <div class="submit-foot-right">
           <button type="button" class="hp-btn-edit" data-close="form">Отмена</button>
-          <button type="button" class="hp-btn-edit" id="submit-game-send">Отправить на модерацию</button>
+          <button type="button" class="hp-btn-save" id="submit-game-send">Отправить на модерацию</button>
         </div>
       </div>
     </div>
@@ -2551,14 +2551,41 @@ function socialAuth(provider) {
 
 <div class="submit-modal hidden" id="submit-done-modal">
     <div class="submit-modal-backdrop" data-close="done"></div>
-    <div class="submit-modal-box">
-      <div class="submit-modal-body" style="text-align:center;padding:32px 20px">
-        <div class="chat-empty-icon" style="margin:0 auto 12px">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <div class="submit-modal-box submit-done-box">
+      <div class="submit-modal-body submit-done-body">
+        <div class="submit-done-icon" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 2L11 13"/>
+            <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
         </div>
-        <h2 class="chat-empty-title">Игра отправлена на рассмотрение</h2>
-        <p class="chat-empty-sub">Спасибо! Администраторы проверят материалы и опубликуют игру или свяжутся с вами.</p>
-        <button type="button" class="auth-submit" data-close="done" style="margin-top:16px">Отлично</button>
+        <h2 class="submit-done-title">Игра отправлена на рассмотрение</h2>
+        <p class="submit-done-sub">Спасибо! Администраторы проверят материалы и опубликуют игру или свяжутся с вами.</p>
+        <button type="button" class="hp-btn-save submit-done-btn" data-close="done">Отлично</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Универсальная confirm-модалка -->
+  <div class="submit-modal hidden" id="app-confirm-modal">
+    <div class="submit-modal-backdrop" data-confirm-cancel></div>
+    <div class="submit-modal-box app-confirm-box">
+      <div class="submit-modal-body app-confirm-body">
+        <div class="app-confirm-icon" id="app-confirm-icon" aria-hidden="true">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"/>
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/>
+            <path d="M14 11v6"/>
+          </svg>
+        </div>
+        <h2 class="app-confirm-title" id="app-confirm-title">Подтверждение</h2>
+        <p class="app-confirm-sub" id="app-confirm-sub"></p>
+        <div class="app-confirm-actions">
+          <button type="button" class="hp-btn-edit" id="app-confirm-cancel" data-confirm-cancel>Отмена</button>
+          <button type="button" class="hp-btn-save app-confirm-ok" id="app-confirm-ok">OK</button>
+        </div>
       </div>
     </div>
   </div>

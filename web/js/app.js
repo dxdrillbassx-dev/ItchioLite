@@ -3687,8 +3687,20 @@ function ensurePublishAdminFooter(formModal, opts, g) {
   };
   delBtn.onclick = async () => {
     if (!gid) return;
-    if (!confirm('Удалить карточку игры полностью?')) return;
-    if (!confirm('Точно удалить? Это нельзя отменить.')) return;
+    const ok1 = await appConfirm({
+      title: 'Удалить карточку игры?',
+      message: 'Игра будет удалена из каталога и модерации.',
+      okText: 'Удалить',
+      danger: true
+    });
+    if (!ok1) return;
+    const ok2 = await appConfirm({
+      title: 'Точно удалить?',
+      message: 'Это действие нельзя отменить.',
+      okText: 'Удалить навсегда',
+      danger: true
+    });
+    if (!ok2) return;
     delBtn.disabled = true;
     try {
       const data = await postJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=delete_game', { id: +gid });
@@ -4715,7 +4727,11 @@ function renderDownloadsView() {
   if (!item && !queued.length) {
     activeBox.innerHTML = `
       <div class="downloads-empty" id="downloads-empty">
-        <div class="downloads-empty-icon">↓</div>
+        <div class="downloads-empty-icon" aria-hidden="true">
+          <svg width="88" height="88" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 19h14"/>
+          </svg>
+        </div>
         <p class="downloads-empty-title">Здесь так пусто...</p>
         <p class="downloads-empty-sub">Вы ещё ничего не скачали через CATio, но никогда не поздно начать.</p>
       </div>`;
@@ -9068,11 +9084,62 @@ async function fillSubmitFromSteam() {
   toast('Импорт из Steam отключён. Используй ZIP (tools/steam-export.bat).');
 }
 
+
+/**
+ * Стилизованный confirm вместо window.confirm
+ * @returns {Promise<boolean>}
+ */
+function appConfirm({ title = 'Подтверждение', message = '', okText = 'OK', cancelText = 'Отмена', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('app-confirm-modal');
+    if (!modal) {
+      resolve(window.confirm(message || title));
+      return;
+    }
+    const t = document.getElementById('app-confirm-title');
+    const s = document.getElementById('app-confirm-sub');
+    const ok = document.getElementById('app-confirm-ok');
+    const cancel = document.getElementById('app-confirm-cancel');
+    const icon = document.getElementById('app-confirm-icon');
+    if (t) t.textContent = title;
+    if (s) {
+      s.textContent = message || '';
+      s.style.display = message ? '' : 'none';
+    }
+    if (ok) {
+      ok.textContent = okText;
+      ok.classList.toggle('is-danger', !!danger);
+    }
+    if (cancel) cancel.textContent = cancelText;
+    if (icon) icon.classList.toggle('is-warn', !!danger);
+
+    const finish = (val) => {
+      modal.classList.add('hidden');
+      modal.querySelectorAll('[data-confirm-cancel], #app-confirm-ok').forEach(el => {
+        el.onclick = null;
+      });
+      resolve(val);
+    };
+    ok.onclick = () => finish(true);
+    modal.querySelectorAll('[data-confirm-cancel]').forEach(el => {
+      el.onclick = () => finish(false);
+    });
+    modal.classList.remove('hidden');
+  });
+}
+window.appConfirm = appConfirm;
+
 async function submitGameForm() {
   const btn = $('#submit-game-send');
   const isAdminPub = !!(btn && btn.dataset.adminPublish === '1' && window.__adminModeratingId);
   const isAdminSave = !!(btn && btn.dataset.adminSave === '1' && window.__adminModeratingId);
   const isPublisherEdit = !!(btn && btn.dataset.publisherEdit === '1');
+  // если форма не готова — подсказка, а не «мёртвая» кнопка
+  if (btn && btn.classList.contains('is-disabled') && !isAdminPub && !isAdminSave) {
+    const reason = btn.dataset.blockReason || btn.title || 'Заполните обязательные поля';
+    if (typeof toast === 'function') toast(reason);
+    return;
+  }
   if (btn) {
     btn.disabled = true;
     btn.textContent = isAdminPub ? 'Публикация...' : (isAdminSave ? 'Сохранение...' : 'Отправка...');
@@ -11994,26 +12061,30 @@ function updatePublishSectionStatus() {
   if (send) {
     const isAdminMod = !!(send.dataset.adminPublish || send.dataset.adminSave);
     const isPubEdit = !!(send.dataset.publisherEdit);
-    // модерация — всегда; обновление публикатора — версия+файл; иначе все секции
+    // Не ставим disabled — клик покажет, чего не хватает. Только визуальный is-disabled.
+    send.disabled = false;
+    send.removeAttribute('disabled');
     if (isAdminMod) {
-      send.disabled = false;
       send.classList.remove('is-disabled');
       send.title = '';
+      send.dataset.blockReason = '';
     } else if (isPubEdit) {
       const verOk = !!(document.getElementById('sg-build-version')?.value || '').trim();
       const fileOk = !!(typeof getSelectedBuildFile === 'function' ? getSelectedBuildFile() : document.getElementById('sg-build-file')?.files?.[0]);
       const okUpd = verOk && fileOk;
-      send.disabled = !okUpd;
       send.classList.toggle('is-disabled', !okUpd);
-      if (okUpd) {
-        send.removeAttribute('disabled');
-        send.classList.remove('is-disabled');
-      }
       send.title = okUpd ? '' : 'Укажите новую версию и прикрепите файл сборки';
+      send.dataset.blockReason = okUpd ? '' : 'Укажите новую версию и прикрепите файл сборки';
     } else {
-      send.disabled = !allOk;
       send.classList.toggle('is-disabled', !allOk);
-      send.title = allOk ? '' : 'Заполните все обязательные разделы (версия + файл сборки)';
+      const missing = [];
+      if (!st.main) missing.push('название и жанры');
+      if (!st.desc) missing.push('описание (от 10 символов)');
+      if (!st.media) missing.push('обложку');
+      if (!st.builds) missing.push('версию и файл сборки');
+      const reason = missing.length ? ('Заполните: ' + missing.join(', ')) : '';
+      send.title = reason;
+      send.dataset.blockReason = reason;
     }
   }
   return allOk;
@@ -13657,6 +13728,20 @@ function assignFilesToInput(targetInput, fileList) {
     targetInput.files = dt.files;
   } catch (err) {
     console.warn('[file] DataTransfer assign failed', err);
+  }
+  // сборка игры — имя файла рядом с кнопкой
+  if (targetInput.id === 'sg-build-file') {
+    const f = (fileList && fileList[0]) || (targetInput.files && targetInput.files[0]) || null;
+    if (f) window.__selectedBuildFile = f;
+    if (typeof setBuildFileLabel === 'function') setBuildFileLabel(f);
+    else {
+      const nameEl = document.getElementById('sg-build-file-name');
+      if (nameEl && f) {
+        nameEl.textContent = f.name + ' · ' + (f.size / 1048576).toFixed(1) + ' МБ';
+        nameEl.style.cssText = 'display:inline;opacity:1;visibility:visible;color:var(--text-bright)';
+      }
+    }
+    try { if (typeof updatePublishSectionStatus === 'function') updatePublishSectionStatus(); } catch (e) {}
   }
   targetInput.dispatchEvent(new Event('change', { bubbles: true }));
   targetInput.dispatchEvent(new Event('input', { bubbles: true }));
