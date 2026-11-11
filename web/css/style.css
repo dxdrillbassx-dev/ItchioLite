@@ -2013,7 +2013,7 @@ button.avatar:hover {
 .lightbox {
   position: fixed;
   inset: 0;
-  z-index: 500;
+  z-index: 12000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -16893,10 +16893,15 @@ body.client .content > .main > #view-home.active {
   max-width: 920px !important;
   width: min(920px, 96vw) !important;
   max-height: 92vh !important;
-  overflow: auto !important;
+  overflow: hidden !important;
   padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
-.ws-modv-page { display: flex; flex-direction: column; }
+#ws-mod-view-modal .ws-mod-view-box > .ws-modv-page {
+  min-height: 0;
+  flex: 1;
+}
 
 .ws-gallery {
   display: flex;
@@ -16919,10 +16924,18 @@ body.client .content > .main > #view-home.active {
   object-fit: contain;
   display: block;
   background: #0e0d0b;
+  cursor: zoom-in;
+}
+/* в модах — только превью */
+.ws-gallery--thumbs-only {
+  gap: 0;
+}
+.ws-gallery--thumbs-only .ws-gallery-main {
+  display: none !important;
 }
 .ws-gallery-empty {
   width: 100%;
-  height: 100%;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -16931,14 +16944,20 @@ body.client .content > .main > #view-home.active {
 }
 .ws-gallery-thumbs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 8px;
+  width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 2px;
+  max-height: 72px;
+  box-sizing: border-box;
 }
 .ws-gallery-thumb {
-  flex: 0 0 auto;
-  width: 88px;
-  height: 56px;
+  flex: 1 1 0;
+  min-width: 64px;
+  max-width: 96px;
+  height: 64px;
   padding: 0;
   border: 2px solid transparent;
   border-radius: 8px;
@@ -16977,25 +16996,45 @@ body.client .content > .main > #view-home.active {
   white-space: pre-wrap;
 }
 
-/* mod hero = hp-hero */
+/* mod hero = как профиль: hp-hero + hp-banner + hp-toolbar */
+.ws-modv-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
 .ws-modv-hero.hp-hero {
   border-radius: 14px 14px 0 0;
   overflow: hidden;
   margin: 0;
-  min-height: 0;
+  /* компактнее профиля, но полноценный banner+toolbar */
+  height: var(--hero-h-sm) !important;
+  min-height: var(--hero-h-sm) !important;
+  max-height: var(--hero-h-sm) !important;
+  flex-shrink: 0;
 }
 .ws-modv-hero .hp-hero-bg {
   filter: brightness(0.42);
   background-size: cover;
   background-position: center;
 }
-.ws-modv-banner-inner {
+.ws-modv-hero .hp-banner {
   position: relative;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
   z-index: 1;
-  padding: 28px 22px 18px;
+}
+.ws-modv-banner-inner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  padding: 16px 18px 14px;
   display: flex;
   align-items: flex-end;
-  min-height: 120px;
 }
 .ws-modv-title {
   margin: 0;
@@ -17015,6 +17054,7 @@ body.client .content > .main > #view-home.active {
   border-radius: 8px;
   color: #fff !important;
 }
+/* toolbar как в профиле */
 .ws-modv-toolbar.hp-toolbar {
   position: relative;
   z-index: 2;
@@ -17022,10 +17062,17 @@ body.client .content > .main > #view-home.active {
   align-items: center !important;
   justify-content: space-between !important;
   gap: 12px !important;
-  padding: 12px 18px !important;
-  background: rgba(18,17,14,0.72) !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  padding: 0 18px !important;
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+  background: rgba(18, 17, 14, 0.45) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border-top: 1px solid rgba(255,255,255,0.06);
-  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  box-sizing: border-box;
 }
 .ws-modv-stats {
   display: flex;
@@ -17048,19 +17095,40 @@ body.client .content > .main > #view-home.active {
 .ws-modv-toolbar-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  margin: 0 !important;
+  padding: 0 !important;
 }
-.ws-modv-install {
+/* install: оранжевая save без лишнего margin */
+#ws-mod-view-modal .ws-modv-install.hp-btn-save,
+#ws-mod-view-modal .hp-btn-save.ws-modv-install {
+  margin: 0 !important;
   min-width: 120px !important;
 }
-.ws-modv-install.is-danger {
-  background: rgba(200,50,50,0.2) !important;
-  border: 1px solid rgba(220,80,80,0.45) !important;
-  color: #ff8e8e !important;
+/* delete 1:1 как #pub-btn-delete (hp-btn-logout hp-btn-danger) */
+#ws-mod-view-modal .ws-modv-toolbar-right .hp-btn-logout,
+#ws-mod-view-modal .ws-modv-toolbar-right .hp-btn-danger {
+  margin: 0 !important;
+}
+#ws-mod-view-modal .ws-modv-toolbar-right .hp-btn-danger {
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  color: #fca5a5 !important;
+}
+#ws-mod-view-modal .ws-modv-toolbar-right .hp-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.55) !important;
 }
 
 .ws-modv-body {
   padding: 16px 20px 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+#ws-media-view-modal .ws-modv-meta-row,
+#ws-media-view-modal .ws-mv-meta.ws-modv-meta-row {
+  margin-top: 12px;
 }
 .ws-modv-section { margin-bottom: 14px; }
 .ws-modv-section h3 {
@@ -17415,3 +17483,229 @@ textarea.field-changed,
   margin-left: 4px;
 }
 #submit-admin-reject.hidden { display: none !important; }
+
+
+/* ===== Модификации в настройках игры ===== */
+.sgdb-mods-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 120px;
+}
+.sgdb-mods-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--text-muted);
+  gap: 10px;
+}
+.sgdb-mods-empty-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+.sgdb-mods-empty-sub {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  max-width: 320px;
+}
+.sgdb-mod-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  min-height: 56px;
+}
+.sgdb-mod-item:hover {
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+}
+.sgdb-mod-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #141210;
+  flex-shrink: 0;
+}
+.sgdb-mod-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sgdb-mod-body {
+  flex: 1;
+  min-width: 0;
+}
+.sgdb-mod-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sgdb-mod-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.sgdb-mod-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+/* тумблер */
+.sgdb-mod-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.08);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background .15s, border-color .15s;
+}
+.sgdb-mod-toggle.on {
+  background: rgba(239, 91, 44, 0.35);
+  border-color: rgba(239, 91, 44, 0.55);
+}
+.sgdb-mod-toggle span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+.sgdb-mod-toggle.on span {
+  transform: translateX(18px);
+}
+.sgdb-mod-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(194, 59, 46, 0.12);
+  color: #fca5a5;
+  cursor: pointer;
+  padding: 0;
+  transition: background .12s, border-color .12s;
+}
+.sgdb-mod-del:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.sgdb-grid-item.is-broken { display: none !important; }
+#btn-buy-game.is-disabled,
+#btn-buy-game:disabled {
+  opacity: 0.65;
+  cursor: default;
+  pointer-events: none;
+}
+
+
+/* ===== Скриншоты сообщества — отступы ===== */
+#gp-comm-body {
+  padding: 4px 2px 6px;
+}
+#gp-comm-body .gp-comm-shots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 10px;
+}
+#gp-comm-body .gp-comm-shot {
+  display: block;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #141210;
+  padding: 0;
+  cursor: pointer;
+}
+#gp-comm-body .gp-comm-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+#gp-comm-body .gp-comm-meta {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 0.72rem;
+}
+#gp-comm-body .gp-side-more,
+#gp-comm-body #gp-comm-more {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+#gp-comm-body .gp-side-more:hover,
+#gp-comm-body #gp-comm-more:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-bright);
+}
+
+/* аватар-буква в отзывах */
+.gp-review-av.is-letter {
+  display: grid !important;
+  place-items: center !important;
+  font-weight: 700 !important;
+  font-size: 0.95rem !important;
+  color: #12110e !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+}
+
+/* разделитель текст ↔ действия */
+.gp-review-content .gp-review-text {
+  margin-bottom: 0 !important;
+  padding-bottom: 10px;
+}
+.gp-review-content .gp-review-actions {
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* цветной баннер без фото */
+.gp-review-banner {
+  border: 1px solid rgba(255,255,255,0.06);
+}

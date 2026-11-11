@@ -2097,13 +2097,16 @@ function socialAuth(provider) {
           </div>
           <div class="ws-gallery-thumbs" id="ws-mv-thumbs"></div>
         </div>
-        <div class="ws-mv-meta">
+        <div class="ws-modv-section">
+          <h3>Описание</h3>
+          <div class="ws-modv-text" id="ws-mv-desc"></div>
+        </div>
+        <div class="ws-modv-meta-row ws-mv-meta">
           <span id="ws-mv-date"></span>
           <span id="ws-mv-author"></span>
           <span id="ws-mv-views"></span>
           <button type="button" class="ws-like-btn" id="ws-mv-like">♥ <span>0</span></button>
         </div>
-        <p class="ws-mv-desc" id="ws-mv-desc"></p>
       </div>
     </div>
   </div>
@@ -2129,16 +2132,14 @@ function socialAuth(provider) {
               <span class="ws-modv-stat" id="ws-modv-dls"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <b>0</b></span>
               <span class="ws-modv-stat" id="ws-modv-likes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg> <b>0</b></span>
             </div>
-            <div class="ws-modv-toolbar-right">
+            <div class="ws-modv-toolbar-right" id="ws-modv-actions">
               <button type="button" class="hp-btn-save ws-modv-install" id="ws-modv-install">Установить</button>
             </div>
           </div>
         </div>
         <div class="ws-modv-body">
-          <div class="ws-gallery" id="ws-modv-gallery">
-            <div class="ws-gallery-main" id="ws-modv-main">
-              <img id="ws-modv-main-img" alt="" />
-            </div>
+          <div class="ws-gallery ws-gallery--thumbs-only" id="ws-modv-gallery">
+            <div class="ws-gallery-main" id="ws-modv-main" hidden></div>
             <div class="ws-gallery-thumbs" id="ws-modv-thumbs"></div>
           </div>
           <div class="ws-modv-section">
@@ -2847,6 +2848,10 @@ function socialAuth(provider) {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Загрузки
         </button>
+        <button type="button" class="sgdb-nav-btn" data-sgdb-tab="mods">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Модификации
+        </button>
         <button type="button" class="sgdb-nav-btn sgdb-nav-danger" data-sgdb-tab="danger">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           Опасная зона
@@ -2916,6 +2921,11 @@ function socialAuth(provider) {
           </label>
           <p class="settings-hint" id="sgdb-downloads-hint">Проверить наличие обновлений или других версий игры</p>
           <button type="button" class="hp-btn-edit" id="sgdb-open-sources" style="margin-top:10px">Открыть источники</button>
+        </div>
+        <div class="sgdb-pane" data-sgdb-pane="mods">
+          <div class="sgdb-pane-title">Модификации</div>
+          <p class="settings-hint" style="margin:0 0 14px">Моды, установленные для этой игры. Включённые будут подхватываться при запуске.</p>
+          <div id="sgdb-mods-list" class="sgdb-mods-list"></div>
         </div>
         <div class="sgdb-pane" data-sgdb-pane="danger">
           <div class="sgdb-pane-title">Опасная зона</div>

@@ -2486,12 +2486,20 @@ function renderGamePage(wrap, data) {
     : '';
 
 
-  const inCart = !g.owned && isInCart(g.id);
+  const inCart = !g.owned && !g.purchased && isInCart(g.id);
 
   // Единый модуль «цена + кнопка» как в Steam
   let purchaseMod = '';
   if (!g.owned) {
-    if (price.className === 'free') {
+    // уже куплено / было в библиотеке — вернуть без цены и без корзины
+    if (g.purchased) {
+      purchaseMod = `<div class="gp-purchase-mod">
+        <button type="button" class="gp-purchase-btn free" id="btn-buy-game" data-mode="restore">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          В библиотеку
+        </button>
+      </div>`;
+    } else if (price.className === 'free') {
       purchaseMod = `<div class="gp-purchase-mod">
         <button type="button" class="gp-purchase-btn free" id="btn-buy-game">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
@@ -2655,19 +2663,10 @@ function renderGamePage(wrap, data) {
             </div>
           </div>
 
-          <div class="gp-side-card">
+          <div class="gp-side-card" id="gp-comm-card" data-game-id="${g.id}">
             <button type="button" class="gp-side-head">Скриншоты сообщества <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span></button>
-            <div class="gp-side-body">
-              ${gallery.filter(it => it.type === 'image').length ? `
-                <div class="gp-comm-shots">
-                  ${gallery.filter(it => it.type === 'image').slice(0, 3).map(item => `
-                    <button type="button" class="gp-comm-shot" data-src="${escapeHtml(item.src)}">
-                      <img src="${escapeHtml(item.thumb || item.src)}" alt="" loading="lazy" />
-                      <span class="gp-comm-meta">${iconSvg('heart',12)} 0 · ${iconSvg('message',12)} 0</span>
-                    </button>`).join('')}
-                </div>
-                <button type="button" class="gp-side-more" id="gp-comm-more">Показать все</button>
-              ` : `<div class="gp-ach-empty">Пока нет скриншотов сообщества</div>`}
+            <div class="gp-side-body" id="gp-comm-body">
+              <div class="gp-ach-empty">Загрузка…</div>
             </div>
           </div>
 
@@ -2700,7 +2699,7 @@ function renderGamePage(wrap, data) {
   renderCommentsThreaded(data.comments || [], data.viewer, g.id);
   initCommentForm(g, data.viewer);
   initBuildButtons(wrap, g);
-  initReviewSort(data.comments || [], data.viewer);
+  initReviewSort(data.comments || [], data.viewer, g.id);
   loadSimilarGames(g);
   bindAdminGameEdit(g, viewer);
 
@@ -2853,16 +2852,81 @@ function renderGamePage(wrap, data) {
       toast('Данные игры ещё не загружены');
     }
   });
-  $$('.gp-comm-shot', wrap).forEach(btn => {
-    btn.addEventListener('click', () => {
-      const img = $('#gallery-main-img');
-      if (img && btn.dataset.src) img.src = btn.dataset.src;
+  // скриншоты сообщества = медиа мастерской по этой игре
+  loadGameCommunityMedia(g.id);
+}
+
+function mediaCoverUrl(m) {
+  if (!m) return '';
+  const pick = (v) => {
+    if (!v) return '';
+    if (typeof v === 'string') return v.trim();
+    if (typeof v === 'object') return String(v.url || v.src || v.thumb || '').trim();
+    return '';
+  };
+  let u = pick(m.image_url) || pick(m.cover_url) || pick(m.thumb_url) || pick(m.thumbnail);
+  if (u) return u;
+  let imgs = m.images_list || m.images || m.files || null;
+  if (typeof imgs === 'string') {
+    try { imgs = JSON.parse(imgs); } catch (e) {
+      // иногда одна строка-путь без JSON
+      if (imgs.includes('/') || imgs.startsWith('uploads')) return imgs.trim();
+      imgs = null;
+    }
+  }
+  if (Array.isArray(imgs) && imgs.length) {
+    for (const it of imgs) {
+      const x = pick(it);
+      if (x) return x;
+    }
+  }
+  return '';
+}
+
+async function loadGameCommunityMedia(gameId) {
+  const body = document.getElementById('gp-comm-body');
+  if (!body) return;
+  gameId = +gameId || 0;
+  if (!gameId) {
+    body.innerHTML = '<div class="gp-ach-empty">Пока нет работ сообщества</div>';
+    return;
+  }
+  try {
+    const data = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=media&game_id=' + gameId + '&limit=6');
+    const list = (data && data.ok && Array.isArray(data.media)) ? data.media : [];
+    if (!list.length) {
+      body.innerHTML = '<div class="gp-ach-empty">Пока нет работ сообщества</div>';
+      return;
+    }
+    const shots = list.slice(0, 3).map(m => {
+      const src = mediaCoverUrl(m);
+      if (!src) return '';
+      const likes = m.likes || m.like_count || 0;
+      return `<button type="button" class="gp-comm-shot" data-media-id="${m.id}" data-src="${escapeHtml(src)}">
+        <img src="${escapeHtml(src)}" alt="${escapeHtml(m.title || '')}" loading="lazy" />
+        <span class="gp-comm-meta">${iconSvg('heart',12)} ${likes}</span>
+      </button>`;
+    }).filter(Boolean).join('');
+    body.innerHTML = `
+      <div class="gp-comm-shots">${shots}</div>
+      <button type="button" class="gp-side-more" id="gp-comm-more">Показать все</button>`;
+    body.querySelectorAll('.gp-comm-shot').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mid = +btn.dataset.mediaId;
+        if (mid && typeof openWorkshopMediaView === 'function') openWorkshopMediaView(mid);
+        else if (btn.dataset.src && typeof openLightbox === 'function') openLightbox(btn.dataset.src);
+      });
     });
-  });
-  $('#gp-comm-more')?.addEventListener('click', () => {
-    const img = $('#gallery-main-img');
-    if (img) img.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
+    const more = document.getElementById('gp-comm-more');
+    if (more) {
+      more.addEventListener('click', () => {
+        if (typeof openWorkshopGame === 'function') openWorkshopGame(gameId, 'media');
+        else if (typeof showView === 'function') showView('workshop');
+      });
+    }
+  } catch (e) {
+    body.innerHTML = '<div class="gp-ach-empty">Не удалось загрузить</div>';
+  }
 }
 
 function brandLogoHtml(kind, title, svgFallback) {
@@ -2907,14 +2971,30 @@ function renderControllerSupport(raw) {
 }
 
 
+// актуальный список отзывов на странице игры (для сортировки без потери данных)
+window.__gameComments = window.__gameComments || { list: [], viewer: null, gameId: 0 };
+
 function renderCommentsThreaded(comments, viewer, gameId) {
   const box = $('#comments-list');
   if (!box) return;
 
+  // всегда держим свежий список
+  if (Array.isArray(comments)) {
+    window.__gameComments = {
+      list: comments.slice(),
+      viewer: viewer || (window.__gameComments && window.__gameComments.viewer) || null,
+      gameId: gameId != null ? gameId : ((window.__gameComments && window.__gameComments.gameId) || 0)
+    };
+  } else if (window.__gameComments && Array.isArray(window.__gameComments.list)) {
+    comments = window.__gameComments.list;
+    viewer = viewer || window.__gameComments.viewer;
+    gameId = gameId != null ? gameId : window.__gameComments.gameId;
+  }
+
   // скрыть/показать форму корневого отзыва
   const formWrap = $('#comment-form-wrap');
   const uid = viewer && viewer.user_id ? +viewer.user_id : null;
-  const myRoot = uid ? (comments || []).find(c => +c.user_id === uid && !(c.parent_id > 0)) : null;
+  const myRoot = uid ? (comments || []).find(c => +c.user_id === uid && !(+c.parent_id > 0)) : null;
   if (formWrap) {
     formWrap.classList.toggle('hidden', !!myRoot);
     const sep = formWrap.nextElementSibling;
@@ -2941,16 +3021,24 @@ function renderCommentsThreaded(comments, viewer, gameId) {
       byParent[pid].push(c);
     }
   });
-  roots.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  // сортировка корней по активной кнопке
+  const activeSort = document.querySelector('.gp-sort-opt.active');
+  const mode = (activeSort && activeSort.dataset.sort) || 'new';
+  if (mode === 'old') roots.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  else if (mode === 'score') roots.sort((a, b) => (b.rating||b.user_rating||0) - (a.rating||a.user_rating||0) || new Date(b.created_at) - new Date(a.created_at));
+  else if (mode === 'popular') roots.sort((a, b) => ((b.likes||0)-(b.dislikes||0)) - ((a.likes||0)-(a.dislikes||0)) || new Date(b.created_at) - new Date(a.created_at));
+  else roots.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   Object.keys(byParent).forEach(k => {
     byParent[k].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   });
 
   const renderOne = (c, depth) => {
     const hasCustomAv = !!c.avatar_url;
+    const letter = (c.avatar || (c.username || '?').slice(0, 1) || '?').toString().slice(0, 1).toUpperCase();
+    const avColor = c.avatar_color || '#ef5b2c';
     const avStyle = hasCustomAv
       ? `background-image:url('${escapeHtml(c.avatar_url)}');background-size:cover;background-position:center;`
-      : '';
+      : `background:${escapeHtml(avColor)};color:#12110e;`;
     const kids = byParent[c.id] || [];
     const rating = (c.rating != null && c.rating !== '') ? c.rating : ((c.user_rating != null && c.user_rating !== '') ? c.user_rating : null);
     const playH = (c.playtime_hours != null && c.playtime_hours !== '')
@@ -2959,21 +3047,22 @@ function renderCommentsThreaded(comments, viewer, gameId) {
     const likes = c.likes || c.like_count || 0;
     const dislikes = c.dislikes || c.dislike_count || 0;
     const banner = c.profile_banner || c.banner_url || '';
+    // всегда фон шапки: картинка или цвет оформления
     const bannerStyle = banner
       ? `background-image:url('${escapeHtml(banner)}');background-size:cover;background-position:center;`
-      : '';
-    const showBanner = !!banner;
+      : `background: linear-gradient(135deg, ${escapeHtml(avColor)}55 0%, ${escapeHtml(avColor)}22 50%, rgba(18,17,14,0.9) 100%); border: 1px solid ${escapeHtml(avColor)}44;`;
+    const showBanner = true;
     const isMine = uid && +c.user_id === uid;
     const isRoot = !(c.parent_id > 0);
 
     return `
-      <div class="gp-review ${depth ? 'is-reply' : ''} ${showBanner ? 'has-banner' : ''}" data-id="${c.id}">
+      <div class="gp-review ${depth ? 'is-reply' : ''} has-banner" data-id="${c.id}">
         <div class="gp-review-main">
-          <div class="gp-review-headcard ${showBanner ? 'with-banner' : ''}">
-            ${showBanner ? `<div class="gp-review-banner" style="${bannerStyle}"></div>` : ''}
+          <div class="gp-review-headcard with-banner">
+            <div class="gp-review-banner" style="${bannerStyle}"></div>
             <div class="gp-review-headcard-inner">
-              <div class="gp-review-av ${hasCustomAv ? 'has-img' : 'is-placeholder'}" style="${avStyle}">
-                ${hasCustomAv ? '' : iconSvg('users', 18)}
+              <div class="gp-review-av ${hasCustomAv ? 'has-img' : 'is-letter'}" style="${avStyle}">
+                ${hasCustomAv ? '' : escapeHtml(letter)}
               </div>
               <div class="gp-review-userblock">
                 <div class="gp-review-name-row">
@@ -3101,7 +3190,14 @@ function renderCommentsThreaded(comments, viewer, gameId) {
   });
 }
 
-function initReviewSort(comments, viewer) {
+function initReviewSort(comments, viewer, gameId) {
+  if (Array.isArray(comments)) {
+    window.__gameComments = {
+      list: comments.slice(),
+      viewer: viewer || null,
+      gameId: gameId != null ? gameId : (window.__gameComments && window.__gameComments.gameId) || 0
+    };
+  }
   const sortBtns = () => $$('.gp-sort-opt');
   sortBtns().forEach(btn => {
     if (btn.dataset.sortBound === '1') return;
@@ -3109,13 +3205,18 @@ function initReviewSort(comments, viewer) {
     btn.addEventListener('click', () => {
       sortBtns().forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      const list = [...(comments || [])];
+      const store = window.__gameComments || { list: [], viewer: null, gameId: 0 };
+      const list = [...(store.list || [])];
       const mode = btn.dataset.sort;
-      if (mode === 'new') list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-      else if (mode === 'old') list.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
-      else if (mode === 'score') list.sort((a,b) => (b.rating||b.user_rating||0) - (a.rating||a.user_rating||0) || new Date(b.created_at) - new Date(a.created_at));
-      else if (mode === 'popular') list.sort((a,b) => ((b.likes||0)-(b.dislikes||0)) - ((a.likes||0)-(a.dislikes||0)) || new Date(b.created_at) - new Date(a.created_at));
-      renderCommentsThreaded(list, viewer);
+      // только корневые для порядка, ответы остаются привязаны в renderCommentsThreaded
+      const roots = list.filter(c => !(+c.parent_id > 0));
+      const replies = list.filter(c => +c.parent_id > 0);
+      if (mode === 'new') roots.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      else if (mode === 'old') roots.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+      else if (mode === 'score') roots.sort((a,b) => (b.rating||b.user_rating||0) - (a.rating||a.user_rating||0) || new Date(b.created_at) - new Date(a.created_at));
+      else if (mode === 'popular') roots.sort((a,b) => ((b.likes||0)-(b.dislikes||0)) - ((a.likes||0)-(a.dislikes||0)) || new Date(b.created_at) - new Date(a.created_at));
+      const sorted = roots.concat(replies);
+      renderCommentsThreaded(sorted, store.viewer || viewer, store.gameId || gameId);
     });
   });
 }
@@ -3174,17 +3275,34 @@ function refreshBuyButton(g) {
   if (g.owned) {
     const pref = getPreferredVersion(g.id);
     const hasAny = Object.keys(getInstalledVersions(g.id)).length > 0;
-    if (hasAny) {
+    const installing = typeof isGameDownloading === 'function' && isGameDownloading(g.id);
+    if (installing) {
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg> Установка`;
+      btn.dataset.mode = 'installing';
+      btn.disabled = true;
+      btn.classList.add('is-disabled', 'owned');
+      btn.classList.remove('in-cart');
+      if (mod) mod.classList.remove('is-in-cart');
+      if (note) note.textContent = 'Идёт установка…';
+    } else if (hasAny) {
       btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Играть${pref ? ' · v' + escapeHtml(pref) : ''}`;
       btn.dataset.mode = 'play';
+      btn.disabled = false;
+      btn.classList.remove('is-disabled');
+      btn.classList.add('owned');
+      btn.classList.remove('in-cart');
+      if (mod) mod.classList.remove('is-in-cart');
+      if (note) note.textContent = 'Установлено на этом ПК';
     } else {
       btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Установить`;
       btn.dataset.mode = 'install';
+      btn.disabled = false;
+      btn.classList.remove('is-disabled');
+      btn.classList.add('owned');
+      btn.classList.remove('in-cart');
+      if (mod) mod.classList.remove('is-in-cart');
+      if (note) note.textContent = '';
     }
-    btn.classList.add('owned');
-    btn.classList.remove('in-cart');
-    if (mod) mod.classList.remove('is-in-cart');
-    if (note) note.textContent = hasAny ? 'Установлено на этом ПК' : '';
   } else if (isInCart(g.id)) {
     btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg> В корзине`;
     btn.classList.add('in-cart');
@@ -3220,6 +3338,10 @@ function initBuyButton(wrap, g) {
     }
     if (g.owned) {
       const mode = btn.dataset.mode || 'install';
+      if (mode === 'installing' || (typeof isGameDownloading === 'function' && isGameDownloading(g.id))) {
+        toast('Игра уже устанавливается');
+        return;
+      }
       const builds = (window.__currentGameBuilds || []).filter(b => !b.status || b.status === 'published');
       if (mode === 'play') {
         const ver = getPreferredVersion(g.id);
@@ -3242,6 +3364,30 @@ function initBuyButton(wrap, g) {
     }
 
     const price = formatPrice(g.price, g.discount_percent);
+    const mode = btn.dataset.mode || '';
+
+    // Куплено ранее / удалено из библиотеки — вернуть в библиотеку без корзины
+    if (g.purchased || mode === 'restore') {
+      btn.disabled = true;
+      const prev = btn.innerHTML;
+      btn.textContent = 'Добавляем...';
+      try {
+        const data = await postJSON(`${API_BASE}?action=buy`, { game_id: g.id });
+        if (!data.ok) throw new Error(data.error || 'Не удалось добавить');
+        if (data.balance !== undefined) updateBalance(data.balance);
+        g.owned = true;
+        g.purchased = true;
+        toast(data.message || 'Вернули в библиотеку');
+        sideLibAddOptimistic(g);
+        loadGamePage(g.id);
+      } catch (err) {
+        toast(err.message || 'Ошибка');
+        btn.innerHTML = prev;
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
 
     // Бесплатные — сразу в библиотеку
     if (price.className === 'free') {
@@ -3252,6 +3398,7 @@ function initBuyButton(wrap, g) {
         if (!data.ok) throw new Error(data.error || 'Не удалось оформить');
         if (data.balance !== undefined) updateBalance(data.balance);
         g.owned = true;
+        g.purchased = true;
         toast(data.message || 'Добавлено в библиотеку');
         sideLibAddOptimistic(g);
         loadGamePage(g.id);
@@ -3367,6 +3514,7 @@ function openInstallModal(g, builds, preferBuildId) {
   const title = document.getElementById('install-title');
   const sizeEl = document.getElementById('install-size');
   const sel = document.getElementById('install-version');
+  const confirmBtn = document.getElementById('install-confirm');
   if (title) title.textContent = g.title || 'Игра';
   if (cover) {
     const url = g.icon_url || g.cover_url || g.banner_url || '';
@@ -3376,15 +3524,23 @@ function openInstallModal(g, builds, preferBuildId) {
   if (sel) {
     sel.innerHTML = builds.map(b => {
       const inst = isVersionInstalled(g.id, b.version) ? ' ✓' : '';
-      return `<option value="${b.id}" data-version="${escapeHtml(b.version)}" data-size="${b.file_size_bytes || 0}" data-platform="${escapeHtml(b.platform || 'windows')}">v${escapeHtml(b.version)} · ${escapeHtml(b.platform || 'windows')}${inst}</option>`;
+      return `<option value="${b.id}" data-version="${escapeHtml(b.version)}" data-size="${b.file_size_bytes || 0}" data-platform="${escapeHtml(b.platform || 'windows')}" data-installed="${inst ? '1' : '0'}">v${escapeHtml(b.version)} · ${escapeHtml(b.platform || 'windows')}${inst}</option>`;
     }).join('');
     if (preferBuildId) sel.value = String(preferBuildId);
-    const syncSize = () => {
+    const syncInstallUi = () => {
       const opt = sel.selectedOptions[0];
       if (sizeEl && opt) sizeEl.textContent = formatSize(+opt.dataset.size || 0);
+      const installed = !!(opt && (opt.dataset.installed === '1' || isVersionInstalled(g.id, opt.dataset.version || '')));
+      if (confirmBtn) {
+        confirmBtn.disabled = installed;
+        confirmBtn.classList.toggle('is-disabled', installed);
+        confirmBtn.textContent = installed ? 'Уже установлено' : 'Установить';
+        confirmBtn.style.opacity = installed ? '0.55' : '';
+        confirmBtn.style.cursor = installed ? 'default' : '';
+      }
     };
-    sel.onchange = syncSize;
-    syncSize();
+    sel.onchange = syncInstallUi;
+    syncInstallUi();
   }
   modal.classList.remove('hidden');
 }
@@ -3402,6 +3558,8 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#install-confirm')) {
     e.preventDefault();
     const sel = document.getElementById('install-version');
+    const confirmBtn = document.getElementById('install-confirm');
+    if (confirmBtn && confirmBtn.disabled) return;
     if (!sel || !__installCtx) return;
     const opt = sel.selectedOptions[0];
     if (!opt) return;
@@ -3410,6 +3568,10 @@ document.addEventListener('click', (e) => {
     const size = +opt.dataset.size || 0;
     const platform = opt.dataset.platform || 'windows';
     const g = __installCtx.g;
+    if (isVersionInstalled(g.id, version)) {
+      toast('Эта версия уже установлена');
+      return;
+    }
     closeInstallModal();
     enqueueDownload({
       buildId,
@@ -4274,6 +4436,7 @@ function openGameAssetsModal(g) {
       fillGameSettingsPath(g);
       fillGameSettingsDownloads(g.id);
       fillGameSettingsDanger(g.id);
+      fillGameSettingsMods(g.id);
     } catch (e) {}
     return;
   }
@@ -4341,6 +4504,7 @@ function openGameAssetsModal(g) {
     fillGameSettingsPath(g);
     fillGameSettingsDownloads(g.id);
     fillGameSettingsDanger(g.id);
+      fillGameSettingsMods(g.id);
   } catch (e) {}
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
@@ -4363,17 +4527,30 @@ function renderSgdbPackAssets(type) {
   const pack = window.__sgdbAssetsFromPack || window.__packSgdbAssets;
   if (!pack) return false;
   const key = type === 'covers' || type === 'grids' ? 'grids' : type;
-  const list = pack[key] || pack[type] || [];
-  const grid = document.getElementById('sgdb-grid') || document.querySelector('.sgdb-grid');
+  let list = pack[key] || pack[type] || (key === 'grids' ? pack.covers : null) || [];
+  if (!Array.isArray(list)) list = [];
+  list = list.map(a => {
+    if (!a) return null;
+    if (typeof a === 'string') return { url: a, thumb: a };
+    const url = a.url || a.file || a.thumb || '';
+    if (!url) return null;
+    return { url, thumb: a.thumb || url };
+  }).filter(Boolean);
+  const grid = document.getElementById('sgdb-asset-grid') || document.querySelector('.sgdb-asset-grid') || document.getElementById('sgdb-grid');
   if (!grid) return false;
   if (!list.length) {
-    grid.innerHTML = '<div class="loading">В пакете нет ассетов для этой вкладки</div>';
+    grid.innerHTML = '<div class="settings-hint">В пакете нет ассетов для этой вкладки</div>';
     return true;
   }
+  // делегируем штатному рендеру, если есть
+  if (typeof renderSgdbGrid === 'function') {
+    try { renderSgdbGrid(list, type); return true; } catch (e) {}
+  }
+  grid.className = 'sgdb-asset-grid is-' + type;
   grid.innerHTML = list.map(a => {
     const u = a.url || a.thumb;
     const th = a.thumb || a.url;
-    return '<button type="button" class="sgdb-grid-item" data-url="' + escapeHtml(u) + '"><img src="' + escapeHtml(th) + '" alt="" loading="lazy" /></button>';
+    return '<button type="button" class="sgdb-grid-item is-' + type + '" data-url="' + escapeHtml(u) + '"><img src="' + escapeHtml(th) + '" alt="" loading="lazy" onerror="this.onerror=null;const b=this.closest(&quot;.sgdb-grid-item&quot;);if(b)b.remove();" /></button>';
   }).join('');
   grid.querySelectorAll('.sgdb-grid-item').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -4627,8 +4804,7 @@ function renderLibraryGrid() {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
           ${escapeHtml(timeLabel)}
         </div>
-        ${isInstalled ? '<span class="lib-card-badge" title="Установлена"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></span>' : ''}
-        <div class="hp-game-ach">
+                <div class="hp-game-ach">
           <div class="hp-game-ach-row">
             ${achLeft}
             <span class="hp-game-ach-pct">${achPct}%</span>
@@ -4726,6 +4902,30 @@ function updateDownloadsBadge() {
   }
 }
 
+function isGameDownloading(gameId) {
+  gameId = +gameId;
+  if (!gameId) return false;
+  if (dm.active && +dm.active.gameId === gameId) return true;
+  if (dm.queue && dm.queue.some(q => +q.gameId === gameId)) return true;
+  if (dm.pausedItem && +dm.pausedItem.gameId === gameId) return true;
+  return false;
+}
+function refreshGameInstallButton(gameId) {
+  gameId = +gameId;
+  try {
+    const g = (window.__currentGame && +window.__currentGame.id === gameId)
+      ? window.__currentGame
+      : (window.__currentGamePage && +window.__currentGamePage.id === gameId ? window.__currentGamePage : null);
+    if (g && typeof refreshBuyButton === 'function') refreshBuyButton(g);
+  } catch (e) {}
+  // кнопки сборок на странице
+  try {
+    document.querySelectorAll('.btn-download[data-build-id]').forEach(btn => {
+      // не трогаем locked/installed — только активные «Установить»
+      if (btn.disabled && btn.dataset.mode !== 'installing') return;
+    });
+  } catch (e) {}
+}
 function enqueueDownload(item) {
   const already =
     (dm.active && dm.active.buildId === item.buildId) ||
@@ -4735,12 +4935,19 @@ function enqueueDownload(item) {
     gotoView('downloads');
     return;
   }
+  // та же игра уже качается / в очереди
+  if (item.gameId && isGameDownloading(item.gameId)) {
+    toast('Эта игра уже устанавливается');
+    refreshGameInstallButton(item.gameId);
+    return;
+  }
   item.id = ++dm.seq;
   item.received = 0;
   item.status = 'queued';
   dm.queue.push(item);
   toast(`«${item.title}» добавлена в загрузки`);
   updateDownloadsBadge();
+  if (item.gameId) refreshGameInstallButton(item.gameId);
   if (getViewFromUrl() === 'downloads') renderDownloadsView();
   pumpDownloads();
 }
@@ -4764,6 +4971,7 @@ async function runDownload(item, offset) {
   item.controller = new AbortController();
   renderDownloadsView();
   updateDownloadsBadge();
+  if (item.gameId) refreshGameInstallButton(item.gameId);
 
   let lastBytes = offset;
   let lastTick = Date.now();
@@ -4847,14 +5055,12 @@ async function runDownload(item, offset) {
     toast(item.preDownload ? `Предзагрузка «${item.title}» готова` : `«${item.title}» установлена`);
     // обновить кнопку на странице игры
     try {
-      const btn = document.getElementById('btn-buy-game');
-      if (btn && window.__currentGamePage && +window.__currentGamePage.id === +item.gameId) {
-        refreshBuyButton(window.__currentGamePage);
-      }
+      if (item.gameId) refreshGameInstallButton(item.gameId);
       const buildsBox = document.getElementById('game-builds');
-      if (buildsBox && window.__currentGamePage) {
-        buildsBox.innerHTML = renderBuildsList(window.__currentGameBuilds || [], window.__currentGamePage);
-        initBuildButtons(document.getElementById('game-page') || document, window.__currentGamePage);
+      const pageGame = window.__currentGamePage || window.__currentGame;
+      if (buildsBox && pageGame && +pageGame.id === +item.gameId) {
+        buildsBox.innerHTML = renderBuildsList(window.__currentGameBuilds || [], pageGame);
+        initBuildButtons(document.getElementById('game-page') || document, pageGame);
       }
     } catch (e) {}
     renderDownloadsView();
@@ -4875,6 +5081,7 @@ async function runDownload(item, offset) {
     item.error = err.name === 'AbortError' ? 'Отменено' : (err.message || 'Ошибка загрузки');
     toast(item.error);
     dm.active = null;
+    if (item.gameId) refreshGameInstallButton(item.gameId);
     renderDownloadsView();
     updateDownloadsBadge();
     setTimeout(pumpDownloads, 0);
@@ -5400,40 +5607,77 @@ async function loadProfileScreenshots() {
   const emptyEl = $('#hp-screenshots-empty');
   const grid = $('#hp-screenshots-grid');
   if (!grid) return;
-  const uid = viewingUserId || (window.CURRENT_USER && window.CURRENT_USER.id) || 0;
+  // только медиа ЭТОГО профиля — не чужой кэш
+  const authId = (window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.id)
+    || (window.CURRENT_USER && window.CURRENT_USER.id)
+    || 0;
+  const uid = viewingUserId ? +viewingUserId : +authId;
+  const reqToken = String(uid) + ':' + Date.now();
+  grid.dataset.shotsFor = String(uid || '');
+  grid.dataset.shotsToken = reqToken;
+  grid.innerHTML = '';
   if (!uid) {
     if (emptyEl) emptyEl.classList.remove('hidden');
     grid.classList.add('hidden');
-    grid.innerHTML = '';
     return;
   }
+  if (emptyEl) {
+    emptyEl.classList.remove('hidden');
+    emptyEl.querySelector('.hp-empty-title') && (emptyEl.querySelector('.hp-empty-title').textContent = 'Загрузка…');
+  }
   try {
-    const data = await fetchJSON(`api/workshop.php?action=media&user_id=${uid}&limit=48`);
-    const list = (data && data.ok && Array.isArray(data.media)) ? data.media : [];
-    if (!list.length) {
-      if (emptyEl) emptyEl.classList.remove('hidden');
+    const data = await fetchJSON(`api/workshop.php?action=media&user_id=${uid}&limit=48&_t=${Date.now()}`);
+    // устаревший ответ (уже открыли другой профиль)
+    if (grid.dataset.shotsToken !== reqToken || String(grid.dataset.shotsFor) !== String(uid)) return;
+    // если ушли на другой профиль
+    const still = viewingUserId ? +viewingUserId : +authId;
+    if (+still !== +uid) return;
+
+    let list = (data && data.ok && Array.isArray(data.media)) ? data.media : [];
+    // жёстко только user_id этого профиля
+    list = list.filter(m => +m.user_id === +uid || !m.user_id);
+    const cards = list.map(m => {
+      const src = (typeof mediaCoverUrl === 'function' ? mediaCoverUrl(m) : (m.image_url || ''));
+      const title = escapeHtml(m.title || m.game_title || 'Скриншот');
+      if (!src) return '';
+      // доп. проверка: если API отдал чужой user_id — пропуск
+      if (m.user_id && +m.user_id !== +uid) return '';
+      return `<button type="button" class="hp-shot-card" data-user-id="${uid}" data-media-id="${m.id || ''}" data-src="${escapeHtml(src)}" title="${title}">
+        <img src="${escapeHtml(src)}" alt="${title}" loading="lazy" onerror="this.closest('.hp-shot-card')?.remove();" />
+      </button>`;
+    }).filter(Boolean);
+
+    if (!cards.length) {
+      if (emptyEl) {
+        emptyEl.classList.remove('hidden');
+        const t = emptyEl.querySelector('.hp-empty-title');
+        if (t) t.textContent = 'Пока нет скриншотов';
+      }
       grid.classList.add('hidden');
       grid.innerHTML = '';
       return;
     }
     if (emptyEl) emptyEl.classList.add('hidden');
     grid.classList.remove('hidden');
-    grid.innerHTML = list.map(m => {
-      const src = m.image_url || (m.images && (Array.isArray(m.images) ? m.images[0] : (typeof m.images === 'string' ? (JSON.parse(m.images || '[]')[0] || '') : ''))) || '';
-      const title = escapeHtml(m.title || m.game_title || 'Скриншот');
-      if (!src) return '';
-      return `<button type="button" class="hp-shot-card" data-src="${escapeHtml(src)}" title="${title}">
-        <img src="${escapeHtml(src)}" alt="${title}" loading="lazy" />
-      </button>`;
-    }).join('');
+    grid.innerHTML = cards.join('');
     $$('.hp-shot-card', grid).forEach(btn => {
       btn.addEventListener('click', () => {
-        if (btn.dataset.src && typeof openLightbox === 'function') openLightbox(btn.dataset.src);
+        // защита от чужих карточек
+        if (btn.dataset.userId && +btn.dataset.userId !== +uid) return;
+        const mid = +btn.dataset.mediaId;
+        if (mid && typeof openWorkshopMediaView === 'function') openWorkshopMediaView(mid);
+        else if (btn.dataset.src && typeof openLightbox === 'function') openLightbox(btn.dataset.src);
       });
     });
   } catch (err) {
-    if (emptyEl) emptyEl.classList.remove('hidden');
+    if (grid.dataset.shotsToken !== reqToken) return;
+    if (emptyEl) {
+      emptyEl.classList.remove('hidden');
+      const t = emptyEl.querySelector('.hp-empty-title');
+      if (t) t.textContent = 'Пока нет скриншотов';
+    }
     grid.classList.add('hidden');
+    grid.innerHTML = '';
   }
 }
 
@@ -7201,14 +7445,30 @@ async function openUserProfile(username, id) {
     if (p.relation === 'self') {
       viewingUserId = null;
       setProfileLoadingShell(false);
+      try {
+        const grid = document.getElementById('hp-screenshots-grid');
+        if (grid) { grid.innerHTML = ''; grid.dataset.shotsFor = ''; }
+      } catch (e) {}
       gotoView('profile');
       return;
     }
 
     viewingUserId = p.id;
     const isAdmin = !!(data.viewer_is_admin || (window.AUTH_STATE && window.AUTH_STATE.user && (window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin)));
+    // сброс медиа чужого/своего кэша до рендера
+    try {
+      const grid = document.getElementById('hp-screenshots-grid');
+      const emptyEl = document.getElementById('hp-screenshots-empty');
+      if (grid) { grid.innerHTML = ''; grid.classList.add('hidden'); grid.dataset.shotsFor = String(p.id); }
+      if (emptyEl) emptyEl.classList.remove('hidden');
+    } catch (e) {}
     renderForeignProfile(p, data.library || [], isAdmin);
     setProfileLoadingShell(false);
+    // если вкладка скриншотов активна — грузим сразу его медиа
+    try {
+      const tab = document.querySelector('.hp-tab.active');
+      if (tab && tab.dataset.ptab === 'screenshots') loadProfileScreenshots();
+    } catch (e) {}
     const libSnapshot = data.library || [];
     setTimeout(() => {
       if (viewingUserId === p.id) {
@@ -9631,6 +9891,14 @@ function fillGameSettingsDanger(gameId) {
       libraryCache = (libraryCache || []).filter(g => +g.id !== +gameId);
       try { sideLibRemoveOptimistic(gameId); } catch (e) {}
       try { renderLibraryGrid(); } catch (e) {}
+      // на странице игры — сразу «В библиотеку» без цены
+      try {
+        if (window.__currentGame && +window.__currentGame.id === +gameId) {
+          window.__currentGame.owned = false;
+          window.__currentGame.purchased = true;
+          if (typeof loadGamePage === 'function') loadGamePage(gameId);
+        }
+      } catch (e) {}
       document.getElementById('steam-import-modal')?.classList.add('hidden');
     } catch (e) {
       toast(e.message || 'Не удалось удалить');
@@ -9689,10 +9957,20 @@ function fillGameSettingsDanger(gameId) {
     try { fillGameSettingsPath({ id: gameId }); } catch (e) {}
     fillGameSettingsDownloads(gameId);
     fillGameSettingsDanger(gameId);
-    // кнопка Играть → Установить
+    fillGameSettingsMods(gameId);
+    // кнопка Играть → Скачать/Установить сразу, без перезагрузки
     try {
-      if (window.__currentGame && +window.__currentGame.id === +gameId && typeof refreshBuyButton === 'function') {
-        refreshBuyButton(window.__currentGame);
+      const g = (window.__currentGame && +window.__currentGame.id === +gameId)
+        ? window.__currentGame
+        : (window.__currentGamePage && +window.__currentGamePage.id === +gameId ? window.__currentGamePage : null);
+      if (g && typeof refreshBuyButton === 'function') refreshBuyButton(g);
+      const btn = document.getElementById('btn-buy-game');
+      if (btn && g && g.owned) {
+        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Установить`;
+        btn.dataset.mode = 'install';
+        btn.classList.add('owned');
+        btn.disabled = false;
+        btn.classList.remove('is-disabled');
       }
       if (typeof renderLibraryGrid === 'function') renderLibraryGrid();
     } catch (e) {}
@@ -10198,36 +10476,56 @@ function initAdminUI() {
   window.applyGameAssetNow = applyGameAssetNow;
   window.saveSelectedGameAssets = saveSelectedGameAssets;
 
+  function normalizeSgdbUrl(u) {
+    if (!u) return '';
+    u = String(u).trim();
+    if (!u || u === 'undefined' || u === 'null') return '';
+    // относительные пути из пакета
+    if (u.startsWith('sgdb/') || u.startsWith('media/') || u.startsWith('uploads/')) {
+      // уже ок
+    } else if (u.startsWith('./')) {
+      u = u.slice(2);
+    }
+    return u;
+  }
+  function mapPackList(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(a => {
+      if (!a) return null;
+      if (typeof a === 'string') {
+        const u = normalizeSgdbUrl(a);
+        return u ? { url: u, thumb: u } : null;
+      }
+      const url = normalizeSgdbUrl(a.url || a.file || a.thumb || '');
+      const thumb = normalizeSgdbUrl(a.thumb || a.url || a.file || '') || url;
+      if (!url) return null;
+      return { url, thumb, width: a.width, height: a.height };
+    }).filter(Boolean);
+  }
   async function loadSgdbAssets(type) {
     const grid = $('#sgdb-asset-grid');
     if (!grid) return;
     grid.className = 'sgdb-asset-grid is-' + type;
+    grid.innerHTML = '<div class="settings-hint">Загрузка…</div>';
 
-    // 1) ассеты из ZIP-пакета (импорт)
+    // 1) ассеты из ZIP-пакета (импорт) — keys: icons/logos/heroes/grids (+ covers)
     const pack = window.__sgdbAssetsFromPack || window.__packSgdbAssets;
     if (pack) {
-      const key = (type === 'grids' || type === 'covers') ? 'grids' : (type === 'heroes' ? 'heroes' : type);
-      const list = pack[key] || pack[type] || pack.covers || [];
+      const key = (type === 'grids' || type === 'covers') ? 'grids' : type;
+      const list = mapPackList(pack[key] || pack[type] || (key === 'grids' ? pack.covers : null) || []);
       if (list.length) {
-        const mapped = list.map(a => ({
-          url: a.url || a.file || a.thumb,
-          thumb: a.thumb || a.url || a.file,
-        })).filter(a => a.url);
-        if (mapped.length) {
-          sgdbCache[type] = mapped;
-          renderSgdbGrid(mapped, type);
-          return;
-        }
+        sgdbCache[type] = list;
+        renderSgdbGrid(list, type);
+        return;
       }
     }
 
     // 2) локальные ассеты уже сохранённой игры
     const g = window.__steamEditGameData || window.__lastGameForCart || (window.wrap && window.wrap._gameData) || null;
-    const gid = window.__steamEditGameId;
     const local = [];
     const pushLocal = (url) => {
-      if (!url) return;
-      const u = String(url);
+      const u = normalizeSgdbUrl(url);
+      if (!u) return;
       if (!local.some(x => x.url === u)) local.push({ url: u, thumb: u });
     };
     if (g) {
@@ -10236,9 +10534,38 @@ function initAdminUI() {
       if (type === 'heroes') { pushLocal(g.banner_url); pushLocal(g.cover_url); }
       if (type === 'grids' || type === 'covers') { pushLocal(g.cover_url); pushLocal(g.cover_src); }
     }
-    // скрины как варианты обложки
     if ((type === 'grids' || type === 'covers' || type === 'heroes') && Array.isArray(window.__lastGameScreenshots)) {
       window.__lastGameScreenshots.forEach(pushLocal);
+    }
+
+    // 3) онлайн CATioGridDB / SteamGridDB по названию (если локально пусто)
+    const q = (window.__sgdbNameQuery || (g && g.title) || window.__packSgdbTitle || '').trim();
+    if (!local.length && q) {
+      try {
+        const data = await fetchJSON('api/game_pack.php?action=sgdb_by_name&q=' + encodeURIComponent(q));
+        const first = (data && data.results && data.results[0]) || (data && data.games && data.games[0]) || null;
+        const sgdbId = (first && first.id) || data.sgdb_id || 0;
+        if (sgdbId) {
+          const assets = await fetchJSON('api/game_pack.php?action=sgdb_by_name&q=' + encodeURIComponent(q) + '&sgdb_id=' + sgdbId);
+          const bag = (assets && assets.assets) || assets || {};
+          const apiKey = (type === 'grids' || type === 'covers') ? 'covers' : type;
+          const list = mapPackList(bag[apiKey] || bag[type] || bag.grids || []);
+          if (list.length) {
+            // кэш всего пакета ассетов для остальных вкладок
+            window.__sgdbAssetsFromPack = window.__sgdbAssetsFromPack || {
+              icons: mapPackList(bag.icons || []),
+              logos: mapPackList(bag.logos || []),
+              heroes: mapPackList(bag.heroes || []),
+              grids: mapPackList(bag.covers || bag.grids || []),
+            };
+            sgdbCache[type] = list;
+            renderSgdbGrid(list, type);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[sgdb]', e);
+      }
     }
 
     if (local.length) {
@@ -10247,7 +10574,7 @@ function initAdminUI() {
       return;
     }
 
-    grid.innerHTML = '<div class="settings-hint">Нет локальных ассетов. Импортируй ZIP-пакет (иконки/обложки из CATioGridDB внутри ZIP) или загрузи файлы в карточке игры.</div>';
+    grid.innerHTML = '<div class="settings-hint">Нет ассетов для этой вкладки. Импортируй ZIP-пакет с CATioGridDB или выбери другое название.</div>';
   }
 
   function renderSgdbGrid(list, type) {
@@ -10266,7 +10593,7 @@ function initAdminUI() {
       const u = a.url || a.thumb;
       const th = a.thumb || a.url;
       return `<button type="button" class="sgdb-grid-item is-${type}${u === selected ? ' selected' : ''}" data-url="${escapeHtml(u)}">
-        <img src="${escapeHtml(th)}" alt="" loading="lazy" onerror="this.parentElement.style.opacity=0.3" />
+        <img src="${escapeHtml(th)}" alt="" loading="lazy" onerror="this.onerror=null;const b=this.closest('.sgdb-grid-item');if(b)b.remove();" />
       </button>`;
     }).join('');
     $$('.sgdb-grid-item', grid).forEach(btn => {
@@ -13720,11 +14047,11 @@ async function openWorkshop() {
 }
 window.openWorkshop = openWorkshop;
 
-async function openWorkshopGame(id) {
+async function openWorkshopGame(id, tab) {
   id = parseInt(id, 10) || 0;
   if (!id) return;
   window.__wsgId = id;
-  window.__wsgTab = 'mods';
+  window.__wsgTab = (tab === 'media' || tab === 'mods') ? tab : 'mods';
   $$('.view').forEach(v => v.classList.remove('active'));
   const view = document.getElementById('view-workshop-game');
   if (view) view.classList.add('active');
@@ -13733,13 +14060,15 @@ async function openWorkshopGame(id) {
     const url = new URL(location.href);
     url.searchParams.set('view', 'workshop');
     url.searchParams.set('wsg', String(id));
+    if (window.__wsgTab === 'media') url.searchParams.set('wsg_tab', 'media');
+    else url.searchParams.delete('wsg_tab');
     history.pushState({}, '', url);
   } catch (e) {}
   const headTitle = document.getElementById('head-title');
   if (headTitle) headTitle.textContent = 'Мастерская';
 
   document.querySelectorAll('#wsg-tabs .ws-tab-btn, #wsg-tabs .hp-tab').forEach(t => {
-    t.classList.toggle('active', t.getAttribute('data-wsg-tab') === 'mods');
+    t.classList.toggle('active', t.getAttribute('data-wsg-tab') === window.__wsgTab);
   });
 
   try {
@@ -14382,7 +14711,15 @@ function wsTextOrEmpty(v) {
 
 function wsBuildGallery(mainEl, thumbsEl, images, onMainClick) {
   const imgs = (images || []).filter(Boolean);
-  if (mainEl) {
+  const thumbsOnly = !!(mainEl && (
+    mainEl.hidden ||
+    mainEl.hasAttribute('hidden') ||
+    (mainEl.closest && mainEl.closest('.ws-gallery--thumbs-only'))
+  ));
+
+  if (mainEl && !thumbsOnly) {
+    mainEl.hidden = false;
+    mainEl.style.display = '';
     if (!imgs.length) {
       mainEl.innerHTML = '<div class="ws-gallery-empty">Нет изображений</div>';
     } else {
@@ -14393,33 +14730,49 @@ function wsBuildGallery(mainEl, thumbsEl, images, onMainClick) {
         img.addEventListener('click', () => onMainClick(img.src));
       }
     }
+  } else if (mainEl) {
+    mainEl.innerHTML = '';
+    mainEl.hidden = true;
+    mainEl.style.display = 'none';
   }
+
   if (thumbsEl) {
-    if (imgs.length < 2) {
+    if (!imgs.length) {
+      thumbsEl.innerHTML = thumbsOnly ? '<div class="ws-gallery-empty">Нет изображений</div>' : '';
+      thumbsEl.style.display = thumbsOnly ? '' : 'none';
+      return;
+    }
+    // в медиа thumbs прячем если картинка одна; в модах (thumbsOnly) показываем всегда
+    if (!thumbsOnly && imgs.length < 2) {
       thumbsEl.innerHTML = '';
       thumbsEl.style.display = 'none';
-    } else {
-      thumbsEl.style.display = '';
-      thumbsEl.innerHTML = imgs.map((src, i) => `
-        <button type="button" class="ws-gallery-thumb ${i === 0 ? 'active' : ''}" data-src="${escapeHtml(src)}">
-          <img src="${escapeHtml(src)}" alt="" loading="lazy" />
-        </button>`).join('');
-      thumbsEl.querySelectorAll('.ws-gallery-thumb').forEach(btn => {
-        btn.addEventListener('click', () => {
-          thumbsEl.querySelectorAll('.ws-gallery-thumb').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          const src = btn.getAttribute('data-src') || '';
-          if (mainEl) {
-            mainEl.innerHTML = `<img src="${escapeHtml(src)}" alt="" data-ws-gallery-main />`;
-            const img = mainEl.querySelector('img');
-            if (img && onMainClick) {
-              img.style.cursor = 'zoom-in';
-              img.addEventListener('click', () => onMainClick(img.src));
-            }
-          }
-        });
-      });
+      return;
     }
+    thumbsEl.style.display = '';
+    thumbsEl.innerHTML = imgs.map((src, i) => `
+      <button type="button" class="ws-gallery-thumb ${i === 0 ? 'active' : ''}" data-src="${escapeHtml(src)}">
+        <img src="${escapeHtml(src)}" alt="" loading="lazy" />
+      </button>`).join('');
+    thumbsEl.querySelectorAll('.ws-gallery-thumb').forEach(btn => {
+      btn.addEventListener('click', () => {
+        thumbsEl.querySelectorAll('.ws-gallery-thumb').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const src = btn.getAttribute('data-src') || '';
+        if (!src) return;
+        if (thumbsOnly) {
+          if (onMainClick) onMainClick(src);
+          return;
+        }
+        if (mainEl) {
+          mainEl.innerHTML = `<img src="${escapeHtml(src)}" alt="" data-ws-gallery-main />`;
+          const img = mainEl.querySelector('img');
+          if (img && onMainClick) {
+            img.style.cursor = 'zoom-in';
+            img.addEventListener('click', () => onMainClick(img.src));
+          }
+        }
+      });
+    });
   }
 }
 
@@ -14434,11 +14787,133 @@ function setInstalledModIds(ids) {
 function isModInstalled(modId) {
   return getInstalledModIds().includes(+modId);
 }
-function markModInstalled(modId, on) {
-  let ids = getInstalledModIds();
-  ids = ids.filter(id => +id !== +modId);
-  if (on) ids.push(+modId);
+/** { [gameId]: [ { id, title, cover_url, enabled } ] } */
+function getGameModsMap() {
+  try { return JSON.parse(localStorage.getItem('catio_game_mods') || '{}') || {}; }
+  catch (e) { return {}; }
+}
+function setGameModsMap(map) {
+  try { localStorage.setItem('catio_game_mods', JSON.stringify(map || {})); } catch (e) {}
+}
+function getModsForGame(gameId) {
+  const map = getGameModsMap();
+  const list = map[String(gameId)] || map[+gameId] || [];
+  return Array.isArray(list) ? list : [];
+}
+function setModsForGame(gameId, list) {
+  const map = getGameModsMap();
+  map[String(gameId)] = Array.isArray(list) ? list : [];
+  setGameModsMap(map);
+}
+function markModInstalled(modId, on, modMeta) {
+  modId = +modId;
+  let ids = getInstalledModIds().filter(id => +id !== modId);
+  if (on) ids.push(modId);
   setInstalledModIds(ids);
+  // привязка к игре
+  const gameId = modMeta && modMeta.game_id ? +modMeta.game_id : 0;
+  if (gameId) {
+    let list = getModsForGame(gameId).filter(m => +m.id !== modId);
+    if (on) {
+      list.push({
+        id: modId,
+        title: (modMeta && modMeta.title) || ('Мод #' + modId),
+        cover_url: (modMeta && (modMeta.cover_url || modMeta.banner_url || (modMeta.images_list && modMeta.images_list[0]))) || '',
+        enabled: true
+      });
+    }
+    setModsForGame(gameId, list);
+  } else if (!on) {
+    // удалили без game_id — вычистить из всех игр
+    const map = getGameModsMap();
+    Object.keys(map).forEach(gid => {
+      map[gid] = (map[gid] || []).filter(m => +m.id !== modId);
+    });
+    setGameModsMap(map);
+  }
+}
+function setModEnabled(gameId, modId, enabled) {
+  const list = getModsForGame(gameId).map(m => {
+    if (+m.id === +modId) return { ...m, enabled: !!enabled };
+    return m;
+  });
+  setModsForGame(gameId, list);
+}
+function removeModFromGame(gameId, modId) {
+  setModsForGame(gameId, getModsForGame(gameId).filter(m => +m.id !== +modId));
+  markModInstalled(modId, false);
+}
+function fillGameSettingsMods(gameId) {
+  const box = document.getElementById('sgdb-mods-list');
+  if (!box) return;
+  gameId = +gameId || +(window.__steamEditGameId || 0);
+  const mods = getModsForGame(gameId);
+  const pane = box.closest('.sgdb-pane');
+  const paneTitle = pane && pane.querySelector('.sgdb-pane-title');
+  const paneHint = pane && pane.querySelector(':scope > .settings-hint');
+  if (!mods.length) {
+    if (paneTitle) paneTitle.style.display = 'none';
+    if (paneHint) paneHint.style.display = 'none';
+    box.innerHTML = `<div class="sgdb-mods-empty">
+      <div class="sgdb-mods-empty-title">Модификации ещё не установлены</div>
+      <button type="button" class="hp-btn-edit" id="sgdb-mods-to-ws">В мастерскую</button>
+    </div>`;
+    document.getElementById('sgdb-mods-to-ws')?.addEventListener('click', () => {
+      document.getElementById('steam-import-modal')?.classList.add('hidden');
+      if (typeof openWorkshop === 'function') openWorkshop();
+      else if (typeof showView === 'function') showView('workshop');
+    });
+    return;
+  }
+  if (paneTitle) paneTitle.style.display = '';
+  if (paneHint) paneHint.style.display = '';
+  box.innerHTML = mods.map(m => {
+    const cover = m.cover_url
+      ? `<img src="${escapeHtml(m.cover_url)}" alt="" loading="lazy" />`
+      : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin:11px;opacity:.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+    return `<div class="sgdb-mod-item" data-mod-id="${m.id}">
+      <div class="sgdb-mod-thumb">${cover}</div>
+      <div class="sgdb-mod-body">
+        <div class="sgdb-mod-title">${escapeHtml(m.title || ('Мод #' + m.id))}</div>
+        <div class="sgdb-mod-sub">${m.enabled !== false ? 'Включён при запуске' : 'Выключен'}</div>
+      </div>
+      <div class="sgdb-mod-actions">
+        <button type="button" class="sgdb-mod-toggle ${m.enabled !== false ? 'on' : ''}" data-mod-toggle="${m.id}" title="Вкл/выкл при запуске" aria-label="Вкл/выкл"><span></span></button>
+        <button type="button" class="sgdb-mod-del" data-mod-del="${m.id}" title="Удалить мод" aria-label="Удалить">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-mod-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mid = +btn.getAttribute('data-mod-toggle');
+      const on = !btn.classList.contains('on');
+      setModEnabled(gameId, mid, on);
+      fillGameSettingsMods(gameId);
+    });
+  });
+  box.querySelectorAll('[data-mod-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const mid = +btn.getAttribute('data-mod-del');
+      const ok = await appConfirm({
+        title: 'Удалить мод?',
+        message: 'Мод будет убран из списка этой игры. В мастерской снова появится «Установить».',
+        okText: 'Удалить',
+        danger: true
+      });
+      if (!ok) return;
+      removeModFromGame(gameId, mid);
+      fillGameSettingsMods(gameId);
+      // обновить кнопку на странице мода, если открыта
+      try {
+        if (window.__wsModvData && +window.__wsModvData.id === mid) {
+          updateModInstallButton(window.__wsModvData);
+        }
+      } catch (e) {}
+      toast('Мод удалён');
+    });
+  });
 }
 
 function userOwnsGameId(gameId) {
@@ -14460,10 +14935,17 @@ function updateModInstallButton(mod) {
   const btn = document.getElementById('ws-modv-install');
   if (!btn || !mod) return;
   const installed = isModInstalled(mod.id);
-  btn.classList.toggle('is-danger', installed);
-  btn.classList.toggle('hp-btn-save', !installed);
-  btn.textContent = installed ? 'Удалить' : 'Установить';
   btn.dataset.mode = installed ? 'remove' : 'install';
+  if (installed) {
+    // 1:1 как #pub-btn-delete на странице издательства
+    btn.className = 'hp-btn-logout hp-btn-danger ws-modv-install';
+    btn.title = 'Удалить';
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Удалить`;
+  } else {
+    btn.className = 'hp-btn-save ws-modv-install';
+    btn.title = 'Установить';
+    btn.textContent = 'Установить';
+  }
 }
 
 function openModNoGameModal(mod) {
@@ -14531,8 +15013,12 @@ async function handleModInstallClick() {
   const btn = document.getElementById('ws-modv-install');
   const mode = btn?.dataset.mode || 'install';
   if (mode === 'remove') {
-    markModInstalled(mod.id, false);
+    markModInstalled(mod.id, false, mod);
     updateModInstallButton(mod);
+    try {
+      const gid = +mod.game_id || +(window.__steamEditGameId || 0);
+      if (gid) fillGameSettingsMods(gid);
+    } catch (e) {}
     toast('Мод удалён');
     return;
   }
@@ -14541,9 +15027,13 @@ async function handleModInstallClick() {
     openModNoGameModal(mod);
     return;
   }
-  // авто-установка: скачать + пометить
-  markModInstalled(mod.id, true);
+  // авто-установка: скачать + пометить + список модов игры
+  markModInstalled(mod.id, true, mod);
   updateModInstallButton(mod);
+  try {
+    const gid = +mod.game_id || 0;
+    if (gid) fillGameSettingsMods(gid);
+  } catch (e) {}
   wsDownloadModFile(mod);
   toast('Мод установлен');
 }
