@@ -359,13 +359,43 @@ try {
             try { $logoUrl = saveUpload('logo', $logoDir, $imgAllowed, 4); } catch (Throwable $e) {}
             if (!$logoUrl) {
                 $lu = trim((string)($_POST['logo_url'] ?? ''));
-                if ($lu !== '' && str_starts_with(ltrim($lu, '/'), 'uploads/')) $logoUrl = ltrim($lu, '/');
+                $lu = str_replace('\\', '/', trim($lu));
+                if ($lu !== '' && (str_starts_with(ltrim($lu, '/'), 'uploads/') || preg_match('#^https?://#i', $lu))) {
+                    if (preg_match('#^https?://#i', $lu)) {
+                        $bin = @file_get_contents($lu);
+                        if ($bin && strlen($bin) > 200) {
+                            $ext = 'png';
+                            if (preg_match('/\.(jpe?g|png|webp|gif)(\?|$)/i', $lu, $m)) $ext = strtolower($m[1]) === 'jpeg' ? 'jpg' : strtolower($m[1]);
+                            $name = 'logo_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                            if (@file_put_contents($logoDir . '/' . $name, $bin)) {
+                                $logoUrl = 'uploads/games/logos/' . $name;
+                            }
+                        }
+                    } else {
+                        $logoUrl = ltrim($lu, '/');
+                    }
+                }
             }
             $iconUrl = null;
             try { $iconUrl = saveUpload('icon', $iconDir, $imgAllowed, 3); } catch (Throwable $e) {}
             if (!$iconUrl) {
                 $iu = trim((string)($_POST['icon_url'] ?? ''));
-                if ($iu !== '' && str_starts_with(ltrim($iu, '/'), 'uploads/')) $iconUrl = ltrim($iu, '/');
+                $iu = str_replace('\\', '/', trim($iu));
+                if ($iu !== '' && (str_starts_with(ltrim($iu, '/'), 'uploads/') || preg_match('#^https?://#i', $iu))) {
+                    if (preg_match('#^https?://#i', $iu)) {
+                        $bin = @file_get_contents($iu);
+                        if ($bin && strlen($bin) > 200) {
+                            $ext = 'png';
+                            if (preg_match('/\.(jpe?g|png|webp|gif)(\?|$)/i', $iu, $m)) $ext = strtolower($m[1]) === 'jpeg' ? 'jpg' : strtolower($m[1]);
+                            $name = 'icon_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                            if (@file_put_contents($iconDir . '/' . $name, $bin)) {
+                                $iconUrl = 'uploads/games/icons/' . $name;
+                            }
+                        }
+                    } else {
+                        $iconUrl = ltrim($iu, '/');
+                    }
+                }
             }
 
             $slug = slugify($title) . '-' . substr(uniqid(), -4);

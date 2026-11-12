@@ -1584,6 +1584,7 @@ function socialAuth(provider) {
 })();
 </script>
   <script src="js/app.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+  <script src="js/catio_fixes.js"></script>
 
   <!-- ===== МОДАЛКА ДРУЗЕЙ ===== -->
   <div class="friends-modal hidden" id="friends-modal">

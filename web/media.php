@@ -33,139 +33,89 @@ function serveLocalImage(int $id, array $kinds): bool {
 }
 
 if ($id > 0 && $type !== 'shot') {
-    if ($type === 'hero') {
-        $kinds = ['hero', 'cover'];
-    } elseif ($type === 'icon') {
-        $kinds = ['appicon', 'icon']; // appicon preferred, then legacy icon_
-    } else {
-        $kinds = ['cover'];
-    }
-    if (serveLocalImage($id, $kinds)) {
-        exit;
-    }
-
     $pdo = getDB();
     $stmt = $pdo->prepare("SELECT title, slug, genre, category, cover_emoji, cover_color, cover_url, banner_url, icon_url, logo_url, steam_appid FROM games WHERE id = ?");
     $stmt->execute([$id]);
     $game = $stmt->fetch() ?: null;
-    if ($game) {
-        $aid = 0;
-        if (!empty($game['steam_appid'])) $aid = (int)$game['steam_appid'];
-        elseif (!empty($game['slug']) && preg_match('/-s(\d{3,10})$/', $game['slug'], $m)) $aid = (int)$m[1];
 
-        // type=icon: один раз скачать Steam library art в covers/icon_{id}.jpg и отдать локально
-        if ($type === 'icon' && $aid > 0) {
-            $coversDir = __DIR__ . '/covers';
-            if (!is_dir($coversDir)) @mkdir($coversDir, 0775, true);
-            $dest = $coversDir . '/appicon_' . $id . '.jpg';
-            $sources = [
-                'https://cdn.cloudflare.steamstatic.com/steam/apps/' . $aid . '/library_600x900.jpg',
-                'https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/' . $aid . '/library_600x900.jpg',
-                'https://cdn.cloudflare.steamstatic.com/steam/apps/' . $aid . '/library_600x900_2x.jpg',
-            ];
-            foreach ($sources as $srcUrl) {
-                $ok = false;
-                if (function_exists('curl_init')) {
-                    $ch = curl_init($srcUrl);
-                    curl_setopt_array($ch, [
-                        CURLOPT_RETURNTRANSFER => true,
-                        CURLOPT_FOLLOWLOCATION => true,
-                        CURLOPT_TIMEOUT => 20,
-                        CURLOPT_SSL_VERIFYPEER => false,
-                        CURLOPT_USERAGENT => 'Mozilla/5.0 CATio/1.0',
-                    ]);
-                    $bin = curl_exec($ch);
-                    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
-                    if ($bin && $code < 400 && strlen($bin) > 1000) {
-                        file_put_contents($dest, $bin);
-                        $ok = true;
-                    }
-                }
-                if ($ok) {
-                    try {
-                        $pdo->prepare("UPDATE games SET icon_url = ?, steam_appid = ? WHERE id = ?")
-                            ->execute(['covers/appicon_' . $id . '.jpg', $aid, $id]);
-                    } catch (Throwable $e) {}
-                    header('Content-Type: image/jpeg');
-                    header('Cache-Control: public, max-age=86400');
-                    readfile($dest);
-                    exit;
-                }
-            }
-            // fallback: локальный/удалённый icon_url из БД
-            if (!empty($game['icon_url'])) {
-                $iu = str_replace('\\', '/', $game['icon_url']);
-                if (preg_match('#^https?://#i', $iu)) {
-                    $dest = $coversDir . '/appicon_' . $id . '.jpg';
-                    if (function_exists('curl_init')) {
-                        $ch = curl_init($iu);
-                        curl_setopt_array($ch, [
-                            CURLOPT_RETURNTRANSFER => true,
-                            CURLOPT_FOLLOWLOCATION => true,
-                            CURLOPT_TIMEOUT => 20,
-                            CURLOPT_SSL_VERIFYPEER => false,
-                        ]);
-                        $bin = curl_exec($ch);
-                        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                        curl_close($ch);
-                        if ($bin && $code < 400 && strlen($bin) > 200) {
-                            file_put_contents($dest, $bin);
-                            header('Content-Type: image/jpeg');
-                            header('Cache-Control: public, max-age=86400');
-                            readfile($dest);
-                            exit;
-                        }
-                    }
-                    header('Location: ' . $iu, true, 302);
-                    exit;
-                }
-                $local = __DIR__ . '/' . ltrim($iu, '/');
-                if (is_file($local)) {
-                    $ext = strtolower(pathinfo($local, PATHINFO_EXTENSION));
-                    $mimeMap = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif'];
-                    if (isset($mimeMap[$ext])) {
-                        // copy to appicon for next time
-                        @copy($local, $coversDir . '/appicon_' . $id . '.' . ($ext === 'jpeg' ? 'jpg' : $ext));
-                        header('Content-Type: ' . $mimeMap[$ext]);
-                        header('Cache-Control: public, max-age=86400');
-                        readfile($local);
-                        exit;
-                    }
-                }
-            }
-            if (!empty($sources[0])) {
-                header('Location: ' . $sources[0], true, 302);
+    $serveFile = function (string $path) {
+        if (!is_file($path)) return false;
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mimeMap = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif'];
+        if (!isset($mimeMap[$ext])) return false;
+        header('Content-Type: ' . $mimeMap[$ext]);
+        header('Cache-Control: public, max-age=3600');
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
+        return true;
+    };
+    $resolveLocal = function (string $rel) use ($serveFile) {
+        $rel = str_replace('\\', '/', trim($rel));
+        if ($rel === '' || preg_match('#^https?://#i', $rel)) return false;
+        $candidates = [
+            __DIR__ . '/' . ltrim($rel, '/'),
+            dirname(__DIR__) . '/' . ltrim($rel, '/'),
+        ];
+        // also if path already absolute-ish under web
+        foreach ($candidates as $p) {
+            if ($serveFile($p)) return true;
+        }
+        return false;
+    };
+
+    // ---- ICON ----
+    if ($type === 'icon') {
+        // 1) Собственный icon_url из БД — НИКОГДА не перезаписываем его Steam-обложкой
+        if ($game && !empty($game['icon_url'])) {
+            $iu = str_replace('\\', '/', trim((string)$game['icon_url']));
+            if (preg_match('#^https?://#i', $iu)) {
+                header('Location: ' . $iu, true, 302);
                 exit;
             }
+            if ($resolveLocal($iu)) exit;
         }
-
-        $candidates = [];
-        if ($type === 'hero') {
-            if (!empty($game['banner_url'])) $candidates[] = $game['banner_url'];
-            if (!empty($game['cover_url'])) $candidates[] = $game['cover_url'];
-        } else {
-            if (!empty($game['cover_url'])) $candidates[] = $game['cover_url'];
-            if (!empty($game['banner_url'])) $candidates[] = $game['banner_url'];
-        }
-        foreach ($candidates as $url) {
-            $url = str_replace('\\', '/', $url);
-            if (preg_match('#^https?://#i', $url)) {
-                header('Location: ' . $url, true, 302);
+        // 2) Локальные файлы covers/icon_* (не appicon из library_600x900)
+        if (serveLocalImage($id, ['icon'])) exit;
+        // 3) covers/appicon_* только если это НЕ результат library_600x900 overwrite
+        //    и только когда icon_url пуст — но даже тогда НЕ трогаем БД
+        if (empty($game['icon_url'] ?? null) && serveLocalImage($id, ['appicon'])) exit;
+        // 4) fallback cover (лучше чем SVG) — без записи в icon_url
+        if ($game && !empty($game['cover_url'])) {
+            $cu = str_replace('\\', '/', trim((string)$game['cover_url']));
+            if (preg_match('#^https?://#i', $cu)) {
+                header('Location: ' . $cu, true, 302);
                 exit;
             }
-            $local = __DIR__ . '/' . ltrim($url, '/');
-            if (is_file($local)) {
-                $ext = strtolower(pathinfo($local, PATHINFO_EXTENSION));
-                $mimeMap = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif'];
-                if (isset($mimeMap[$ext])) {
-                    header('Content-Type: ' . $mimeMap[$ext]);
-                    header('Cache-Control: public, max-age=3600');
-                    header('X-Content-Type-Options: nosniff');
-                    readfile($local);
-                    exit;
-                }
-            }
+            if ($resolveLocal($cu)) exit;
+        }
+        if (serveLocalImage($id, ['cover'])) exit;
+        // дальше SVG
+    }
+
+    // ---- HERO / COVER ----
+    if ($type === 'hero') {
+        if ($game && !empty($game['banner_url'])) {
+            $bu = str_replace('\\', '/', trim((string)$game['banner_url']));
+            if (preg_match('#^https?://#i', $bu)) { header('Location: ' . $bu, true, 302); exit; }
+            if ($resolveLocal($bu)) exit;
+        }
+        if (serveLocalImage($id, ['hero', 'cover'])) exit;
+        if ($game && !empty($game['cover_url'])) {
+            $cu = str_replace('\\', '/', trim((string)$game['cover_url']));
+            if (preg_match('#^https?://#i', $cu)) { header('Location: ' . $cu, true, 302); exit; }
+            if ($resolveLocal($cu)) exit;
+        }
+    } else if ($type !== 'icon') {
+        if ($game && !empty($game['cover_url'])) {
+            $cu = str_replace('\\', '/', trim((string)$game['cover_url']));
+            if (preg_match('#^https?://#i', $cu)) { header('Location: ' . $cu, true, 302); exit; }
+            if ($resolveLocal($cu)) exit;
+        }
+        if (serveLocalImage($id, ['cover'])) exit;
+        if ($game && !empty($game['banner_url'])) {
+            $bu = str_replace('\\', '/', trim((string)$game['banner_url']));
+            if (preg_match('#^https?://#i', $bu)) { header('Location: ' . $bu, true, 302); exit; }
+            if ($resolveLocal($bu)) exit;
         }
     }
 } else {

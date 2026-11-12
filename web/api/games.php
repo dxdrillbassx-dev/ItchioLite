@@ -811,12 +811,17 @@ try {
             if ($local) {
                 $fields[] = 'icon_url = ?'; $params[] = $local;
                 $src = dirname(__DIR__) . '/' . $local;
-                if (is_file($src)) @copy($src, $coversDir . '/appicon_' . $gameId . '.jpg');
-                else {
-                    $ch = curl_init($iconUrl);
-                    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30, CURLOPT_SSL_VERIFYPEER => false]);
-                    $bin = curl_exec($ch); curl_close($ch);
-                    if ($bin) file_put_contents($coversDir . '/appicon_' . $gameId . '.jpg', $bin);
+                if (!is_file($src)) $src = __DIR__ . '/../' . $local;
+                // пишем covers/icon_{id}.* — media.php type=icon отдаёт это
+                if (is_file($src)) {
+                    $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION) ?: 'png');
+                    if ($ext === 'jpeg') $ext = 'jpg';
+                    @copy($src, $coversDir . '/icon_' . $gameId . '.' . $ext);
+                }
+                // снести старый Steam library appicon, чтобы не подменял иконку
+                foreach (['jpg','jpeg','png','webp'] as $e) {
+                    $p = $coversDir . '/appicon_' . $gameId . '.' . $e;
+                    if (is_file($p)) @unlink($p);
                 }
             }
         }
@@ -1002,8 +1007,12 @@ try {
         foreach ($games as &$g) {
             $g['owned'] = true;
             $g['cover_src'] = !empty($g['cover_url']) ? $g['cover_url'] : ('media.php?type=cover&id=' . $g['id']);
-            // всегда через media.php?type=icon — там Steam library_600x900 / client-style
-            $g['icon_src'] = 'media.php?type=icon&id=' . $g['id'];
+            // Своя иконка из БД важнее media.php (раньше media перезаписывал icon_url Steam-обложкой)
+            if (!empty($g['icon_url'])) {
+                $g['icon_src'] = $g['icon_url'];
+            } else {
+                $g['icon_src'] = 'media.php?type=icon&id=' . $g['id'];
+            }
             $g['playtime_minutes'] = (int)($g['playtime_minutes'] ?? 0);
             $g['is_pinned'] = (int)($g['is_pinned'] ?? 0);
             $g['ach_unlocked'] = (int)($g['ach_unlocked'] ?? 0);
@@ -1399,12 +1408,6 @@ try {
             $path = __DIR__ . '/../' . ltrim(str_replace('..', '', $build['file_url']), '/');
         }
 
-        // Считаем скачивание и отмечаем активность в библиотеке
-        $pdo->prepare("UPDATE games SET download_count = download_count + 1 WHERE id = ?")
-            ->execute([$build['game_id']]);
-        $pdo->prepare("UPDATE library SET last_played = NOW() WHERE user_id = ? AND game_id = ?")
-            ->execute([(int)$user['id'], (int)$build['game_id']]);
-
         $ext = pathinfo($path, PATHINFO_EXTENSION);
         $filename = $build['slug'] . '-' . $build['version'] . '-' . $build['platform'] . '.' . $ext;
         $size = filesize($path);
@@ -1416,6 +1419,14 @@ try {
         if (preg_match('/bytes=(\d+)-/', $rangeHeader, $m)) {
             $offset = min((int)$m[1], $size);
             $statusCode = 206;
+        }
+
+        // +1 download_count только на первом запросе (не на Range/resume)
+        if ($statusCode === 200 && $offset === 0) {
+            $pdo->prepare("UPDATE games SET download_count = download_count + 1 WHERE id = ?")
+                ->execute([$build['game_id']]);
+            $pdo->prepare("UPDATE library SET last_played = NOW() WHERE user_id = ? AND game_id = ?")
+                ->execute([(int)$user['id'], (int)$build['game_id']]);
         }
 
         // Отдача файла — переключаем заголовки с JSON на бинарные

@@ -897,14 +897,86 @@ if ($action === 'import_pack') {
         $moviesOut[] = $item;
     }
 
+    // --- Постоянная директория CATioGridDB (как covers живут в uploads, не в памяти) ---
+    $steamAppId = (int)($manifest['steam_appid'] ?? $game['steam_appid'] ?? 0);
+    $gridKey = $steamAppId > 0 ? ('s' . $steamAppId) : ('p' . $token);
+    $gridRel = 'uploads/catiogrid/' . $gridKey;
+    $gridAbs = dirname(__DIR__) . '/' . $gridRel;
+    foreach (['icons', 'logos', 'covers', 'heroes', 'media'] as $sub) {
+        $d = $gridAbs . '/' . $sub;
+        if (!is_dir($d)) @mkdir($d, 0755, true);
+    }
+
+    $copyToGrid = function (string $srcFull, string $sub, string $name) use ($gridAbs, $gridRel): ?string {
+        if (!is_file($srcFull)) return null;
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION) ?: pathinfo($srcFull, PATHINFO_EXTENSION) ?: 'png');
+        if ($ext === 'jpeg') $ext = 'jpg';
+        $safe = preg_replace('/[^a-zA-Z0-9._-]+/', '_', pathinfo($name, PATHINFO_FILENAME)) ?: 'file';
+        $destName = $safe . '.' . $ext;
+        $destFull = $gridAbs . '/' . $sub . '/' . $destName;
+        // уникальное имя если занято другим содержимым
+        if (is_file($destFull) && @md5_file($destFull) !== @md5_file($srcFull)) {
+            $destName = $safe . '_' . substr(md5($srcFull . microtime()), 0, 6) . '.' . $ext;
+            $destFull = $gridAbs . '/' . $sub . '/' . $destName;
+        }
+        if (!is_file($destFull)) {
+            if (!@copy($srcFull, $destFull)) return null;
+        }
+        return $gridRel . '/' . $sub . '/' . $destName;
+    };
+
+    // основные media → catiogrid/.../media/
+    foreach (['cover' => 'cover', 'banner' => 'banner', 'icon' => 'icon', 'logo' => 'logo'] as $fk => $baseName) {
+        $rel = $files[$fk] ?? null;
+        if (!$rel) continue;
+        $rel = ltrim(str_replace('\\', '/', (string)$rel), '/');
+        $src = $extractTo . '/' . $rel;
+        $copied = $copyToGrid($src, 'media', $baseName . '.' . (pathinfo($rel, PATHINFO_EXTENSION) ?: 'jpg'));
+        if ($copied) $outFiles[$fk] = $copied;
+        elseif (!$outFiles[$fk]) $outFiles[$fk] = $mapFile($rel);
+    }
+
+    // sgdb/* → catiogrid/.../{icons,logos,covers,heroes}/
     foreach (['icons', 'covers', 'heroes', 'logos'] as $k) {
+        $n = 0;
         foreach (($files['sgdb'][$k] ?? []) as $item) {
             $rel = is_array($item) ? ($item['file'] ?? '') : $item;
-            $u = $mapFile($rel);
-            if ($u) {
-                $outFiles['sgdb'][$k][] = array_merge(is_array($item) ? $item : [], ['url' => $u, 'thumb' => $u]);
+            $rel = ltrim(str_replace('\\', '/', (string)$rel), '/');
+            if ($rel === '') continue;
+            $src = $extractTo . '/' . $rel;
+            $n++;
+            $name = sprintf('%02d', $n) . '.' . (pathinfo($rel, PATHINFO_EXTENSION) ?: 'png');
+            $copied = $copyToGrid($src, $k, $name);
+            if (!$copied) {
+                // fallback: temp pack url
+                $copied = $mapFile($rel);
             }
+            if (!$copied) continue;
+            $thumb = $copied;
+            // для .ico превью — remote thumb из манифеста если есть
+            if (preg_match('/\.ico$/i', $copied) && is_array($item) && !empty($item['thumb']) && preg_match('#^https?://#i', (string)$item['thumb'])) {
+                $thumb = (string)$item['thumb'];
+            }
+            $outFiles['sgdb'][$k][] = [
+                'file' => $copied,
+                'url' => $copied,
+                'thumb' => $thumb,
+                'width' => (int)(is_array($item) ? ($item['width'] ?? 0) : 0),
+                'height' => (int)(is_array($item) ? ($item['height'] ?? 0) : 0),
+            ];
         }
+    }
+
+    // дефолт icon/logo если пусто
+    if (empty($outFiles['icon']) && !empty($outFiles['sgdb']['icons'])) {
+        foreach ($outFiles['sgdb']['icons'] as $ic) {
+            $u = (string)($ic['url'] ?? '');
+            if ($u && !preg_match('/\.ico$/i', $u)) { $outFiles['icon'] = $u; break; }
+        }
+        if (empty($outFiles['icon'])) $outFiles['icon'] = (string)($outFiles['sgdb']['icons'][0]['url'] ?? '') ?: null;
+    }
+    if (empty($outFiles['logo']) && !empty($outFiles['sgdb']['logos'])) {
+        $outFiles['logo'] = (string)($outFiles['sgdb']['logos'][0]['url'] ?? '') ?: null;
     }
 
     // fallbacks from game urls if files missing
@@ -920,10 +992,12 @@ if ($action === 'import_pack') {
     echo json_encode([
         'ok' => true,
         'pack_token' => $token,
+        'grid_key' => $gridKey,
+        'grid_path' => $gridRel,
         'manifest' => $manifest,
         'game' => $game,
         'files' => $outFiles,
-        'steam_appid' => $manifest['steam_appid'] ?? null,
+        'steam_appid' => $manifest['steam_appid'] ?? $steamAppId ?? null,
         'sgdb_game_id' => $manifest['sgdb_game_id'] ?? null,
         'movies' => $moviesOut ?? ($manifest['movies'] ?? []),
     ], JSON_UNESCAPED_UNICODE);
@@ -1011,8 +1085,55 @@ if ($action === 'export_download') {
 }
 
 http_response_code(400);
+
+if ($action === 'list_catiogrid') {
+    gp_requireUser();
+    $appid = (int)($_GET['appid'] ?? $_GET['steam_appid'] ?? 0);
+    $key = trim((string)($_GET['key'] ?? ''));
+    if ($key === '' && $appid > 0) $key = 's' . $appid;
+    if ($key === '') {
+        echo json_encode(['ok' => false, 'error' => 'appid или key'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $key = preg_replace('/[^a-zA-Z0-9_-]/', '', $key);
+    $baseRel = 'uploads/catiogrid/' . $key;
+    $baseAbs = dirname(__DIR__) . '/' . $baseRel;
+    $out = ['icons' => [], 'logos' => [], 'covers' => [], 'heroes' => [], 'media' => []];
+    if (!is_dir($baseAbs)) {
+        echo json_encode(['ok' => true, 'key' => $key, 'path' => $baseRel, 'assets' => $out, 'count' => 0], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $extOk = ['png','jpg','jpeg','webp','gif','ico'];
+    foreach (array_keys($out) as $sub) {
+        $dir = $baseAbs . '/' . $sub;
+        if (!is_dir($dir)) continue;
+        $files = scandir($dir);
+        if (!$files) continue;
+        sort($files);
+        foreach ($files as $f) {
+            if ($f === '.' || $f === '..') continue;
+            $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
+            if (!in_array($ext, $extOk, true)) continue;
+            $url = $baseRel . '/' . $sub . '/' . $f;
+            $thumb = $url;
+            // ico — для превью лучше соседний png с тем же номером если есть
+            if ($ext === 'ico') {
+                $stem = pathinfo($f, PATHINFO_FILENAME);
+                foreach (['png','webp','jpg'] as $ae) {
+                    if (is_file($dir . '/' . $stem . '.' . $ae)) { $thumb = $baseRel . '/' . $sub . '/' . $stem . '.' . $ae; break; }
+                }
+            }
+            $out[$sub][] = ['url' => $url, 'thumb' => $thumb, 'file' => $url];
+        }
+    }
+    $count = 0;
+    foreach ($out as $arr) $count += count($arr);
+    echo json_encode(['ok' => true, 'key' => $key, 'path' => $baseRel, 'assets' => $out, 'count' => $count], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 echo json_encode([
     'ok' => false,
     'error' => 'Unknown action',
-    'available' => ['export', 'import_pack', 'sgdb_by_name'],
+    'available' => ['export', 'import_pack', 'sgdb_by_name', 'list_catiogrid'],
 ], JSON_UNESCAPED_UNICODE);
