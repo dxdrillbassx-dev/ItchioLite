@@ -16472,7 +16472,8 @@ body.client .content > .main > #view-home.active {
   gap: 12px;
 }
 .ws-grid.is-mods,
-.ws-grid.is-media {
+.ws-grid.is-media,
+.ws-grid.is-assets {
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 14px;
 }
@@ -16549,7 +16550,8 @@ body.client .content > .main > #view-home.active {
 
 /* mod / media — как home-card: баннер + title/author, stats на hover */
 .ws-mod-card,
-.ws-media-card {
+.ws-media-card,
+.ws-asset-card {
   position: relative;
   width: 100%;
   aspect-ratio: 2.35 / 1;
@@ -16567,13 +16569,15 @@ body.client .content > .main > #view-home.active {
   color: inherit;
 }
 .ws-mod-card:hover,
-.ws-media-card:hover {
+.ws-media-card:hover,
+.ws-asset-card:hover {
   transform: translateY(-3px);
   border-color: rgba(255,255,255,0.14);
   box-shadow: 0 8px 28px rgba(0,0,0,0.55);
 }
 .ws-mod-card .ws-card-cover,
-.ws-media-card .ws-card-cover {
+.ws-media-card .ws-card-cover,
+.ws-asset-card .ws-card-cover {
   position: absolute;
   inset: 0;
   background: #1c1a16 center/cover no-repeat;
@@ -16581,11 +16585,13 @@ body.client .content > .main > #view-home.active {
   transition: transform 0.25s ease;
 }
 .ws-mod-card:hover .ws-card-cover,
-.ws-media-card:hover .ws-card-cover {
+.ws-media-card:hover .ws-card-cover,
+.ws-asset-card:hover .ws-card-cover {
   transform: scale(1.04);
 }
 .ws-mod-card .ws-card-shade,
-.ws-media-card .ws-card-shade {
+.ws-media-card .ws-card-shade,
+.ws-asset-card .ws-card-shade {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -16593,7 +16599,8 @@ body.client .content > .main > #view-home.active {
   background: linear-gradient(0deg, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.35) 45%, transparent 75%);
 }
 .ws-mod-card .ws-card-info,
-.ws-media-card .ws-card-info {
+.ws-media-card .ws-card-info,
+.ws-asset-card .ws-card-info {
   position: absolute;
   left: 0; right: 0; bottom: 0;
   z-index: 2;
@@ -16604,7 +16611,8 @@ body.client .content > .main > #view-home.active {
   box-sizing: border-box;
 }
 .ws-mod-card .ws-card-title,
-.ws-media-card .ws-card-title {
+.ws-media-card .ws-card-title,
+.ws-asset-card .ws-card-title {
   margin: 0;
   font-size: 15px;
   font-weight: 700;
@@ -16615,7 +16623,8 @@ body.client .content > .main > #view-home.active {
   text-shadow: 0 1px 4px rgba(0,0,0,0.8);
 }
 .ws-mod-card .ws-card-sub,
-.ws-media-card .ws-card-sub {
+.ws-media-card .ws-card-sub,
+.ws-asset-card .ws-card-sub {
   margin: 0;
   font-size: 0.75rem;
   font-weight: 600;
@@ -16625,7 +16634,8 @@ body.client .content > .main > #view-home.active {
   text-overflow: ellipsis;
 }
 .ws-mod-card .ws-card-stats,
-.ws-media-card .ws-card-stats {
+.ws-media-card .ws-card-stats,
+.ws-asset-card .ws-card-stats {
   display: flex;
   gap: 14px;
   margin: 0;
@@ -16639,7 +16649,8 @@ body.client .content > .main > #view-home.active {
   pointer-events: none;
 }
 .ws-mod-card:hover .ws-card-stats,
-.ws-media-card:hover .ws-card-stats {
+.ws-media-card:hover .ws-card-stats,
+.ws-asset-card:hover .ws-card-stats {
   max-height: 28px;
   opacity: 1;
   transform: translateY(0);
@@ -17153,7 +17164,7 @@ body.client .content > .main > #view-home.active {
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
-.ws-mod-card, .ws-media-card { cursor: pointer; }
+.ws-mod-card, .ws-media-card, .ws-asset-card { cursor: pointer; }
 #ws-mod-no-game-modal { z-index: 11100 !important; }
 #ws-mod-no-game-modal:not(.hidden) {
   position: fixed !important;
@@ -17708,4 +17719,206 @@ textarea.field-changed,
 /* цветной баннер без фото */
 .gp-review-banner {
   border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ===== ASSET VIEW SPLIT ===== */
+#ws-asset-view-modal .ws-asset-view-box {
+  max-width: 1100px !important;
+  width: min(1100px, 96vw) !important;
+  max-height: 88vh !important;
+  height: min(720px, 88vh) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative;
+}
+#ws-asset-view-modal .ws-assetv-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  margin: 0;
+}
+#ws-asset-view-modal .ws-assetv-head .ws-assetv-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-bright);
+  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-assetv-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  min-height: 0;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+.ws-assetv-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow: hidden;
+}
+.ws-assetv-left .gp-gallery {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  gap: 8px;
+}
+.ws-assetv-left .gp-gallery-viewport,
+.ws-assetv-left .gp-gallery-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: auto;
+  height: 100%;
+}
+.ws-assetv-left .gp-gallery-main img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #0e0d0b;
+  border-radius: 12px;
+}
+.ws-assetv-left .gp-gallery-thumbs {
+  flex: 0 0 auto;
+  max-height: 64px;
+}
+.ws-assetv-left .gp-section-builds {
+  flex: 0 0 auto;
+  margin: 0;
+  padding-top: 8px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.ws-assetv-left .gp-section-builds .gp-block-title {
+  margin: 8px 0;
+  font-size: 0.95rem;
+}
+.ws-asset-files.modal-builds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 140px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.ws-asset-files .build-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+.ws-asset-files .build-info {
+  min-width: 0;
+  overflow: hidden;
+}
+.ws-assetv-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.ws-assetv-meta > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.ws-assetv-meta .ws-like-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.ws-assetv-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 14px 16px 16px;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+}
+.ws-assetv-right > .gp-block-title {
+  margin: 0 0 10px;
+  flex: 0 0 auto;
+}
+.ws-assetv-right .gp-description,
+#ws-assetv-desc {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden !important;
+  overflow-y: auto;
+  padding-right: 6px;
+  line-height: 1.55;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.ws-assetv-right .gp-description *,
+#ws-assetv-desc * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.ws-assetv-right .gp-description img,
+.ws-assetv-right .gp-description video,
+.ws-assetv-right .gp-description iframe,
+#ws-assetv-desc img,
+#ws-assetv-desc video,
+#ws-assetv-desc iframe {
+  max-width: 100% !important;
+  width: auto !important;
+  height: auto !important;
+}
+.ws-assetv-right .gp-description pre,
+.ws-assetv-right .gp-description code,
+#ws-assetv-desc pre,
+#ws-assetv-desc code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: hidden;
+}
+.ws-assetv-right .gp-description.gp-description--collapsed {
+  max-height: none;
+}
+@media (max-width: 820px) {
+  #ws-asset-view-modal .ws-asset-view-box {
+    height: min(90vh, 900px) !important;
+  }
+  .ws-assetv-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .ws-assetv-left {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 48%;
+  }
 }

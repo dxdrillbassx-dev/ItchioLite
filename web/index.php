@@ -522,8 +522,8 @@ if ($isAuthorized) {
                 </div>
                 <div class="ws-hero-stats" id="ws-hero-stats">
                   <div class="ws-stat">
-                    <div class="ws-stat-val" id="ws-stat-downloads">0</div>
-                    <div class="ws-stat-lbl">Скачиваний</div>
+                    <div class="ws-stat-val" id="ws-stat-views">0</div>
+                    <div class="ws-stat-lbl">Просмотров</div>
                   </div>
                   <div class="ws-stat">
                     <div class="ws-stat-val" id="ws-stat-mods">0</div>
@@ -550,6 +550,10 @@ if ($isAuthorized) {
                 <button type="button" class="hp-btn-edit ws-tab-btn" data-ws-tab="media">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                   Медиа
+                </button>
+                <button type="button" class="hp-btn-edit ws-tab-btn" data-ws-tab="assets">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                  Ассеты
                 </button>
               </div>
               <div class="hp-toolbar-spacer"></div>
@@ -595,6 +599,10 @@ if ($isAuthorized) {
                 <button type="button" class="hp-btn-edit ws-tab-btn" data-wsg-tab="media">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                   Медиа
+                </button>
+                <button type="button" class="hp-btn-edit ws-tab-btn" data-wsg-tab="assets">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                  Ассеты
                 </button>
               </div>
               <div class="hp-toolbar-spacer"></div>
@@ -1927,6 +1935,12 @@ function socialAuth(provider) {
           </span>
           <span class="create-menu-txt"><strong>Загрузить медиа</strong><em>Скриншоты для игры</em></span>
         </button>
+        <button type="button" class="create-menu-item" id="ws-type-asset">
+          <span class="create-menu-ico" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          </span>
+          <span class="create-menu-txt"><strong>Загрузить ассет</strong><em>Документы, механики, паки — игра необязательна</em></span>
+        </button>
       </div>
     </div>
   </div>
@@ -1975,6 +1989,106 @@ function socialAuth(provider) {
       <div class="submit-modal-foot">
         <button type="button" class="hp-btn-edit" data-close-ws-media-form>Отмена</button>
         <button type="button" class="hp-btn-save" id="ws-media-submit">Отправить на модерацию</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Мастерская: форма ассета ===== -->
+  <div class="submit-modal hidden" id="ws-asset-form-modal">
+    <div class="submit-modal-backdrop" data-close-ws-asset-form></div>
+    <div class="submit-modal-box" style="max-width:560px">
+      <div class="submit-modal-head">
+        <h2>Загрузка ассета</h2>
+        <button type="button" class="pub-modal-close" data-close-ws-asset-form aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="submit-modal-body">
+        <form id="ws-asset-form" class="ws-pub-form">
+          <label class="ws-field"><span>Название *</span>
+            <input type="text" name="title" class="auth-input" required maxlength="80" minlength="2" placeholder="Название ассета / документа / механики" />
+            <span class="field-counter" data-for="title" data-max="80">0 / 80</span>
+          </label>
+          <label class="ws-field"><span>Игра (необязательно)</span>
+            <select name="game_id" id="ws-asset-game" class="settings-select">
+              <option value="">Без привязки к игре</option>
+            </select>
+            <span class="settings-hint">Можно опубликовать гайд, реализацию механики или пак без указания игры</span>
+          </label>
+          <label class="ws-field"><span>Краткое описание</span>
+            <input type="text" name="short_description" class="auth-input" maxlength="160" placeholder="Одна строка для карточки" />
+            <span class="field-counter" data-for="short_description" data-max="160">0 / 160</span>
+          </label>
+          <div class="ws-field"><span>Описание *</span>
+            <div class="pub-rte" id="ws-asset-rte">
+              <div class="pub-rte-toolbar" role="toolbar" aria-label="Форматирование">
+                <button type="button" class="pub-rte-btn" data-cmd="bold" title="Жирный"><b>B</b></button>
+                <button type="button" class="pub-rte-btn" data-cmd="italic" title="Курсив"><i>I</i></button>
+                <button type="button" class="pub-rte-btn" data-cmd="underline" title="Подчёркнутый"><u>U</u></button>
+                <span class="pub-rte-sep"></span>
+                <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="h2" title="Заголовок">H2</button>
+                <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="h3" title="Подзаголовок">H3</button>
+                <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="p" title="Абзац">¶</button>
+                <span class="pub-rte-sep"></span>
+                <button type="button" class="pub-rte-btn" data-cmd="insertUnorderedList" title="Список">• List</button>
+                <button type="button" class="pub-rte-btn" data-cmd="insertOrderedList" title="Нумерация">1. List</button>
+                <button type="button" class="pub-rte-btn" data-cmd="createLink" title="Ссылка">🔗</button>
+                <button type="button" class="pub-rte-btn" data-cmd="removeFormat" title="Сбросить стиль">✕</button>
+              </div>
+              <div class="pub-rte-editor auth-input" id="ws-asset-desc-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Подробно: что это, зачем, как пользоваться…"></div>
+              <textarea class="hidden" name="description" id="ws-asset-desc" required></textarea>
+            </div>
+          </div>
+          <label class="ws-field"><span>Теги</span>
+            <input type="text" name="tags" class="auth-input" maxlength="200" placeholder="через запятую: механика, ui, tutorial" />
+          </label>
+          <div class="ws-field-row">
+            <div class="ws-field"><span>Обложка</span>
+              <div class="pub-file-card ws-file-card">
+                <label class="pub-file-btn" for="ws-asset-cover">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Выбрать
+                </label>
+                <input type="file" name="cover" id="ws-asset-cover" class="pub-file-input" accept="image/png,image/jpeg,image/webp" />
+                <div class="ws-file-hint" id="ws-asset-cover-hint">до 5 МБ</div>
+              </div>
+            </div>
+            <div class="ws-field"><span>Баннер</span>
+              <div class="pub-file-card ws-file-card">
+                <label class="pub-file-btn" for="ws-asset-banner">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Выбрать
+                </label>
+                <input type="file" name="banner" id="ws-asset-banner" class="pub-file-input" accept="image/png,image/jpeg,image/webp" />
+                <div class="ws-file-hint" id="ws-asset-banner-hint">до 5 МБ</div>
+              </div>
+            </div>
+          </div>
+          <div class="ws-field"><span>Скриншоты / превью</span>
+            <div class="pub-file-card ws-file-card">
+              <label class="pub-file-btn" for="ws-asset-shots">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Выбрать файлы
+              </label>
+              <input type="file" name="screenshots[]" id="ws-asset-shots" class="pub-file-input" accept="image/png,image/jpeg,image/webp" multiple />
+              <div class="ws-file-hint" id="ws-asset-shots-hint">До 10 шт., до 5 МБ</div>
+            </div>
+          </div>
+          <div class="ws-field"><span>Файл (архив, документ…)</span>
+            <div class="pub-file-card ws-file-card">
+              <label class="pub-file-btn" for="ws-asset-file">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Выбрать файл
+              </label>
+              <input type="file" name="asset_file" id="ws-asset-file" class="pub-file-input" accept=".zip,.rar,.7z,.pdf,.txt,.md,.doc,.docx,.json,.unitypackage,.fbx,.blend,.psd" />
+              <div class="ws-file-hint" id="ws-asset-file-hint">ZIP / PDF / документ, до 500 МБ</div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="submit-modal-foot">
+        <button type="button" class="hp-btn-edit" data-close-ws-asset-form>Отмена</button>
+        <button type="button" class="hp-btn-save" id="ws-asset-submit">Отправить на модерацию</button>
       </div>
     </div>
   </div>
@@ -2168,6 +2282,45 @@ function socialAuth(provider) {
             <span id="ws-modv-game"></span>
             <button type="button" class="ws-like-btn" id="ws-modv-like">♥ <span>0</span></button>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Просмотр ассета ===== -->
+  <div class="submit-modal hidden" id="ws-asset-view-modal">
+    <div class="submit-modal-backdrop" data-close-ws-asset-view></div>
+    <div class="submit-modal-box ws-view-box ws-asset-view-box">
+      <div class="submit-modal-head ws-assetv-head">
+        <h2 class="ws-assetv-title" id="ws-assetv-title">Ассет</h2>
+        <button type="button" class="pub-modal-close" data-close-ws-asset-view aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="ws-assetv-split">
+        <div class="ws-assetv-left">
+          <div class="gp-gallery" id="ws-assetv-gallery">
+            <div class="gp-gallery-viewport">
+              <div class="gp-gallery-main" id="ws-assetv-main">
+                <img id="ws-assetv-main-img" alt="" />
+              </div>
+            </div>
+            <div class="gp-gallery-thumbs" id="ws-assetv-thumbs"></div>
+          </div>
+          <div class="gp-section gp-section-builds" id="ws-assetv-files-wrap">
+            <h2 class="gp-block-title">Сборки и файлы</h2>
+            <div id="ws-assetv-files" class="ws-asset-files modal-builds"></div>
+            <div class="ws-assetv-meta">
+              <span id="ws-assetv-author"></span>
+              <span id="ws-assetv-game"></span>
+              <span class="ws-assetv-statline" id="ws-assetv-stats-line"></span>
+              <button type="button" class="ws-like-btn" id="ws-assetv-like">♥ <span>0</span></button>
+            </div>
+          </div>
+        </div>
+        <div class="ws-assetv-right">
+          <h2 class="gp-block-title">Об ассете</h2>
+          <div class="gp-description" id="ws-assetv-desc"></div>
         </div>
       </div>
     </div>

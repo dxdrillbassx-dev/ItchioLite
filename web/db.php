@@ -490,14 +490,62 @@ function getDB() {
             }
         } catch (Throwable $e) {}
 
+        $pdo->exec("CREATE TABLE IF NOT EXISTS workshop_assets (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            game_id INT UNSIGNED DEFAULT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL DEFAULT '',
+            short_description VARCHAR(512) DEFAULT NULL,
+            description TEXT,
+            cover_url VARCHAR(512) DEFAULT NULL,
+            banner_url VARCHAR(512) DEFAULT NULL,
+            screenshots TEXT,
+            file_url VARCHAR(512) DEFAULT NULL,
+            file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            files TEXT,
+            downloads INT UNSIGNED NOT NULL DEFAULT 0,
+            likes INT UNSIGNED NOT NULL DEFAULT 0,
+            views INT UNSIGNED NOT NULL DEFAULT 0,
+            tags VARCHAR(512) NOT NULL DEFAULT '',
+            status ENUM('draft','pending','published','rejected') NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_wa_game (game_id),
+            INDEX idx_wa_user (user_id),
+            INDEX idx_wa_status_created (status, created_at),
+            INDEX idx_wa_downloads (downloads),
+            INDEX idx_wa_likes (likes)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        try {
+            $cols = [
+                'short_description' => 'VARCHAR(512) DEFAULT NULL',
+                'banner_url' => 'VARCHAR(512) DEFAULT NULL',
+                'screenshots' => 'TEXT',
+                'files' => 'TEXT',
+                'views' => 'INT UNSIGNED NOT NULL DEFAULT 0',
+                'tags' => "VARCHAR(512) NOT NULL DEFAULT ''",
+            ];
+            foreach ($cols as $col => $def) {
+                $chk = $pdo->query("SHOW COLUMNS FROM workshop_assets LIKE " . $pdo->quote($col))->fetch();
+                if (!$chk) $pdo->exec("ALTER TABLE workshop_assets ADD COLUMN `$col` $def");
+            }
+        } catch (Throwable $e) {}
+
         $pdo->exec("CREATE TABLE IF NOT EXISTS workshop_likes (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             user_id INT UNSIGNED NOT NULL,
-            target_type ENUM('mod','media') NOT NULL,
+            target_type ENUM('mod','media','asset') NOT NULL,
             target_id INT UNSIGNED NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY uq_ws_like (user_id, target_type, target_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // миграция ENUM likes: добавить asset если таблица уже была
+        try {
+            $pdo->exec("ALTER TABLE workshop_likes MODIFY COLUMN target_type ENUM('mod','media','asset') NOT NULL");
+        } catch (Throwable $e) {}
 
         return $pdo;
     } catch (PDOException $e) {

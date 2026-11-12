@@ -30,6 +30,20 @@ function ws_int(array $a, string $k, int $d = 0): int {
     return array_key_exists($k, $a) ? (int)$a[$k] : $d;
 }
 
+
+function ws_notify_admins(PDO $pdo, string $title, string $body, array $meta = []): void {
+    try {
+        $admins = $pdo->query("SELECT id FROM users WHERE role = 'admin'")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if (!$admins) return;
+        $st = $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)");
+        $metaJson = json_encode($meta, JSON_UNESCAPED_UNICODE);
+        foreach ($admins as $a) {
+            $st->execute([(int)$a['id'], 'workshop_review', $title, $body, $metaJson]);
+        }
+    } catch (Throwable $e) {}
+}
+
+
 try {
     $pdo = getDB();
 } catch (Throwable $e) {
@@ -43,10 +57,17 @@ try {
         case 'stats': {
             $games = (int)$pdo->query("SELECT COUNT(*) FROM games WHERE (status = 'published' OR (status IS NULL AND COALESCE(is_published,1) = 1)) AND COALESCE(category,'game') = 'game'")->fetchColumn();
             $mods = 0;
-            $downloads = 0;
+            $views = 0;
             try {
                 $mods = (int)$pdo->query("SELECT COUNT(*) FROM workshop_mods WHERE status = 'published'")->fetchColumn();
-                $downloads = (int)$pdo->query("SELECT COALESCE(SUM(downloads),0) FROM workshop_mods WHERE status = 'published'")->fetchColumn();
+            } catch (Throwable $e) {}
+            try {
+                $vMods = (int)$pdo->query("SELECT COALESCE(SUM(views),0) FROM workshop_mods WHERE status = 'published'")->fetchColumn();
+                $vMedia = 0;
+                $vAssets = 0;
+                try { $vMedia = (int)$pdo->query("SELECT COALESCE(SUM(views),0) FROM workshop_media WHERE status = 'published'")->fetchColumn(); } catch (Throwable $e) {}
+                try { $vAssets = (int)$pdo->query("SELECT COALESCE(SUM(views),0) FROM workshop_assets WHERE status = 'published'")->fetchColumn(); } catch (Throwable $e) {}
+                $views = $vMods + $vMedia + $vAssets;
             } catch (Throwable $e) {}
             $users = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
             // random banner from published games
@@ -60,7 +81,8 @@ try {
                 'stats' => [
                     'games' => $games,
                     'mods' => $mods,
-                    'downloads' => $downloads,
+                    'views' => $views,
+                    'downloads' => $views, // backward-compat
                     'users' => $users,
                 ],
                 'banner' => $banner,
@@ -130,6 +152,7 @@ try {
             if (!$game) ws_json(['ok' => false, 'error' => 'Игра не найдена'], 404);
             $modsCount = 0;
             $mediaCount = 0;
+            $assetsCount = 0;
             try {
                 $c = $pdo->prepare("SELECT COUNT(*) FROM workshop_mods WHERE game_id = ? AND status = 'published'");
                 $c->execute([$id]);
@@ -137,9 +160,13 @@ try {
                 $c = $pdo->prepare("SELECT COUNT(*) FROM workshop_media WHERE game_id = ? AND status = 'published'");
                 $c->execute([$id]);
                 $mediaCount = (int)$c->fetchColumn();
+                $c = $pdo->prepare("SELECT COUNT(*) FROM workshop_assets WHERE game_id = ? AND status = 'published'");
+                $c->execute([$id]);
+                $assetsCount = (int)$c->fetchColumn();
             } catch (Throwable $e) {}
             $game['mods_count'] = $modsCount;
             $game['media_count'] = $mediaCount;
+            $game['assets_count'] = $assetsCount;
             ws_json(['ok' => true, 'game' => $game]);
         }
 
@@ -389,6 +416,7 @@ try {
             if (!$u || ($u['role'] ?? '') !== 'admin') ws_json(['ok' => false, 'error' => 'Только для админов'], 403);
             $mods = [];
             $media = [];
+            $assets = [];
             try {
                 $st = $pdo->query("SELECT m.id, m.title, m.cover_url, m.status, m.created_at, m.game_id,
                     g.title AS game_title, u.username AS submitter
@@ -409,7 +437,17 @@ try {
                     ORDER BY wm.created_at ASC");
                 $media = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
             } catch (Throwable $e) {}
-            ws_json(['ok' => true, 'mods' => $mods, 'media' => $media]);
+            try {
+                $st = $pdo->query("SELECT a.id, a.title, a.cover_url, a.status, a.created_at, a.game_id,
+                    g.title AS game_title, u.username AS submitter
+                    FROM workshop_assets a
+                    LEFT JOIN games g ON g.id = a.game_id
+                    LEFT JOIN users u ON u.id = a.user_id
+                    WHERE a.status = 'pending'
+                    ORDER BY a.created_at ASC");
+                $assets = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable $e) {}
+            ws_json(['ok' => true, 'mods' => $mods, 'media' => $media, 'assets' => $assets]);
         }
 
         case 'admin_set_status': {
@@ -417,11 +455,11 @@ try {
             $u = function_exists('getCurrentUser') ? getCurrentUser() : null;
             if (!$u || ($u['role'] ?? '') !== 'admin') ws_json(['ok' => false, 'error' => 'Только для админов'], 403);
             $raw = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
-            $type = in_array(($raw['type'] ?? ''), ['mod', 'media'], true) ? $raw['type'] : '';
+            $type = in_array(($raw['type'] ?? ''), ['mod', 'media', 'asset'], true) ? $raw['type'] : '';
             $id = (int)($raw['id'] ?? 0);
             $status = in_array(($raw['status'] ?? ''), ['published', 'rejected', 'pending'], true) ? $raw['status'] : '';
             if (!$type || $id <= 0 || !$status) ws_json(['ok' => false, 'error' => 'type/id/status required'], 400);
-            $table = $type === 'mod' ? 'workshop_mods' : 'workshop_media';
+            $table = $type === 'mod' ? 'workshop_mods' : ($type === 'media' ? 'workshop_media' : 'workshop_assets');
             $st = $pdo->prepare("UPDATE `$table` SET status = ? WHERE id = ?");
             $st->execute([$status, $id]);
             ws_json(['ok' => true, 'id' => $id, 'status' => $status]);
@@ -433,10 +471,10 @@ try {
             if (!$u) ws_json(['ok' => false, 'error' => 'Нужно войти'], 401);
             $uid = (int)$u['id'];
             $raw = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
-            $type = in_array(($raw['type'] ?? ''), ['mod','media'], true) ? $raw['type'] : '';
+            $type = in_array(($raw['type'] ?? ''), ['mod','media','asset'], true) ? $raw['type'] : '';
             $tid = (int)($raw['id'] ?? 0);
             if (!$type || $tid <= 0) ws_json(['ok' => false, 'error' => 'type/id required'], 400);
-            $table = $type === 'mod' ? 'workshop_mods' : 'workshop_media';
+            $table = $type === 'mod' ? 'workshop_mods' : ($type === 'media' ? 'workshop_media' : 'workshop_assets');
             try {
                 $chk = $pdo->prepare("SELECT 1 FROM workshop_likes WHERE user_id=? AND target_type=? AND target_id=?");
                 $chk->execute([$uid, $type, $tid]);
@@ -498,7 +536,10 @@ try {
 
             $st = $pdo->prepare("INSERT INTO workshop_media (game_id, user_id, title, description, image_url, images, status) VALUES (?,?,?,?,?,?, 'pending')");
             $st->execute([$gameId, $uid, $title, $desc, $urls[0], json_encode($urls, JSON_UNESCAPED_UNICODE)]);
-            ws_json(['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'status' => 'pending']);
+            $newId = (int)$pdo->lastInsertId();
+            $uname = (string)($u['username'] ?? 'user');
+            ws_notify_admins($pdo, 'Новое медиа на модерации', $uname . ' отправил «' . $title . '»', ['kind' => 'media', 'id' => $newId]);
+            ws_json(['ok' => true, 'id' => $newId, 'status' => 'pending']);
         }
 
         case 'submit_mod': {
@@ -591,7 +632,199 @@ try {
                 $coverUrl, $bannerUrl, $shots ? json_encode($shots, JSON_UNESCAPED_UNICODE) : null,
                 $fileUrl, $fileSize, $tags
             ]);
-            ws_json(['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'status' => 'pending']);
+            $newId = (int)$pdo->lastInsertId();
+            $uname = (string)($u['username'] ?? 'user');
+            ws_notify_admins($pdo, 'Новый мод на модерации', $uname . ' отправил «' . $title . '»', ['kind' => 'mod', 'id' => $newId, 'game_id' => $gameId]);
+            ws_json(['ok' => true, 'id' => $newId, 'status' => 'pending']);
+        }
+
+        case 'assets': {
+            $page = max(1, (int)($_GET['page'] ?? 1));
+            $limit = min(48, max(1, (int)($_GET['limit'] ?? 24)));
+            $offset = ($page - 1) * $limit;
+            $q = trim((string)($_GET['q'] ?? ''));
+            $gameId = (int)($_GET['game_id'] ?? 0);
+            $tag = trim((string)($_GET['tag'] ?? ''));
+            $where = ["a.status = 'published'"];
+            $params = [];
+            if ($gameId > 0) {
+                $where[] = 'a.game_id = ?';
+                $params[] = $gameId;
+            }
+            if ($q !== '') {
+                $where[] = '(a.title LIKE ? OR a.description LIKE ? OR a.short_description LIKE ?)';
+                $like = '%' . $q . '%';
+                $params[] = $like; $params[] = $like; $params[] = $like;
+            }
+            if ($tag !== '') {
+                $where[] = 'a.tags LIKE ?';
+                $params[] = '%' . $tag . '%';
+            }
+            $w = implode(' AND ', $where);
+            $from = "FROM workshop_assets a
+                LEFT JOIN games g ON g.id = a.game_id
+                LEFT JOIN users u ON u.id = a.user_id";
+            $cntSt = $pdo->prepare("SELECT COUNT(*) $from WHERE $w");
+            $cntSt->execute($params);
+            $total = (int)$cntSt->fetchColumn();
+            $sql = "SELECT a.*, u.username AS author_name, g.title AS game_title, g.cover_url AS game_cover, g.icon_url AS game_icon
+                $from WHERE $w ORDER BY a.created_at DESC LIMIT $limit OFFSET $offset";
+            $st = $pdo->prepare($sql);
+            $st->execute($params);
+            $list = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            ws_json(['ok' => true, 'assets' => $list, 'total' => $total, 'page' => $page, 'limit' => $limit]);
+        }
+
+        case 'asset': {
+            $id = (int)($_GET['id'] ?? 0);
+            if ($id <= 0) ws_json(['ok' => false, 'error' => 'id required'], 400);
+            $st = $pdo->prepare("SELECT a.*, u.username AS author_name, g.title AS game_title, g.cover_url AS game_cover, g.icon_url AS game_icon, g.slug AS game_slug
+                FROM workshop_assets a
+                LEFT JOIN games g ON g.id = a.game_id
+                LEFT JOIN users u ON u.id = a.user_id
+                WHERE a.id = ? AND a.status = 'published'");
+            $st->execute([$id]);
+            $item = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$item) ws_json(['ok' => false, 'error' => 'Ассет не найден'], 404);
+            try {
+                $pdo->prepare("UPDATE workshop_assets SET views = views + 1 WHERE id = ?")->execute([$id]);
+                $item['views'] = (int)($item['views'] ?? 0) + 1;
+            } catch (Throwable $e) {}
+            $shots = [];
+            if (!empty($item['screenshots'])) {
+                $decoded = json_decode($item['screenshots'], true);
+                if (is_array($decoded)) $shots = array_values(array_filter($decoded));
+            }
+            if (!$shots && !empty($item['cover_url'])) $shots = [$item['cover_url']];
+            $item['screenshots_list'] = $shots;
+            $files = [];
+            if (!empty($item['files'])) {
+                $fd = json_decode($item['files'], true);
+                if (is_array($fd)) $files = $fd;
+            }
+            if (!$files && !empty($item['file_url'])) {
+                $files = [['url' => $item['file_url'], 'name' => basename($item['file_url']), 'size' => (int)($item['file_size'] ?? 0)]];
+            }
+            $item['files_list'] = $files;
+            $liked = false;
+            try {
+                if (function_exists('getCurrentUser')) {
+                    $cu = getCurrentUser();
+                    if ($cu) {
+                        $lk = $pdo->prepare("SELECT 1 FROM workshop_likes WHERE user_id=? AND target_type='asset' AND target_id=?");
+                        $lk->execute([(int)$cu['id'], $id]);
+                        $liked = (bool)$lk->fetchColumn();
+                    }
+                }
+            } catch (Throwable $e) {}
+            $item['liked'] = $liked;
+            ws_json(['ok' => true, 'asset' => $item]);
+        }
+
+        case 'submit_asset': {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') ws_json(['ok' => false, 'error' => 'POST only'], 405);
+            $u = function_exists('getCurrentUser') ? getCurrentUser() : null;
+            if (!$u) ws_json(['ok' => false, 'error' => 'Нужно войти'], 401);
+            $uid = (int)$u['id'];
+            $gameId = (int)($_POST['game_id'] ?? 0);
+            $title = trim((string)($_POST['title'] ?? ''));
+            $description = trim((string)($_POST['description'] ?? ''));
+            $short = trim((string)($_POST['short_description'] ?? ''));
+            $tags = trim((string)($_POST['tags'] ?? ''));
+            if ($title === '') ws_json(['ok' => false, 'error' => 'Укажите название'], 400);
+            if ($description === '') ws_json(['ok' => false, 'error' => 'Напишите описание'], 400);
+
+            // игра необязательна
+            if ($gameId > 0) {
+                $g = $pdo->prepare("SELECT id FROM games WHERE id = ? AND (status = 'published' OR (status IS NULL AND COALESCE(is_published,1) = 1))");
+                $g->execute([$gameId]);
+                if (!$g->fetchColumn()) $gameId = 0;
+            } else {
+                $gameId = null;
+            }
+
+            $base = dirname(__DIR__) . '/uploads/workshop/assets/' . $uid;
+            if (!is_dir($base)) @mkdir($base, 0755, true);
+
+            $coverUrl = null;
+            $bannerUrl = null;
+            $shots = [];
+            $allowedImg = ['image/jpeg','image/png','image/webp','image/gif'];
+
+            $saveImg = function($f, $subdir) use ($base, $uid, $allowedImg) {
+                if (empty($f) || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return null;
+                $mime = $f['type'] ?? (function_exists('mime_content_type') ? @mime_content_type($f['tmp_name']) : '');
+                if ($mime && !in_array($mime, $allowedImg, true)) return null;
+                $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION) ?: 'jpg');
+                if (!in_array($ext, ['jpg','jpeg','png','webp','gif'], true)) $ext = 'jpg';
+                $dir = $base . '/' . $subdir;
+                if (!is_dir($dir)) @mkdir($dir, 0755, true);
+                $fname = substr($subdir, 0, 1) . '_' . time() . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
+                if (!@move_uploaded_file($f['tmp_name'], $dir . '/' . $fname)) return null;
+                return 'uploads/workshop/assets/' . $uid . '/' . $subdir . '/' . $fname;
+            };
+
+            if (!empty($_FILES['cover'])) $coverUrl = $saveImg($_FILES['cover'], 'covers');
+            if (!empty($_FILES['banner'])) $bannerUrl = $saveImg($_FILES['banner'], 'banners');
+
+            if (!empty($_FILES['screenshots'])) {
+                $names = $_FILES['screenshots']['name'];
+                if (!is_array($names)) $names = [$names];
+                $tmps = is_array($_FILES['screenshots']['tmp_name']) ? $_FILES['screenshots']['tmp_name'] : [$_FILES['screenshots']['tmp_name']];
+                $errs = is_array($_FILES['screenshots']['error']) ? $_FILES['screenshots']['error'] : [$_FILES['screenshots']['error']];
+                $types = is_array($_FILES['screenshots']['type'] ?? null) ? $_FILES['screenshots']['type'] : [$_FILES['screenshots']['type'] ?? ''];
+                $dir = $base . '/shots';
+                if (!is_dir($dir)) @mkdir($dir, 0755, true);
+                foreach ($names as $i => $name) {
+                    if (($errs[$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+                    $mime = $types[$i] ?? '';
+                    if ($mime && !in_array($mime, $allowedImg, true)) continue;
+                    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION) ?: 'jpg');
+                    if (!in_array($ext, ['jpg','jpeg','png','webp','gif'], true)) $ext = 'jpg';
+                    $fname = 's_' . time() . '_' . $i . '_' . bin2hex(random_bytes(2)) . '.' . $ext;
+                    if (@move_uploaded_file($tmps[$i], $dir . '/' . $fname)) {
+                        $shots[] = 'uploads/workshop/assets/' . $uid . '/shots/' . $fname;
+                    }
+                }
+            }
+            if (!$coverUrl && $shots) $coverUrl = $shots[0];
+
+            $fileUrl = null;
+            $fileSize = 0;
+            $filesList = [];
+            if (!empty($_FILES['asset_file']) && ($_FILES['asset_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+                $f = $_FILES['asset_file'];
+                $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION) ?: 'zip');
+                if (!in_array($ext, ['zip','rar','7z','pdf','txt','md','doc','docx','json','unitypackage','fbx','blend','psd','ai'], true)) $ext = 'zip';
+                $dir = $base . '/files';
+                if (!is_dir($dir)) @mkdir($dir, 0755, true);
+                $fname = 'asset_' . time() . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
+                if (@move_uploaded_file($f['tmp_name'], $dir . '/' . $fname)) {
+                    $fileUrl = 'uploads/workshop/assets/' . $uid . '/files/' . $fname;
+                    $fileSize = (int)$f['size'];
+                    $filesList[] = ['url' => $fileUrl, 'name' => $f['name'], 'size' => $fileSize];
+                }
+            }
+
+            $slug = preg_replace('~[^a-z0-9]+~', '-', strtolower(preg_replace('~[^\p{L}\p{N}]+~u', '-', $title)));
+            $slug = trim($slug, '-') ?: ('asset-' . time());
+
+            $st = $pdo->prepare("INSERT INTO workshop_assets
+                (game_id, user_id, title, slug, short_description, description, cover_url, banner_url, screenshots, file_url, file_size, files, tags, status)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')");
+            $st->execute([
+                $gameId, $uid, $title, $slug,
+                $short ?: mb_substr($description, 0, 500),
+                $description, $coverUrl, $bannerUrl,
+                $shots ? json_encode($shots, JSON_UNESCAPED_UNICODE) : null,
+                $fileUrl, $fileSize,
+                $filesList ? json_encode($filesList, JSON_UNESCAPED_UNICODE) : null,
+                $tags
+            ]);
+            $newId = (int)$pdo->lastInsertId();
+            $uname = (string)($u['username'] ?? 'user');
+            ws_notify_admins($pdo, 'Новый ассет на модерации', $uname . ' отправил «' . $title . '»', ['kind' => 'asset', 'id' => $newId, 'game_id' => $gameId]);
+            ws_json(['ok' => true, 'id' => $newId, 'status' => 'pending']);
         }
 
         default:

@@ -10761,7 +10761,7 @@ async function refreshAdminPendingBadge() {
     } catch (e) {}
     try {
       const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending&_t=' + Date.now());
-      if (ws && ws.ok) total += (ws.mods || []).length + (ws.media || []).length;
+      if (ws && ws.ok) total += (ws.mods || []).length + (ws.media || []).length + (ws.assets || []).length;
     } catch (e) {}
     try {
       const bd = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=pending_builds&_t=' + Date.now());
@@ -10785,12 +10785,13 @@ async function loadAdminPending() {
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     const games = data.games || [];
 
-    let mods = [], media = [], builds = [];
+    let mods = [], media = [], assets = [], builds = [];
     try {
       const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending');
       if (ws && ws.ok) {
         mods = ws.mods || [];
         media = ws.media || [];
+        assets = ws.assets || [];
       }
     } catch (e) {}
     try {
@@ -10798,7 +10799,7 @@ async function loadAdminPending() {
       if (bd && bd.ok) builds = bd.builds || [];
     } catch (e) {}
 
-    const total = games.length + mods.length + media.length + builds.length;
+    const total = games.length + mods.length + media.length + assets.length + builds.length;
     updateAdminPendingBadge(total);
     if (!total) {
       list.innerHTML = '<div class="friends-empty">Нет заявок на модерации</div>';
@@ -10855,6 +10856,17 @@ async function loadAdminPending() {
           </div>
         </button>`).join(''));
     }
+    if (assets.length) {
+      parts.push('<div class="admin-pending-section">Ассеты</div>');
+      parts.push(assets.map(m => `
+        <button type="button" class="admin-pending-item" data-kind="asset" data-id="${m.id}">
+          <img src="${escapeHtml(m.cover_url || '')}" alt="" onerror="this.style.display='none'" />
+          <div>
+            <div class="t">${escapeHtml(m.title || 'Ассет')}</div>
+            <div class="s">${escapeHtml(m.submitter || '—')} · ${escapeHtml(m.game_title || 'без игры')}</div>
+          </div>
+        </button>`).join(''));
+    }
     list.innerHTML = parts.join('');
 
     $$('.admin-pending-item', list).forEach(btn => {
@@ -10864,6 +10876,7 @@ async function loadAdminPending() {
         if (kind === 'game') openAdminGame(id);
         else if (kind === 'mod') openAdminWorkshopItem('mod', id);
         else if (kind === 'media') openAdminWorkshopItem('media', id);
+        else if (kind === 'asset') openAdminWorkshopItem('asset', id);
       });
     });
     $$('[data-approve-build]', list).forEach(btn => {
@@ -10927,7 +10940,7 @@ async function openAdminWorkshopItem(type, id) {
   window.__wsAdminItem = { type, id };
   const title = document.getElementById('ws-admin-mod-title');
   const body = document.getElementById('ws-admin-mod-body');
-  if (title) title.textContent = type === 'mod' ? 'Модерация мода' : 'Модерация медиа';
+  if (title) title.textContent = type === 'mod' ? 'Модерация мода' : (type === 'asset' ? 'Модерация ассета' : 'Модерация медиа');
   if (body) body.innerHTML = '<div class="loading">Загрузка…</div>';
   existing.classList.remove('hidden');
 
@@ -10936,14 +10949,14 @@ async function openAdminWorkshopItem(type, id) {
     const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending');
     let item = null;
     if (ws && ws.ok) {
-      const arr = type === 'mod' ? (ws.mods || []) : (ws.media || []);
+      const arr = type === 'mod' ? (ws.mods || []) : (type === 'asset' ? (ws.assets || []) : (ws.media || []));
       item = arr.find(x => +x.id === +id) || null;
     }
     if (body) {
       if (!item) {
         body.innerHTML = '<p>Заявка #' + id + '</p>';
       } else {
-        const cover = type === 'mod' ? (item.cover_url || '') : (item.image_url || '');
+        const cover = type === 'media' ? (item.image_url || '') : (item.cover_url || '');
         body.innerHTML = `
           ${cover ? `<img src="${escapeHtml(cover)}" alt="" style="max-width:100%;max-height:200px;border-radius:10px;margin-bottom:12px;object-fit:cover" />` : ''}
           <div style="font-weight:700;font-size:1.05rem;color:var(--text-bright);margin-bottom:6px">${escapeHtml(item.title || '')}</div>
@@ -13665,7 +13678,7 @@ async function loadWorkshopStats() {
     if (!data || !data.ok) return;
     const s = data.stats || {};
     const el = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = wsFormatNum(v); };
-    el('ws-stat-downloads', s.downloads);
+    el('ws-stat-views', s.views != null ? s.views : s.downloads);
     el('ws-stat-mods', s.mods);
     el('ws-stat-users', s.users);
     const bg = document.getElementById('ws-hero-bg');
@@ -13698,10 +13711,15 @@ function updateWorkshopSub() {
     const n = s.mods || 0;
     hide = !n && !window.__wsHasListContent;
     text = n ? 'Изучите лучшие модификации в интернете' : '';
-  } else {
+  } else if (tab === 'media') {
     const n = s.media || 0;
     hide = !n && !window.__wsHasListContent;
     text = n ? 'Лучшая галерея в интернете' : '';
+  } else if (tab === 'assets') {
+    hide = !window.__wsHasListContent;
+    text = 'Гайды, механики, паки и всё связанное с играми';
+  } else {
+    text = '';
   }
   sub.textContent = text;
   sub.classList.toggle('is-hidden', hide || !text);
@@ -13889,6 +13907,113 @@ async function loadWorkshopTags() {
   }
 }
 
+
+// ---------- Workshop list cache + async views ----------
+window.__wsListCache = window.__wsListCache || Object.create(null);
+window.__wsgListCache = window.__wsgListCache || Object.create(null);
+window.__wsViewsLocal = window.__wsViewsLocal || Object.create(null);
+window.__wsViewedSession = window.__wsViewedSession || Object.create(null);
+
+function wsCacheKey(prefix, tab, extra) {
+  try { return prefix + ':' + tab + ':' + JSON.stringify(extra || {}); }
+  catch (e) { return prefix + ':' + tab + ':' + String(Date.now()); }
+}
+
+function wsGetCachedViews(type, id, fallback) {
+  const k = type + ':' + id;
+  if (window.__wsViewsLocal[k] != null) return window.__wsViewsLocal[k];
+  return fallback != null ? (+fallback || 0) : 0;
+}
+
+function wsBumpViewsLocal(type, id, absolute) {
+  const k = type + ':' + id;
+  const prevLocal = window.__wsViewsLocal[k];
+  let v;
+  if (absolute != null) v = Math.max(0, +absolute || 0);
+  else v = (prevLocal != null ? prevLocal : 0) + 1;
+  const firstOpen = !window.__wsViewedSession[k];
+  if (firstOpen) window.__wsViewedSession[k] = 1;
+  window.__wsViewsLocal[k] = v;
+  const sel = type === 'mod' ? '[data-mod-id="' + id + '"]'
+    : (type === 'media' ? '[data-media-id="' + id + '"]' : '[data-asset-id="' + id + '"]');
+  document.querySelectorAll(sel).forEach(card => {
+    const el = card.querySelector('[data-ws-views]');
+    if (el) el.textContent = '👁 ' + wsFormatNum(v);
+    card.setAttribute('data-views', String(v));
+  });
+  if (firstOpen) {
+    const hero = document.getElementById('ws-stat-views');
+    if (hero) {
+      const cur = parseInt(String(hero.textContent || '0').replace(/\D/g, ''), 10) || 0;
+      hero.textContent = wsFormatNum(cur + 1);
+      if (window.__wsStats) window.__wsStats.views = (window.__wsStats.views || cur) + 1;
+    }
+  }
+  const patchList = (list) => {
+    if (!Array.isArray(list)) return;
+    const item = list.find(x => +x.id === +id);
+    if (item) item.views = v;
+  };
+  Object.keys(window.__wsListCache || {}).forEach(key => {
+    const bag = window.__wsListCache[key];
+    if (!bag || !bag.list) return;
+    if (key.indexOf(':mods:') >= 0 && type === 'mod') patchList(bag.list);
+    if (key.indexOf(':media:') >= 0 && type === 'media') patchList(bag.list);
+    if (key.indexOf(':assets:') >= 0 && type === 'asset') patchList(bag.list);
+  });
+  Object.keys(window.__wsgListCache || {}).forEach(key => {
+    const bag = window.__wsgListCache[key];
+    if (!bag || !bag.list) return;
+    if (key.indexOf(':mods:') >= 0 && type === 'mod') patchList(bag.list);
+    if (key.indexOf(':media:') >= 0 && type === 'media') patchList(bag.list);
+    if (key.indexOf(':assets:') >= 0 && type === 'asset') patchList(bag.list);
+  });
+  return v;
+}
+
+function wsFixGridLayout(grid, tab) {
+  if (!grid) return;
+  grid.classList.toggle('is-mods', tab === 'mods' || tab === 'assets');
+  grid.classList.toggle('is-media', tab === 'media');
+  grid.classList.toggle('is-assets', tab === 'assets');
+  document.querySelectorAll('#view-workshop .ws-body, #view-workshop-game .ws-body').forEach(b => {
+    b.classList.add('ws-body--full');
+  });
+  void grid.offsetWidth;
+  requestAnimationFrame(function () {
+    grid.classList.toggle('is-mods', tab === 'mods' || tab === 'assets');
+    grid.classList.toggle('is-media', tab === 'media');
+    grid.classList.toggle('is-assets', tab === 'assets');
+    void grid.offsetWidth;
+  });
+}
+
+function wsApplyListToGrid(grid, tab, list, opts) {
+  opts = opts || {};
+  wsFixGridLayout(grid, tab);
+  grid.classList.remove('is-empty');
+  if (!list || !list.length) {
+    grid.classList.add('is-empty');
+    grid.innerHTML = wsEmptyHtml(opts.empty || 'Пусто');
+    return;
+  }
+  if (tab === 'games') {
+    grid.innerHTML = renderWorkshopGames(list);
+    grid.querySelectorAll('[data-ws-game-id]').forEach(card => {
+      card.addEventListener('click', function () {
+        openWorkshopGame(card.getAttribute('data-ws-game-id'));
+      });
+    });
+  } else if (tab === 'mods') {
+    grid.innerHTML = renderWorkshopMods(list);
+  } else if (tab === 'media') {
+    grid.innerHTML = renderWorkshopMedia(list);
+  } else if (tab === 'assets') {
+    grid.innerHTML = renderWorkshopAssets(list);
+  }
+  wsFixGridLayout(grid, tab);
+}
+
 function renderWorkshopGames(list) {
   if (!list.length) return '<div class="ws-empty">Игр в мастерской пока нет</div>';
   return list.map(g => {
@@ -13927,7 +14052,7 @@ function renderWorkshopMods(list) {
         <div class="ws-card-title">${escapeHtml(m.title || '')}</div>
         <div class="ws-card-sub">${escapeHtml(m.author_name || 'Автор')}</div>
         <div class="ws-card-stats">
-          <span>⬇ ${wsFormatNum(m.downloads)}</span>
+          <span data-ws-views>👁 ${wsFormatNum(wsGetCachedViews('mod', m.id, m.views))}</span>
           <span>♥ ${wsFormatNum(m.likes)}</span>
           <span>${wsFormatBytes(m.file_size)}</span>
         </div>
@@ -13948,77 +14073,120 @@ function renderWorkshopMedia(list) {
         <div class="ws-card-title">${escapeHtml(m.title || 'Скриншот')}</div>
         <div class="ws-card-sub">${escapeHtml(m.author_name || 'Автор')}</div>
         <div class="ws-card-stats">
-          <span>by ${escapeHtml(m.author_name || '')}</span>
           <span>♥ ${wsFormatNum(m.likes)}</span>
-          <span>👁 ${wsFormatNum(m.views)}</span>
+          <span data-ws-views>👁 ${wsFormatNum(wsGetCachedViews('media', m.id, m.views))}</span>
         </div>
       </div>
     </article>`;
   }).join('');
 }
 
-async function loadWorkshopList() {
+function renderWorkshopAssets(list) {
+  if (!list.length) return '<div class="ws-empty">Ассетов пока нет</div>';
+  return list.map(m => {
+    const cover = m.cover_url || m.banner_url || m.game_cover || '';
+    return `<article class="ws-mod-card" data-asset-id="${m.id}">
+      <div class="ws-card-cover" style="${cover ? "background-image:url('" + String(cover).replace(/'/g, '%27') + "')" : ''}"></div>
+      <div class="ws-card-shade"></div>
+      ${wsGameBadge(m)}
+      <div class="ws-card-info">
+        <div class="ws-card-title">${escapeHtml(m.title || '')}</div>
+        <div class="ws-card-sub">${escapeHtml(m.author_name || 'Автор')}</div>
+        <div class="ws-card-stats">
+          <span data-ws-views>👁 ${wsFormatNum(wsGetCachedViews('asset', m.id, m.views))}</span>
+          <span>♥ ${wsFormatNum(m.likes)}</span>
+          <span>${m.file_size ? wsFormatBytes(m.file_size) : '—'}</span>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+async function loadWorkshopList(opts) {
+  opts = opts || {};
+  const force = !!opts.force;
   const grid = document.getElementById('ws-grid');
   if (!grid) return;
   const tab = window.__wsTab || 'games';
   const f = window.__wsFilters || {};
-  grid.classList.toggle('is-mods', tab === 'mods');
-  grid.classList.toggle('is-media', tab === 'media');
-  grid.classList.remove('is-empty');
-  grid.innerHTML = '<div class="loading">Загрузка…</div>';
-  window.__wsHasListContent = false;
-  updateWorkshopSub();
+  const key = wsCacheKey('ws', tab, f);
+
+  const paint = (list, total) => {
+    window.__wsHasListContent = !!(list && list.length);
+    if (tab === 'games' && total != null) window.__wsGamesTotal = total;
+    updateWorkshopSub();
+    const emptyMsg = tab === 'games' ? 'Пока нет игр для модификации'
+      : (tab === 'mods' ? 'Модов пока нет'
+      : (tab === 'media' ? 'Медиа пока нет' : 'Ассетов пока нет — публикуйте гайды, механики, паки'));
+    wsApplyListToGrid(grid, tab, list, { empty: emptyMsg });
+  };
+
+  const cached = window.__wsListCache[key];
+  if (cached && cached.list && !force) {
+    paint(cached.list, cached.total);
+    if (!cached._refreshing && (Date.now() - (cached.ts || 0) > 15000)) {
+      cached._refreshing = true;
+      loadWorkshopList({ force: true, soft: true }).finally(() => { cached._refreshing = false; });
+    }
+    return;
+  }
+
+  if (!opts.soft) {
+    wsFixGridLayout(grid, tab);
+    grid.classList.remove('is-empty');
+    grid.innerHTML = '<div class="loading">Загрузка…</div>';
+    window.__wsHasListContent = false;
+    updateWorkshopSub();
+  }
+
   try {
+    let list = [];
+    let total = null;
     if (tab === 'games') {
       const params = new URLSearchParams({ action: 'games', limit: '48' });
       if (f.q) params.set('q', f.q);
       if (f.genre) params.set('genre', f.genre);
       const data = await fetchJSON(WS_API + '?' + params.toString());
-      const list = (data && data.games) || [];
-      window.__wsGamesTotal = data.total != null ? data.total : list.length;
-      window.__wsHasListContent = list.length > 0;
-      updateWorkshopSub();
-      if (!list.length) {
-        grid.classList.add('is-empty');
-        grid.innerHTML = wsEmptyHtml('Пока нет игр для модификации');
-      } else {
-        grid.innerHTML = renderWorkshopGames(list);
-        grid.querySelectorAll('[data-ws-game-id]').forEach(card => {
-          card.addEventListener('click', () => openWorkshopGame(card.getAttribute('data-ws-game-id')));
-        });
-      }
+      list = (data && data.games) || [];
+      total = data.total != null ? data.total : list.length;
     } else if (tab === 'mods') {
       const params = new URLSearchParams({ action: 'mods', limit: '48' });
       ['q','game','tag','lang','param','size_min','size_max','dl_min','dl_max','like_min','like_max'].forEach(k => {
         if (f[k]) params.set(k, f[k]);
       });
       const data = await fetchJSON(WS_API + '?' + params.toString());
-      const list = (data && data.mods) || [];
-      window.__wsHasListContent = list.length > 0;
-      updateWorkshopSub();
-      if (!list.length) {
-        grid.classList.add('is-empty');
-        grid.innerHTML = wsEmptyHtml('Модов пока нет');
-      } else {
-        grid.innerHTML = renderWorkshopMods(list);
-      }
-    } else {
+      list = (data && data.mods) || [];
+      total = data.total != null ? data.total : list.length;
+    } else if (tab === 'media') {
       const params = new URLSearchParams({ action: 'media', limit: '48' });
       if (f.game) params.set('game', f.game);
       const data = await fetchJSON(WS_API + '?' + params.toString());
-      const list = (data && data.media) || [];
-      window.__wsHasListContent = list.length > 0;
-      updateWorkshopSub();
-      if (!list.length) {
-        grid.classList.add('is-empty');
-        grid.innerHTML = wsEmptyHtml('Медиа пока нет');
-      } else {
-        grid.innerHTML = renderWorkshopMedia(list);
-      }
+      list = (data && data.media) || [];
+      total = data.total != null ? data.total : list.length;
+    } else if (tab === 'assets') {
+      const params = new URLSearchParams({ action: 'assets', limit: '48' });
+      if (f.q) params.set('q', f.q);
+      if (f.game) params.set('game_id', f.game);
+      if (f.tag) params.set('tag', f.tag);
+      const data = await fetchJSON(WS_API + '?' + params.toString());
+      list = (data && data.assets) || [];
+      total = data.total != null ? data.total : list.length;
     }
+    list.forEach(item => {
+      if (!item || item.id == null) return;
+      const type = tab === 'mods' ? 'mod' : (tab === 'media' ? 'media' : (tab === 'assets' ? 'asset' : null));
+      if (!type) return;
+      const local = window.__wsViewsLocal[type + ':' + item.id];
+      if (local != null) item.views = Math.max(+item.views || 0, local);
+    });
+    window.__wsListCache[key] = { list: list, total: total, ts: Date.now() };
+    paint(list, total);
   } catch (e) {
-    grid.classList.add('is-empty');
-    grid.innerHTML = wsEmptyHtml('Ошибка: ' + (e.message || 'неизвестно'));
+    if (!opts.soft) {
+      grid.classList.add('is-empty');
+      grid.innerHTML = wsEmptyHtml('Ошибка: ' + (e.message || 'неизвестно'));
+      wsFixGridLayout(grid, tab);
+    }
   }
 }
 
@@ -14037,10 +14205,14 @@ async function openWorkshop() {
   const head = document.getElementById('head-title');
   if (head) head.textContent = 'Мастерская';
   window.__wsTab = window.__wsTab || 'games';
-  window.__wsFilters = {};
+  // не сбрасываем фильтры/кэш при каждом заходе — только если явно пустые
+  if (!window.__wsFilters) window.__wsFilters = {};
   document.querySelectorAll('#ws-tabs .ws-tab-btn, #ws-tabs .hp-tab').forEach(t => {
     t.classList.toggle('active', t.getAttribute('data-ws-tab') === window.__wsTab);
   });
+  // layout body
+  const body = document.querySelector('#view-workshop .ws-body');
+  if (body) body.classList.add('ws-body--full');
   await loadWorkshopStats();
   renderWorkshopSide(window.__wsTab);
   await loadWorkshopList();
@@ -14051,7 +14223,7 @@ async function openWorkshopGame(id, tab) {
   id = parseInt(id, 10) || 0;
   if (!id) return;
   window.__wsgId = id;
-  window.__wsgTab = (tab === 'media' || tab === 'mods') ? tab : 'mods';
+  window.__wsgTab = (tab === 'media' || tab === 'mods' || tab === 'assets') ? tab : 'mods';
   $$('.view').forEach(v => v.classList.remove('active'));
   const view = document.getElementById('view-workshop-game');
   if (view) view.classList.add('active');
@@ -14061,6 +14233,7 @@ async function openWorkshopGame(id, tab) {
     url.searchParams.set('view', 'workshop');
     url.searchParams.set('wsg', String(id));
     if (window.__wsgTab === 'media') url.searchParams.set('wsg_tab', 'media');
+    else if (window.__wsgTab === 'assets') url.searchParams.set('wsg_tab', 'assets');
     else url.searchParams.delete('wsg_tab');
     history.pushState({}, '', url);
   } catch (e) {}
@@ -14102,6 +14275,7 @@ async function openWorkshopGame(id, tab) {
       meta.innerHTML = `
         <span>${g.mods_count || 0} модов</span>
         <span>${g.media_count || 0} медиа</span>
+        <span>${g.assets_count || 0} ассетов</span>
         ${g.genre ? '<span>' + escapeHtml(g.genre) + '</span>' : ''}
         ${g.developer_name || g.developer ? '<span>' + escapeHtml(g.developer_name || g.developer) + '</span>' : ''}`;
     }
@@ -14183,6 +14357,17 @@ function renderWorkshopGameSide() {
       });
     }
     loadWorkshopTagsInto('wsg-tag-list', () => loadWorkshopGameList());
+  } else if (tab === 'assets') {
+    side.innerHTML =
+      wsFilterField('Поиск', `<div class="search-field"><svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" class="auth-input" id="wsg-f-asset-q" placeholder="Название ассета" /></div>`);
+    const inp = document.getElementById('wsg-f-asset-q');
+    if (inp) {
+      let t;
+      inp.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => loadWorkshopGameList(), 280);
+      });
+    }
   } else {
     side.innerHTML = wsFilterField('Поиск', `<div class="search-field"><svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" class="auth-input" id="wsg-f-media-q" placeholder="Название" /></div>`);
     const inp = document.getElementById('wsg-f-media-q');
@@ -14220,54 +14405,80 @@ async function loadWorkshopTagsInto(boxId, onPick) {
   }
 }
 
-async function loadWorkshopGameList() {
+async function loadWorkshopGameList(opts) {
+  opts = opts || {};
+  const force = !!opts.force;
   const grid = document.getElementById('wsg-grid');
   const sub = document.getElementById('wsg-sub');
   if (!grid || !window.__wsgId) return;
   const tab = window.__wsgTab || 'mods';
-  grid.classList.toggle('is-mods', tab === 'mods');
-  grid.classList.toggle('is-media', tab === 'media');
-  grid.classList.remove('is-empty');
-  grid.innerHTML = '<div class="loading">Загрузка…</div>';
+  const gid = window.__wsgId;
+  const qEl = document.getElementById(tab === 'mods' ? 'wsg-f-q' : (tab === 'assets' ? 'wsg-f-asset-q' : 'wsg-f-media-q'));
+  const q = (qEl && qEl.value.trim()) || '';
+  const tagBtn = document.querySelector('#wsg-tag-list .ws-chip.active');
+  const tag = tagBtn ? (tagBtn.getAttribute('data-ws-tag') || '') : '';
+  const key = wsCacheKey('wsg', tab, { gid: gid, q: q, tag: tag });
+
+  const paint = (list) => {
+    if (sub) {
+      const label = tab === 'mods' ? 'Моды этой игры' : (tab === 'media' ? 'Медиа этой игры' : 'Ассеты этой игры');
+      sub.textContent = list.length ? label : '';
+      sub.classList.toggle('is-hidden', !list.length);
+    }
+    const empty = tab === 'mods' ? 'Модов для этой игры пока нет'
+      : (tab === 'media' ? 'Медиа для этой игры пока нет' : 'Ассетов для этой игры пока нет');
+    wsApplyListToGrid(grid, tab, list, { empty: empty });
+  };
+
+  const cached = window.__wsgListCache[key];
+  if (cached && cached.list && !force) {
+    paint(cached.list);
+    if (!cached._refreshing && (Date.now() - (cached.ts || 0) > 15000)) {
+      cached._refreshing = true;
+      loadWorkshopGameList({ force: true, soft: true }).finally(() => { cached._refreshing = false; });
+    }
+    return;
+  }
+
+  if (!opts.soft) {
+    wsFixGridLayout(grid, tab);
+    grid.classList.remove('is-empty');
+    grid.innerHTML = '<div class="loading">Загрузка…</div>';
+  }
+
   try {
     let list = [];
     if (tab === 'mods') {
-      const params = new URLSearchParams({ action: 'mods', game_id: String(window.__wsgId), limit: '48' });
-      const q = document.getElementById('wsg-f-q');
-      if (q && q.value.trim()) params.set('q', q.value.trim());
-      const tagBtn = document.querySelector('#wsg-tag-list .ws-chip.active');
-      if (tagBtn) params.set('tag', tagBtn.getAttribute('data-ws-tag') || '');
+      const params = new URLSearchParams({ action: 'mods', game_id: String(gid), limit: '48' });
+      if (q) params.set('q', q);
+      if (tag) params.set('tag', tag);
       const data = await fetchJSON(WS_API + '?' + params.toString());
       list = (data && data.mods) || [];
-      if (sub) {
-        sub.textContent = list.length ? 'Моды этой игры' : '';
-        sub.classList.toggle('is-hidden', !list.length);
-      }
-      if (!list.length) {
-        grid.classList.add('is-empty');
-        grid.innerHTML = wsEmptyHtml('Модов для этой игры пока нет');
-      } else {
-        grid.innerHTML = renderWorkshopMods(list);
-      }
+    } else if (tab === 'assets') {
+      const params = new URLSearchParams({ action: 'assets', game_id: String(gid), limit: '48' });
+      if (q) params.set('q', q);
+      const data = await fetchJSON(WS_API + '?' + params.toString());
+      list = (data && data.assets) || [];
     } else {
-      const params = new URLSearchParams({ action: 'media', game_id: String(window.__wsgId), limit: '48' });
+      const params = new URLSearchParams({ action: 'media', game_id: String(gid), limit: '48' });
       const data = await fetchJSON(WS_API + '?' + params.toString());
       list = (data && data.media) || [];
-      if (sub) {
-        sub.textContent = list.length ? 'Медиа этой игры' : '';
-        sub.classList.toggle('is-hidden', !list.length);
-      }
-      if (!list.length) {
-        grid.classList.add('is-empty');
-        grid.innerHTML = wsEmptyHtml('Медиа для этой игры пока нет');
-      } else {
-        grid.innerHTML = renderWorkshopMedia(list);
-      }
     }
+    list.forEach(item => {
+      if (!item || item.id == null) return;
+      const type = tab === 'mods' ? 'mod' : (tab === 'media' ? 'media' : 'asset');
+      const local = window.__wsViewsLocal[type + ':' + item.id];
+      if (local != null) item.views = Math.max(+item.views || 0, local);
+    });
+    window.__wsgListCache[key] = { list: list, ts: Date.now() };
+    paint(list);
   } catch (e) {
     if (sub) sub.classList.add('is-hidden');
-    grid.classList.add('is-empty');
-    grid.innerHTML = wsEmptyHtml('Ошибка: ' + (e.message || ''));
+    if (!opts.soft) {
+      grid.classList.add('is-empty');
+      grid.innerHTML = wsEmptyHtml('Ошибка: ' + (e.message || ''));
+      wsFixGridLayout(grid, tab);
+    }
   }
 }
 
@@ -14308,7 +14519,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(location.search);
     if (params.get('view') === 'workshop') {
       const wsg = parseInt(params.get('wsg') || '0', 10);
-      if (wsg) openWorkshopGame(wsg);
+      const wsgTab = params.get('wsg_tab') || '';
+      if (wsg) openWorkshopGame(wsg, wsgTab || undefined);
       else openWorkshop();
     }
   } catch (e) {}
@@ -14402,8 +14614,10 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-close-ws-type]')) wsCloseModal('ws-type-modal');
   if (t.closest('[data-close-ws-media-form]')) wsCloseModal('ws-media-form-modal');
   if (t.closest('[data-close-ws-mod-form]')) wsCloseModal('ws-mod-form-modal');
+  if (t.closest('[data-close-ws-asset-form]')) wsCloseModal('ws-asset-form-modal');
   if (t.closest('[data-close-ws-media-view]')) wsCloseModal('ws-media-view-modal');
   if (t.closest('[data-close-ws-mod-view]')) wsCloseModal('ws-mod-view-modal');
+  if (t.closest('[data-close-ws-asset-view]')) wsCloseModal('ws-asset-view-modal');
 
   if (t.closest('#ws-type-media')) {
     e.preventDefault();
@@ -14423,12 +14637,38 @@ document.addEventListener('click', (e) => {
     wsOpenModal('ws-mod-form-modal');
     return;
   }
+  if (t.closest('#ws-type-asset')) {
+    e.preventDefault();
+    wsCloseModal('ws-type-modal');
+    const form = document.getElementById('ws-asset-form');
+    if (form) form.reset();
+    const ed = document.getElementById('ws-asset-desc-editor');
+    const ta = document.getElementById('ws-asset-desc');
+    if (ed) ed.innerHTML = '';
+    if (ta) ta.value = '';
+    wsFillGamesSelect('ws-asset-game').then(() => {
+      const sel = document.getElementById('ws-asset-game');
+      if (sel && sel.options.length && sel.options[0].value === '') {
+        sel.options[0].textContent = 'Без привязки к игре';
+      }
+    });
+    if (typeof initWsAssetRte === 'function') initWsAssetRte();
+    wsOpenModal('ws-asset-form-modal');
+    return;
+  }
 
   // клик по карточке медиа
   const mediaCard = t.closest('.ws-media-card[data-media-id]');
   if (mediaCard) {
     e.preventDefault();
     openWorkshopMediaView(mediaCard.getAttribute('data-media-id'));
+    return;
+  }
+  // клик по карточке ассета
+  const assetCard = t.closest('[data-asset-id]');
+  if (assetCard) {
+    e.preventDefault();
+    openWorkshopAssetView(assetCard.getAttribute('data-asset-id'));
     return;
   }
   // клик по карточке мода
@@ -14450,8 +14690,32 @@ document.addEventListener('click', (e) => {
     wsToggleLike('mod', window.__wsModvId, '#ws-modv-like');
     return;
   }
+  if (t.closest('#ws-assetv-like')) {
+    e.preventDefault();
+    wsToggleLike('asset', window.__wsAssetvId, '#ws-assetv-like');
+    return;
+  }
   if (t.closest('#ws-modv-install')) {
     handleModInstallClick();
+    return;
+  }
+  const assetDl = t.closest('#ws-asset-view-modal .btn-download[data-asset-file], #ws-assetv-download');
+  if (assetDl) {
+    e.preventDefault();
+    e.stopPropagation();
+    const href = assetDl.getAttribute('data-asset-file') || window.__wsAssetvFile || '';
+    if (href) {
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = '';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } else {
+      toast('Файл не прикреплён');
+    }
     return;
   }
 });
@@ -15046,6 +15310,10 @@ async function openWorkshopMediaView(id) {
     const data = await fetchJSON(WS_API + '?action=media_item&id=' + id);
     if (!data || !data.ok || !data.media) throw new Error((data && data.error) || 'Не найдено');
     const m = data.media;
+    try {
+      if (m.views != null) wsBumpViewsLocal('media', id, +m.views);
+      else wsBumpViewsLocal('media', id);
+    } catch (e) {}
     const imgs = m.images_list || (m.image_url ? [m.image_url] : []);
     window.__wsMvImages = imgs;
     window.__wsMvIdx = 0;
@@ -15085,6 +15353,8 @@ async function openWorkshopModView(id) {
     const data = await fetchJSON(WS_API + '?action=mod&id=' + id);
     if (!data || !data.ok || !data.mod) throw new Error((data && data.error) || 'Не найдено');
     const m = data.mod;
+    try { if (m.views != null) wsBumpViewsLocal('mod', id, +m.views); else wsBumpViewsLocal('mod', id); } catch (e) {}
+
     window.__wsModvData = m;
     const shots = m.screenshots_list || [];
     window.__wsModvShots = shots;
@@ -15168,4 +15438,193 @@ async function wsToggleLike(type, id, btnSel) {
 }
 
 window.openWorkshopMediaView = openWorkshopMediaView;
+
+window.__wsAssetvId = 0;
+window.__wsAssetvFile = '';
+window.__wsAssetvShots = [];
+
+async function openWorkshopAssetView(id) {
+  id = parseInt(id, 10) || 0;
+  if (!id) return;
+  window.__wsAssetvId = id;
+  window.__wsAssetvFile = '';
+  try {
+    const data = await fetchJSON(WS_API + '?action=asset&id=' + id);
+    if (!data || !data.ok || !data.asset) {
+      toast((data && data.error) || 'Ассет не найден');
+      return;
+    }
+    const a = data.asset;
+    try {
+      if (a.views != null) wsBumpViewsLocal('asset', id, +a.views);
+      else wsBumpViewsLocal('asset', id);
+    } catch (e) {}
+    const titleEl = document.getElementById('ws-assetv-title');
+    if (titleEl) titleEl.textContent = a.title || 'Ассет';
+
+    const likeBtn = document.getElementById('ws-assetv-like');
+    if (likeBtn) {
+      likeBtn.classList.toggle('is-liked', !!a.liked);
+      const sp = likeBtn.querySelector('span');
+      if (sp) sp.textContent = wsFormatNum(a.likes);
+    }
+    const statsLine = document.getElementById('ws-assetv-stats-line');
+    if (statsLine) {
+      statsLine.textContent = '👁 ' + wsFormatNum(a.views) + ' · ⬇ ' + wsFormatNum(a.downloads) + ' · ♥ ' + wsFormatNum(a.likes);
+    }
+
+    const desc = document.getElementById('ws-assetv-desc');
+    if (desc) {
+      const raw = a.description || a.short_description || '';
+      desc.innerHTML = typeof formatGameDescription === 'function' ? formatGameDescription(raw) : escapeHtml(raw).replace(/\n/g, '<br>');
+      desc.classList.remove('gp-description--collapsed');
+      desc.scrollTop = 0;
+    }
+    const author = document.getElementById('ws-assetv-author');
+    if (author) author.textContent = a.author_name ? ('Автор: ' + a.author_name) : '';
+    const gameEl = document.getElementById('ws-assetv-game');
+    if (gameEl) gameEl.textContent = a.game_title ? ('Игра: ' + a.game_title) : 'Без привязки к игре';
+
+    // галерея: скрины → cover → пусто
+    let shots = a.screenshots_list || [];
+    if (!shots.length && a.cover_url) shots = [a.cover_url];
+    if (!shots.length && a.banner_url) shots = [a.banner_url];
+    window.__wsAssetvShots = shots;
+    const gal = document.getElementById('ws-assetv-gallery');
+    const mainImg = document.getElementById('ws-assetv-main-img');
+    const thumbs = document.getElementById('ws-assetv-thumbs');
+    if (gal) gal.hidden = false;
+    if (mainImg) {
+      if (shots.length) {
+        mainImg.src = shots[0];
+        mainImg.style.display = '';
+      } else {
+        mainImg.removeAttribute('src');
+        mainImg.style.display = 'none';
+      }
+    }
+    if (thumbs) {
+      if (shots.length > 1) {
+        thumbs.innerHTML = shots.map((src, i) =>
+          `<button type="button" class="gp-thumb ${i===0?'active':''}" data-src="${escapeHtml(src)}"><img src="${escapeHtml(src)}" alt="" /></button>`
+        ).join('');
+        thumbs.style.display = '';
+        thumbs.querySelectorAll('.gp-thumb').forEach(btn => {
+          btn.addEventListener('click', () => {
+            thumbs.querySelectorAll('.gp-thumb').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (mainImg && btn.dataset.src) {
+              mainImg.src = btn.dataset.src;
+              mainImg.style.display = '';
+            }
+          });
+        });
+      } else {
+        thumbs.innerHTML = '';
+        thumbs.style.display = 'none';
+      }
+    }
+
+    const files = a.files_list || [];
+    const filesBox = document.getElementById('ws-assetv-files');
+    if (filesBox) {
+      if (!files.length) {
+        filesBox.innerHTML = '<p class="modal-builds-empty">Файлы не прикреплены</p>';
+        window.__wsAssetvFile = '';
+      } else {
+        window.__wsAssetvFile = files[0].url || '';
+        filesBox.innerHTML = files.map(f => {
+          const name = escapeHtml(f.name || basenameSafe(f.url) || 'файл');
+          const size = f.size ? (typeof formatSize === 'function' ? formatSize(f.size) : wsFormatBytes(f.size)) : '';
+          const url = escapeHtml(f.url || '');
+          return `<div class="build-row">
+            <div class="build-info">
+              <span class="build-version">${name}</span>
+              ${size ? `<span class="build-size">${size}</span>` : ''}
+            </div>
+            <button type="button" class="btn-download" data-asset-file="${url}">Скачать</button>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    wsOpenModal('ws-asset-view-modal');
+  } catch (err) {
+    toast(err.message || 'Ошибка загрузки ассета');
+  }
+}
+
+function basenameSafe(u) {
+  try { return String(u).split('/').pop() || ''; } catch (e) { return ''; }
+}
+window.openWorkshopAssetView = openWorkshopAssetView;
+
 window.openWorkshopModView = openWorkshopModView;
+
+
+function initWsAssetRte() {
+  const root = document.getElementById('ws-asset-rte');
+  const ed = document.getElementById('ws-asset-desc-editor');
+  const ta = document.getElementById('ws-asset-desc');
+  if (!root || !ed || root.dataset.bound === '1') return;
+  root.dataset.bound = '1';
+  root.querySelectorAll('.pub-rte-btn').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      ed.focus();
+      const cmd = btn.getAttribute('data-cmd');
+      const val = btn.getAttribute('data-val') || undefined;
+      if (cmd === 'createLink') {
+        const url = prompt('URL ссылки');
+        if (url) document.execCommand('createLink', false, url);
+        return;
+      }
+      document.execCommand(cmd, false, val);
+    });
+  });
+  const sync = () => { if (ta) ta.value = ed.innerHTML.trim(); };
+  ed.addEventListener('input', sync);
+  ed.addEventListener('blur', sync);
+}
+
+document.addEventListener('click', async (e) => {
+  if (!(e.target && e.target.closest && e.target.closest('#ws-asset-submit'))) return;
+  e.preventDefault();
+  const form = document.getElementById('ws-asset-form');
+  if (!form) return;
+  const title = (form.querySelector('[name="title"]')?.value || '').trim();
+  const ed = document.getElementById('ws-asset-desc-editor');
+  const ta = document.getElementById('ws-asset-desc');
+  if (ed && ta) ta.value = ed.innerHTML.trim();
+  const desc = (ta ? ta.value : (form.querySelector('[name="description"]')?.value || '')).trim();
+  const plain = desc.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+  if (title.length < 2) { toast('Название: минимум 2 символа'); return; }
+  if (!plain) { toast('Напишите описание'); return; }
+  const fd = new FormData(form);
+  if (ta) fd.set('description', ta.value);
+  const btn = document.getElementById('ws-asset-submit');
+  if (btn) { btn.disabled = true; btn.textContent = 'Отправка…'; }
+  try {
+    const res = await fetch(WS_API + '?action=submit_asset', { method: 'POST', body: fd, credentials: 'same-origin' });
+    let text = await res.text();
+    const js = text.indexOf('{');
+    if (js > 0) text = text.slice(js);
+    const data = JSON.parse(text);
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    toast('Ассет отправлен на модерацию');
+    wsCloseModal('ws-asset-form-modal');
+    form.reset();
+    if (ed) ed.innerHTML = '';
+    if (ta) ta.value = '';
+    // сразу обновить модерку и уведомления без перезагрузки
+    try { if (typeof refreshAdminPendingBadge === 'function') refreshAdminPendingBadge(); } catch (e) {}
+    try { if (typeof loadAdminPending === 'function') loadAdminPending(); } catch (e) {}
+    try { if (typeof loadNotifications === 'function') loadNotifications(); } catch (e) {}
+    try { if (typeof refreshBadge === 'function') refreshBadge(); } catch (e) {}
+  } catch (err) {
+    toast(err.message || 'Не удалось отправить');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Отправить на модерацию'; }
+  }
+});

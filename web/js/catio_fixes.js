@@ -525,6 +525,10 @@
     ensureListEl('ws-media-files-hint', 'ws-media-files-list');
     bindFileInput('ws-mod-file', 'ws-mod-file-list', 'ws-mod-file-hint');
     bindFileInput('ws-media-files', 'ws-media-files-list', 'ws-media-files-hint');
+    bindFileInput('ws-asset-cover', 'ws-asset-cover-list', 'ws-asset-cover-hint');
+    bindFileInput('ws-asset-banner', 'ws-asset-banner-list', 'ws-asset-banner-hint');
+    bindFileInput('ws-asset-shots', 'ws-asset-shots-list', 'ws-asset-shots-hint');
+    bindFileInput('ws-asset-file', 'ws-asset-file-list', 'ws-asset-file-hint');
     bindFileInput('sg-build-file', 'sg-build-file-list', 'sg-build-file-name');
     bindPublishImagePreviews();
   }
@@ -767,6 +771,10 @@
       ['ws-mod-shots', 'ws-mod-shots-list', 'ws-mod-shots-hint'],
       ['ws-mod-file', 'ws-mod-file-list', 'ws-mod-file-hint'],
       ['ws-media-files', 'ws-media-files-list', 'ws-media-files-hint'],
+      ['ws-asset-cover', 'ws-asset-cover-list', 'ws-asset-cover-hint'],
+      ['ws-asset-banner', 'ws-asset-banner-list', 'ws-asset-banner-hint'],
+      ['ws-asset-shots', 'ws-asset-shots-list', 'ws-asset-shots-hint'],
+      ['ws-asset-file', 'ws-asset-file-list', 'ws-asset-file-hint'],
     ].forEach(([inputId, listId, hintId]) => {
       const input = document.getElementById(inputId);
       if (!input) return;
