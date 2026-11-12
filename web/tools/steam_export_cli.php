@@ -166,15 +166,72 @@ function parseSysReq($html): array {
 // ---- Steam ----
 say("AppID: $appId");
 say("Чтение Steam API…");
-$raw = httpGet("https://store.steampowered.com/api/appdetails?appids={$appId}&l=russian", [], 25);
-if (!$raw) $raw = httpGet("https://store.steampowered.com/api/appdetails?appids={$appId}&l=english", [], 25);
-if (!$raw) fail('Steam API недоступен');
-$j = json_decode($raw, true);
-$data = $j[(string)$appId]['data'] ?? null;
-if (!is_array($data) || empty($j[(string)$appId]['success'])) fail('Игра не найдена в Steam API');
+
+function fetchSteamAppDetails(int $appId): array {
+    $attempts = [
+        "https://store.steampowered.com/api/appdetails?appids={$appId}&l=russian&cc=ru",
+        "https://store.steampowered.com/api/appdetails?appids={$appId}&l=english&cc=us",
+        "https://store.steampowered.com/api/appdetails?appids={$appId}&l=english",
+        "https://store.steampowered.com/api/appdetails?appids={$appId}",
+    ];
+    $lastRaw = null;
+    $lastJson = null;
+    foreach ($attempts as $url) {
+        say("  GET $url");
+        $raw = httpGet($url, [], 30);
+        if (!$raw) {
+            say("  (нет ответа)");
+            continue;
+        }
+        $lastRaw = $raw;
+        $j = json_decode($raw, true);
+        $lastJson = $j;
+        if (!is_array($j)) {
+            say("  (не JSON)");
+            continue;
+        }
+        $entry = $j[(string)$appId] ?? null;
+        if (!is_array($entry)) {
+            say("  (нет ключа appid в ответе)");
+            continue;
+        }
+        if (!empty($entry['success']) && is_array($entry['data'] ?? null)) {
+            return ['ok' => true, 'data' => $entry['data'], 'raw' => $raw];
+        }
+        $msg = is_string($entry['data'] ?? null) ? $entry['data'] : '';
+        say("  success=false" . ($msg !== '' ? " ($msg)" : ''));
+    }
+    // Минимальный fallback: CDN-only пакет без store-описания
+    return ['ok' => false, 'data' => null, 'raw' => $lastRaw, 'json' => $lastJson];
+}
+
+$steam = fetchSteamAppDetails($appId);
+$data = $steam['data'];
+$cdnOnly = false;
+if (!is_array($data)) {
+    say("WARN: Steam Store API не отдал карточку (delisted/region/age/rate-limit).");
+    say("Продолжаем в CDN-only режиме: header/library/logo + SGDB.");
+    $cdnOnly = true;
+    $data = [
+        'name' => 'App ' . $appId,
+        'short_description' => '',
+        'detailed_description' => '',
+        'about_the_game' => '',
+        'developers' => [],
+        'publishers' => [],
+        'genres' => [],
+        'categories' => [],
+        'screenshots' => [],
+        'movies' => [],
+        'pc_requirements' => [],
+        'header_image' => "https://cdn.cloudflare.steamstatic.com/steam/apps/{$appId}/header.jpg",
+        'capsule_image' => "https://cdn.cloudflare.steamstatic.com/steam/apps/{$appId}/capsule_616x353.jpg",
+        'capsule_imagev5' => "https://cdn.cloudflare.steamstatic.com/steam/apps/{$appId}/capsule_231x87.jpg",
+    ];
+}
 
 $title = (string)($data['name'] ?? ('App ' . $appId));
-say("Игра: $title");
+say("Игра: $title" . ($cdnOnly ? " [CDN-only]" : ""));
 
 $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'catio_steam_' . $appId . '_' . bin2hex(random_bytes(3));
 @mkdir($tmp . '/media/screenshots', 0775, true);

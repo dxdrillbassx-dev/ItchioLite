@@ -886,106 +886,166 @@
   
 
 
-  // ---------- CATioGridDB: файлы с диска uploads/catiogrid/{key}/ — как cover/banner ----------
-  function catiogridKeyFromGame(g) {
-    if (!g) g = window.__steamEditGameData || window.__lastGameForCart || null;
-    const appid = (g && (g.steam_appid || g.steamAppId)) || window.__packSteamAppId || 0;
-    if (+appid > 0) return 's' + appid;
-    if (window.__catiogridKey) return window.__catiogridKey;
-    return '';
+  // ---------- CATioGridDB из ZIP: кэш + восстановление без онлайна ----------
+  function packSgdbStorageKey(appid, title) {
+    if (appid) return 'catio_pack_sgdb_' + String(appid);
+    const t = (title || '').toLowerCase().trim().slice(0, 80);
+    return t ? 'catio_pack_sgdb_t_' + t : '';
   }
 
-  async function fetchCatiogridAssets(key) {
-    if (!key) return null;
+  function normalizePackSgdb(sg) {
+    const out = { icons: [], logos: [], heroes: [], grids: [] };
+    const mapKey = { icons: 'icons', logos: 'logos', heroes: 'heroes', covers: 'grids', grids: 'grids' };
+    Object.keys(sg || {}).forEach((k) => {
+      const dst = mapKey[k] || k;
+      if (!out[dst]) out[dst] = [];
+      (Array.isArray(sg[k]) ? sg[k] : []).forEach((item) => {
+        if (!item) return;
+        if (typeof item === 'string') {
+          out[dst].push({ url: item, thumb: item });
+          return;
+        }
+        let url = item.url || item.file || '';
+        let thumb = item.thumb || url;
+        // .ico плохо в <img> — для превью/сохранения предпочитаем thumb png
+        if (/\.ico(\?|$)/i.test(url) && thumb && !/\.ico(\?|$)/i.test(thumb)) {
+          url = thumb;
+        }
+        if (!url) return;
+        out[dst].push({
+          url,
+          thumb: thumb || url,
+          width: item.width,
+          height: item.height,
+          file: item.file || '',
+        });
+      });
+    });
+    return out;
+  }
+
+  function savePackSgdbCache(pack, appid, title) {
+    const key = packSgdbStorageKey(appid, title);
+    if (!key || !pack) return;
     try {
-      const data = await fetchJSON('api/game_pack.php?action=list_catiogrid&key=' + encodeURIComponent(key));
-      if (data && data.ok && data.assets) return data.assets;
-    } catch (e) {
-      console.warn('[CATio] list_catiogrid', e);
+      localStorage.setItem(key, JSON.stringify({
+        at: Date.now(),
+        appid: appid || 0,
+        title: title || '',
+        pack,
+      }));
+    } catch (e) {}
+  }
+
+  function loadPackSgdbCache(appid, title) {
+    const keys = [packSgdbStorageKey(appid, title), packSgdbStorageKey(0, title)].filter(Boolean);
+    for (const key of keys) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const data = JSON.parse(raw);
+        if (data && data.pack) return data.pack;
+      } catch (e) {}
     }
     return null;
   }
 
-  function assetsToPackShape(assets) {
-    if (!assets) return null;
-    return {
-      icons: assets.icons || [],
-      logos: assets.logos || [],
-      heroes: assets.heroes || [],
-      grids: assets.covers || assets.grids || [],
-      covers: assets.covers || [],
-    };
+  function applyPackSgdbToWindow(pack, appid, title) {
+    if (!pack) return;
+    const norm = normalizePackSgdb(pack);
+    window.__packSgdbAssets = norm;
+    window.__sgdbAssetsFromPack = norm;
+    window.__packSgdbTitle = title || window.__packSgdbTitle || '';
+    if (appid) window.__packSteamAppId = appid;
+    savePackSgdbCache(norm, appid, title);
   }
 
-  async function loadCatiogridIntoWindow(type) {
-    const key = catiogridKeyFromGame();
-    if (!key) return false;
-    const assets = await fetchCatiogridAssets(key);
-    if (!assets) return false;
-    const pack = assetsToPackShape(assets);
-    window.__packSgdbAssets = pack;
-    window.__sgdbAssetsFromPack = pack;
-    window.__catiogridKey = key;
-    if (typeof window.renderSgdbPackAssets === 'function') {
-      window.renderSgdbPackAssets(type || 'icons');
-      return true;
-    }
-    return false;
-  }
-
-  window.catioForceLoadSgdb = function (type) {
-    loadCatiogridIntoWindow(type || 'icons');
-  };
-
-  // после import_pack — ключ с ответа
-  const _fetch = window.fetch;
-  if (!_fetch.__catioGridWrap) {
+  // перехват успешного import_pack: нормализуем icons/logos и кладём в localStorage
+  const _origFetch = window.fetch;
+  if (!_origFetch.__catioPackWrap) {
     const wrapped = async function (input, init) {
-      const res = await _fetch.apply(this, arguments);
+      const res = await _origFetch.apply(this, arguments);
       try {
         const url = typeof input === 'string' ? input : (input && input.url) || '';
-        if (/import_pack/i.test(url) || (init && init.body && String(init.body).indexOf('import_pack') >= 0)) {
-          res.clone().json().then((data) => {
+        if (/game_pack\.php.*import_pack|action=import_pack/i.test(url) || (init && init.body && String(init.body).indexOf('import_pack') >= 0)) {
+          const clone = res.clone();
+          clone.json().then((data) => {
             if (!data || !data.ok) return;
-            if (data.grid_key) window.__catiogridKey = data.grid_key;
-            const appid = data.steam_appid || (data.game && data.game.steam_appid);
-            if (appid) window.__packSteamAppId = appid;
             const files = data.files || {};
-            if (files.sgdb) {
-              window.__packSgdbAssets = assetsToPackShape(files.sgdb);
-              window.__sgdbAssetsFromPack = window.__packSgdbAssets;
-            }
-            // дефолт hidden icon/logo из файлов пакета (пути на диске)
+            const game = data.game || {};
+            const sg = files.sgdb || {};
+            const appid = game.steam_appid || data.steam_appid || 0;
+            const title = game.title || '';
+            applyPackSgdbToWindow(sg, appid, title);
+            // дефолтная иконка если пусто
             setTimeout(() => {
               try {
-                const setIfEmpty = (hidId, val, prevId) => {
-                  if (!val) return;
-                  const hid = document.getElementById(hidId);
-                  if (hid && !hid.value) {
-                    hid.value = val;
-                    const prev = document.getElementById(prevId);
-                    if (prev) {
-                      prev.classList.add('has-img');
-                      prev.innerHTML = '<img src="' + val + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit" />';
+                const iconHid = document.getElementById('sg-icon-url');
+                if (iconHid && !iconHid.value) {
+                  const icons = (window.__packSgdbAssets && window.__packSgdbAssets.icons) || [];
+                  const best = icons.find((x) => x.url && !/\.ico(\?|$)/i.test(x.url)) || icons[0];
+                  if (best && best.url) {
+                    iconHid.value = best.url;
+                    if (typeof setPubPreviewImg === 'function') setPubPreviewImg('sg-icon-preview', best.url);
+                    else {
+                      const prev = document.getElementById('sg-icon-preview');
+                      if (prev) prev.innerHTML = '<img src="' + best.url + '" alt="" style="width:100%;height:100%;object-fit:cover" />';
                     }
                   }
-                };
-                setIfEmpty('sg-icon-url', files.icon, 'sg-icon-preview');
-                setIfEmpty('sg-logo-url', files.logo, 'sg-logo-preview');
-                setIfEmpty('sg-cover-url', files.cover, 'sg-cover-preview');
-                setIfEmpty('sg-banner-url', files.banner, 'sg-banner-preview');
+                }
+                const logoHid = document.getElementById('sg-logo-url');
+                if (logoHid && !logoHid.value) {
+                  const logos = (window.__packSgdbAssets && window.__packSgdbAssets.logos) || [];
+                  if (logos[0] && logos[0].url) {
+                    logoHid.value = logos[0].url;
+                    if (typeof setPubPreviewImg === 'function') setPubPreviewImg('sg-logo-preview', logos[0].url);
+                  }
+                }
               } catch (e) {}
-            }, 50);
+            }, 100);
           }).catch(() => {});
         }
       } catch (e) {}
       return res;
     };
-    wrapped.__catioGridWrap = true;
+    wrapped.__catioPackWrap = true;
     window.fetch = wrapped;
   }
 
-  // клик по вкладкам ассетов — читаем директорию
+  // при открытии модалки ассетов — восстановить пакет из localStorage
+  function ensurePackSgdbLoaded() {
+    if (window.__packSgdbAssets && (window.__packSgdbAssets.icons || []).length) return true;
+    const g = window.__steamEditGameData || window.__lastGameForCart || null;
+    const appid = (g && g.steam_appid) || window.__packSteamAppId || 0;
+    const title = (g && g.title) || window.__packSgdbTitle || window.__sgdbNameQuery || '';
+    const cached = loadPackSgdbCache(appid, title);
+    if (cached) {
+      applyPackSgdbToWindow(cached, appid, title);
+      return true;
+    }
+    return false;
+  }
+
+  function catioRenderPackTab(type) {
+    type = type || 'icons';
+    ensurePackSgdbLoaded();
+    const pack = window.__sgdbAssetsFromPack || window.__packSgdbAssets;
+    if (!pack) return false;
+    if (typeof window.renderSgdbPackAssets === 'function') {
+      return window.renderSgdbPackAssets(type);
+    }
+    return false;
+  }
+  window.catioForceLoadSgdb = function (type) {
+    // только локальный пакет / кэш, без онлайна SteamGridDB
+    if (!catioRenderPackTab(type || 'icons')) {
+      const grid = document.getElementById('sgdb-asset-grid') || document.querySelector('.sgdb-asset-grid');
+      if (grid && !grid.querySelector('.sgdb-grid-item')) {
+        grid.innerHTML = '<div class="settings-hint">Нет локальных ассетов. Импортируй ZIP с CATioGridDB.</div>';
+      }
+    }
+  };
+
   document.addEventListener('click', function (e) {
     const tab = e.target && e.target.closest && e.target.closest('.sgdb-asset-tab, .sgdb-nav-btn');
     if (!tab) return;
@@ -993,32 +1053,24 @@
       const type = (tab.dataset && (tab.dataset.assetType || tab.dataset.sgdbTab)) || 'icons';
       const t = type === 'assets' ? 'icons' : type;
       if (['icons', 'logos', 'heroes', 'grids', 'covers'].includes(t)) {
-        loadCatiogridIntoWindow(t === 'covers' ? 'grids' : t);
+        ensurePackSgdbLoaded();
+        catioRenderPackTab(t === 'covers' ? 'grids' : t);
       }
-    }, 30);
+    }, 50);
   }, true);
 
-  // loadSgdbAssetsGlobal → с диска
+  // патч loadSgdbAssetsGlobal: сначала локальный пакет
   const _loadG = window.loadSgdbAssetsGlobal;
   window.loadSgdbAssetsGlobal = function (t) {
-    loadCatiogridIntoWindow(t || 'icons').then((ok) => {
-      if (!ok && typeof _loadG === 'function') {
-        try { _loadG(t); } catch (e) {}
-      }
-    });
+    ensurePackSgdbLoaded();
+    if (window.__packSgdbAssets && typeof window.renderSgdbPackAssets === 'function') {
+      const ok = window.renderSgdbPackAssets(t || 'icons');
+      if (ok) return;
+    }
+    try { if (typeof _loadG === 'function') _loadG(t); } catch (e) {}
   };
 
-  // при открытии steam/sgdb модалки — сразу с диска
-  const _openSteam = window.openSteamModal;
-  if (typeof _openSteam === 'function' && !_openSteam.__catioGrid) {
-    window.openSteamModal = function () {
-      const r = _openSteam.apply(this, arguments);
-      setTimeout(() => loadCatiogridIntoWindow('icons'), 60);
-      return r;
-    };
-    window.openSteamModal.__catioGrid = true;
-  }
 
+  console.log('[CATio] catio_fixes.js v6 loaded');
 
-    console.log('[CATio] catio_fixes.js v7 loaded');
 })();
