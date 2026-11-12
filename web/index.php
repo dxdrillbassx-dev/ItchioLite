@@ -1093,12 +1093,37 @@ if ($isAuthorized) {
               <h2 class="settings-title">Уведомления</h2>
               <p class="settings-sub">Выберите, о чём вас оповещать</p>
 
-              <div class="settings-group">
-                <h3 class="settings-group-title">Уведомления библиотеки</h3>
-                <label class="settings-check"><input type="checkbox" data-np="dl_complete" checked /> По завершении загрузки</label>
-                <label class="settings-check"><input type="checkbox" data-np="friend_request" checked /> При получении запроса в друзья</label>
-                <label class="settings-check"><input type="checkbox" data-np="friend_playing" checked /> Когда друг начинает играть</label>
-                <label class="settings-check"><input type="checkbox" data-np="friend_message" checked /> Когда друг отправляет сообщение</label>
+              <div class="filter-block settings-filter-block settings-rows-block">
+                <div class="filter-block-body filter-block-body--open settings-rows">
+                  <label class="settings-row settings-row-check">
+                    <span class="settings-row-label">Завершение загрузки</span>
+                    <span class="settings-row-control">
+                      <input type="checkbox" data-np="dl_complete" checked />
+                      <span class="settings-row-check-text">Вкл</span>
+                    </span>
+                  </label>
+                  <label class="settings-row settings-row-check">
+                    <span class="settings-row-label">Запрос в друзья</span>
+                    <span class="settings-row-control">
+                      <input type="checkbox" data-np="friend_request" checked />
+                      <span class="settings-row-check-text">Вкл</span>
+                    </span>
+                  </label>
+                  <label class="settings-row settings-row-check">
+                    <span class="settings-row-label">Друг начал играть</span>
+                    <span class="settings-row-control">
+                      <input type="checkbox" data-np="friend_playing" checked />
+                      <span class="settings-row-check-text">Вкл</span>
+                    </span>
+                  </label>
+                  <label class="settings-row settings-row-check">
+                    <span class="settings-row-label">Сообщение от друга</span>
+                    <span class="settings-row-control">
+                      <input type="checkbox" data-np="friend_message" checked />
+                      <span class="settings-row-check-text">Вкл</span>
+                    </span>
+                  </label>
+                </div>
               </div>
               <button type="button" class="hp-btn-save" id="settings-save-notif">Сохранить</button>
             </div>
@@ -1108,40 +1133,43 @@ if ($isAuthorized) {
               <h2 class="settings-title">Аккаунт и конфиденциальность</h2>
               <p class="settings-sub">Кто видит ваш профиль и как с вами связываться</p>
 
-              <label class="settings-label">
-                <span>Видимость профиля</span>
-                <select id="settings-profile-vis" class="settings-select">
-                  <option value="public">Публичный</option>
-                  <option value="friends">Только для друзей</option>
-                  <option value="hidden">Скрытый</option>
-                </select>
-              </label>
-
-              <label class="settings-label">
-                <span>Видимость скриншотов</span>
-                <select id="settings-media-vis" class="settings-select">
-                  <option value="public">Публичный</option>
-                  <option value="friends">Только для друзей</option>
-                  <option value="hidden">Скрытый</option>
-                </select>
-              </label>
-
-              <label class="settings-check" style="margin:16px 0">
-                <input type="checkbox" id="settings-allow-friends" checked />
-                Разрешить заявки в друзья
-              </label>
-
-              <label class="settings-label">
-                <span>Текущий email</span>
-                <input type="email" id="settings-email" class="auth-input" value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" />
-              </label>
-
-              <label class="settings-label"><span>Издательство в профиле</span>
-                <select class="settings-select" id="settings-display-pub">
-                  <option value="hide">Не показывать</option>
-                </select>
-              </label>
-              <p class="settings-hint" style="margin-top:-4px;margin-bottom:12px;color:var(--text-muted);font-size:0.8rem">Какое издательство видно под ником (или скрыть)</p>
+              <div class="filter-block settings-filter-block settings-rows-block">
+                <div class="filter-block-body filter-block-body--open settings-rows">
+                  <label class="settings-row">
+                    <span class="settings-row-label">Видимость профиля</span>
+                    <select id="settings-profile-vis" class="settings-select sort-select" aria-label="Видимость профиля">
+                      <option value="public">Публичный</option>
+                      <option value="friends">Только для друзей</option>
+                      <option value="hidden">Скрытый</option>
+                    </select>
+                  </label>
+                  <label class="settings-row">
+                    <span class="settings-row-label">Видимость скриншотов</span>
+                    <select id="settings-media-vis" class="settings-select sort-select" aria-label="Видимость скриншотов">
+                      <option value="public">Публичный</option>
+                      <option value="friends">Только для друзей</option>
+                      <option value="hidden">Скрытый</option>
+                    </select>
+                  </label>
+                  <label class="settings-row settings-row-check">
+                    <span class="settings-row-label">Заявки в друзья</span>
+                    <span class="settings-row-control">
+                      <input type="checkbox" id="settings-allow-friends" checked />
+                      <span class="settings-row-check-text">Разрешить</span>
+                    </span>
+                  </label>
+                  <label class="settings-row">
+                    <span class="settings-row-label">Текущий email</span>
+                    <input type="email" id="settings-email" class="auth-input settings-row-input" value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" />
+                  </label>
+                  <label class="settings-row">
+                    <span class="settings-row-label">Издательство в профиле</span>
+                    <select class="settings-select sort-select" id="settings-display-pub" aria-label="Издательство в профиле">
+                      <option value="hide">Не показывать</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
 
               <p id="settings-privacy-error" class="auth-error hidden"></p>
               <button type="button" class="hp-btn-save" id="settings-save-privacy">Сохранить</button>
@@ -1237,12 +1265,16 @@ if ($isAuthorized) {
           <div class="settings-main">
             <div class="settings-pane" id="admin-pane-moderation">
               <h2 class="settings-title">Модерация</h2>
-              <p class="settings-desc">Игры, моды и медиа на проверке. Нажмите карточку — откроется модалка.</p>
-              <div class="admin-layout admin-layout--list-only">
-                <div class="admin-list-panel" style="grid-column: 1 / -1">
+              <p class="settings-sub">Всё на проверке: игры, моды, ассеты, медиа и версии. Тип указан на карточке — нажмите, чтобы открыть модалку.</p>
+              <div class="filter-block settings-filter-block settings-rows-block admin-mod-list-wrap">
+                <div class="filter-block-body filter-block-body--open" style="padding:8px !important">
                   <div id="admin-pending-list" class="admin-pending-list">
                     <div class="loading">Загрузка...</div>
                   </div>
+                </div>
+              </div>
+              <div class="admin-layout admin-layout--list-only" style="display:none">
+                <div class="admin-list-panel" style="grid-column: 1 / -1">
                 </div>
                 <div class="admin-edit-panel hidden" id="admin-edit-panel" style="display:none !important" aria-hidden="true">
                   <div class="admin-placeholder hidden" id="admin-empty">
@@ -1299,19 +1331,23 @@ if ($isAuthorized) {
             
             <div class="settings-pane hidden" id="admin-pane-users">
               <h2 class="settings-title">Пользователи</h2>
-              <p class="settings-desc">Список аккаунтов, роли, баны. Можно открыть профиль или редактировать.</p>
-              <div class="admin-users-toolbar">
-                <input type="search" class="auth-input" id="admin-users-search" placeholder="Поиск по нику или почте…" />
-                <select id="admin-users-filter" class="auth-input" style="max-width:160px">
-                  <option value="all">Все</option>
-                  <option value="admin">Админы</option>
-                  <option value="developer">Разработчики</option>
-                  <option value="user">Игроки</option>
-                  <option value="banned">Забаненные</option>
-                </select>
-              </div>
-              <div id="admin-users-list" class="admin-users-list">
-                <div class="loading">Загрузка...</div>
+              <p class="settings-sub">Список аккаунтов, роли и баны. Можно открыть профиль или редактировать.</p>
+              <div class="filter-block settings-filter-block settings-rows-block admin-mod-list-wrap">
+                <div class="filter-block-body filter-block-body--open" style="padding:12px 14px !important">
+                  <div class="admin-users-toolbar" style="margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap">
+                    <input type="search" class="auth-input" id="admin-users-search" placeholder="Поиск по нику или почте…" style="flex:1;min-width:180px" />
+                    <select id="admin-users-filter" class="settings-select sort-select" style="max-width:180px">
+                      <option value="all">Все</option>
+                      <option value="admin">Админы</option>
+                      <option value="developer">Разработчики</option>
+                      <option value="user">Игроки</option>
+                      <option value="banned">Забаненные</option>
+                    </select>
+                  </div>
+                  <div id="admin-users-list" class="admin-users-list">
+                    <div class="loading">Загрузка...</div>
+                  </div>
+                </div>
               </div>
             </div>
             <!-- admin-pane-import removed -->

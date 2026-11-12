@@ -1374,10 +1374,10 @@ try {
             exit;
         }
 
-        // Платное — только владельцам (и админу). Pending — только админу (предзагрузка).
+        // Платное — только владельцам (и админу). Pending/attached — только админу (предзагрузка).
         $isAdmin = $user['role'] === 'admin';
         $bStatus = (string)($build['status'] ?? 'published');
-        if ($bStatus === 'pending' && !$isAdmin) {
+        if (in_array($bStatus, ['pending', 'attached'], true) && !$isAdmin) {
             http_response_code(403);
             echo json_encode(['ok' => false, 'error' => 'Сборка на модерации'], JSON_UNESCAPED_UNICODE);
             exit;

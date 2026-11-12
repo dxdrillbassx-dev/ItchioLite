@@ -793,7 +793,19 @@ function showView(name, gameId, opts) {
       loadProfile();
     }
   }
-  if (name === 'admin') loadAdminPending();
+  if (name === 'admin') {
+    // всегда открываем раздел «Модерация», иначе справа может быть пусто
+    const view = document.getElementById('view-admin');
+    if (view) {
+      view.querySelectorAll('.settings-nav-btn[data-atab]').forEach(b => {
+        b.classList.toggle('active', b.dataset.atab === 'moderation');
+      });
+      view.querySelectorAll('.settings-pane').forEach(p => {
+        p.classList.toggle('hidden', p.id !== 'admin-pane-moderation');
+      });
+    }
+    loadAdminPending();
+  }
   if (name === 'game') {
     const gid = gameId || window.__lastGameForCart?.id || window.GAME_ID_FROM_URL || 0;
     if (gid) loadGamePage(gid);
@@ -1330,7 +1342,7 @@ function renderSideLibrary(filter) {
   }
 
   list.innerHTML = games.map(g => {
-    const icon = g.id ? ('media.php?type=icon&id=' + g.id + '&v=' + (window.__iconBust || Date.now())) : (g.icon_src || g.icon_url || g.cover_url || g.cover_src || '');
+    const icon = g.id ? ('media.php?type=icon&id=' + g.id + '&v=' + (window.__iconBust || window.__mediaBust || '1')) : (g.icon_src || g.icon_url || g.cover_url || g.cover_src || '');
     const liked = !!(+g.is_liked || g.liked);
     return `
     <button type="button" class="side-lib-item ${liked ? 'liked' : ''}" data-id="${g.id}">
@@ -3901,6 +3913,35 @@ function ensurePublishAdminFooter(formModal, opts, g) {
     }
   }
 
+  // Предзагрузка в модалке модерации игры
+  let preBtn = document.getElementById('submit-admin-preload');
+  if (mode === 'moderate' && g && g.id) {
+    if (!preBtn) {
+      preBtn = document.createElement('button');
+      preBtn.type = 'button';
+      preBtn.id = 'submit-admin-preload';
+      preBtn.className = 'btn-ghost';
+      preBtn.textContent = 'Предзагрузка';
+    }
+    // Безопасная вставка: send может быть не прямым потомком foot
+    const foot = formModal.querySelector('.submit-modal-foot');
+    const send = document.getElementById('submit-game-send');
+    const rej = document.getElementById('submit-admin-reject');
+    const anchor = rej || send;
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(preBtn, anchor);
+    } else if (foot) {
+      foot.appendChild(preBtn);
+    }
+    preBtn.classList.remove('hidden');
+    preBtn.style.display = '';
+    preBtn.onclick = () => adminPreloadGame(g.id, g.title || '');
+  } else if (preBtn) {
+    preBtn.classList.add('hidden');
+    preBtn.style.display = 'none';
+    preBtn.onclick = null;
+  }
+
   const gid = g && g.id;
   exportBtn.onclick = async () => {
     if (!gid) return;
@@ -4935,8 +4976,8 @@ function enqueueDownload(item) {
     gotoView('downloads');
     return;
   }
-  // та же игра уже качается / в очереди
-  if (item.gameId && isGameDownloading(item.gameId)) {
+  // та же игра уже качается / в очереди (кроме админ-предзагрузки)
+  if (item.gameId && !item.adminPreload && isGameDownloading(item.gameId)) {
     toast('Эта игра уже устанавливается');
     refreshGameInstallButton(item.gameId);
     return;
@@ -4945,9 +4986,13 @@ function enqueueDownload(item) {
   item.received = 0;
   item.status = 'queued';
   dm.queue.push(item);
-  toast(`«${item.title}» добавлена в загрузки`);
+  if (item.adminPreload) {
+    toast('Добавлено в загрузки для проверки');
+  } else {
+    toast(`«${item.title}» добавлена в загрузки`);
+  }
   updateDownloadsBadge();
-  if (item.gameId) refreshGameInstallButton(item.gameId);
+  if (item.gameId && !item.adminPreload) refreshGameInstallButton(item.gameId);
   if (getViewFromUrl() === 'downloads') renderDownloadsView();
   pumpDownloads();
 }
@@ -7985,6 +8030,14 @@ async function refreshBadge() {
     }
 
     setAvatarDots(total > 0);
+
+    // Админ: параллельно проверяем очередь модерации (список обновится при изменении счётчика)
+    try {
+      const me = window.AUTH_STATE && window.AUTH_STATE.user;
+      if (me && me.role === 'admin' && typeof refreshAdminPendingBadge === 'function') {
+        refreshAdminPendingBadge();
+      }
+    } catch (e) {}
   } catch (e) {
     console.warn('refreshBadge', e);
   }
@@ -10737,6 +10790,96 @@ if (!data.ok) throw new Error(data.error || 'Ошибка импорта');
 }
 
 
+
+/** Серая заглушка обложки с иконкой раздела (из «Создать» / «Мастерская») */
+const ADMIN_SECTION_ICO = {
+  game: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></svg>',
+  build: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></svg>',
+  mod: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>',
+  media: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
+  asset: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+};
+
+function adminCoverHtml(url, kind) {
+  const u = (url || '').trim();
+  if (u) {
+    return `<img src="${escapeHtml(u)}" alt="" onerror="this.onerror=null;this.replaceWith((function(){var d=document.createElement('div');d.className='admin-pending-cover is-ph is-${kind||'game'}';d.innerHTML=ADMIN_SECTION_ICO['${kind||'game'}']||ADMIN_SECTION_ICO.game;return d;})())" />`;
+  }
+  const ico = ADMIN_SECTION_ICO[kind] || ADMIN_SECTION_ICO.game;
+  return `<div class="admin-pending-cover is-ph is-${kind || 'game'}" aria-hidden="true">${ico}</div>`;
+}
+
+const ADMIN_ICO = {
+  approve: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>',
+  reject: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+  preload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+};
+
+/** Три квадратные кнопки: одобрить / отклонить / предзагрузка */
+function adminPendingActionsHtml(opts) {
+  opts = opts || {};
+  const kind = opts.kind || '';
+  const id = opts.id || '';
+  const title = escapeHtml(opts.title || '');
+  const extra = opts.extra || {};
+  const bits = [];
+  bits.push(`<button type="button" class="admin-act-btn is-approve" data-admin-act="approve" data-kind="${kind}" data-id="${id}" title="Опубликовать" aria-label="Опубликовать">${ADMIN_ICO.approve}</button>`);
+  bits.push(`<button type="button" class="admin-act-btn is-reject" data-admin-act="reject" data-kind="${kind}" data-id="${id}" title="Отклонить" aria-label="Отклонить">${ADMIN_ICO.reject}</button>`);
+  if (opts.preload !== false) {
+    const bId = extra.buildId != null ? ` data-build-id="${extra.buildId}"` : '';
+    const ver = extra.version != null ? ` data-version="${escapeHtml(String(extra.version))}"` : '';
+    const gId = extra.gameId != null ? ` data-game-id="${extra.gameId}"` : '';
+    bits.push(`<button type="button" class="admin-act-btn is-preload" data-admin-act="preload" data-kind="${kind}" data-id="${id}" data-title="${title}"${bId}${ver}${gId} title="Предзагрузка" aria-label="Предзагрузка">${ADMIN_ICO.preload}</button>`);
+  }
+  return `<div class="admin-pending-actions" onclick="event.stopPropagation()">${bits.join('')}</div>`;
+}
+
+/** Предзагрузка сборки админом — через очередь загрузок лаунчера */
+function adminEnqueueBuildPreload(opts) {
+  opts = opts || {};
+  const buildId = +(opts.buildId || 0);
+  if (!buildId) {
+    toast('Нет файла сборки для предзагрузки');
+    return;
+  }
+  if (typeof enqueueDownload !== 'function') {
+    toast('Система загрузок недоступна');
+    return;
+  }
+  enqueueDownload({
+    buildId,
+    gameId: +(opts.gameId || 0) || null,
+    title: opts.title || 'Сборка',
+    version: opts.version || '',
+    platform: opts.platform || 'windows',
+    adminPreload: true,
+  });
+}
+
+async function adminPreloadGame(gameId, title) {
+  try {
+    const data = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=get&id=' + (+gameId));
+    if (!data || !data.ok) throw new Error((data && data.error) || 'Не удалось получить заявку');
+    const g = data.game || data;
+    const builds = g.builds || [];
+    if (!builds.length) {
+      toast('У заявки нет файла сборки');
+      return;
+    }
+    // Берём самую свежую сборку (не rejected)
+    const b = builds.find(x => !['rejected'].includes(String(x.status || ''))) || builds[0];
+    adminEnqueueBuildPreload({
+      buildId: b.id,
+      gameId: +gameId,
+      title: title || g.title || 'Игра',
+      version: b.version || '',
+      platform: b.platform || 'windows',
+    });
+  } catch (e) {
+    toast(e.message || 'Ошибка предзагрузки');
+  }
+}
+
 function updateAdminPendingBadge(count) {
   const n = Math.max(0, parseInt(count, 10) || 0);
   const badge = document.getElementById('admin-badge');
@@ -10768,11 +10911,42 @@ async function refreshAdminPendingBadge() {
       if (bd && bd.ok) total += (bd.builds || []).length;
     } catch (e) {}
     updateAdminPendingBadge(total);
+
+    const prev = (typeof window.__adminPendingCount === 'number') ? window.__adminPendingCount : null;
+    window.__adminPendingCount = total;
+
+    // Если админ сидит в модерации и число заявок изменилось — обновить список без F5
+    if (prev !== null && prev !== total) {
+      const adminView = document.getElementById('view-admin');
+      const modPane = document.getElementById('admin-pane-moderation');
+      const onAdmin = adminView && adminView.classList.contains('active');
+      const onMod = modPane && !modPane.classList.contains('hidden');
+      if (onAdmin && onMod && typeof loadAdminPending === 'function' && !window.__adminPendingLoading) {
+        try { loadAdminPending(); } catch (e) {}
+      }
+    }
   } catch (e) {}
 }
 
 async function loadAdminPending() {
+  if (window.__adminPendingLoading) return;
+  window.__adminPendingLoading = true;
   try { initAdminUI(); } catch (e) {}
+
+  // гарантия: панель модерации видна
+  try {
+    const view = document.getElementById('view-admin');
+    if (view) {
+      view.querySelectorAll('.settings-nav-btn[data-atab]').forEach(b => {
+        b.classList.toggle('active', b.dataset.atab === 'moderation');
+      });
+      view.querySelectorAll('.settings-pane').forEach(p => {
+        p.classList.toggle('hidden', p.id !== 'admin-pane-moderation');
+      });
+      const modPane = document.getElementById('admin-pane-moderation');
+      if (modPane) modPane.classList.remove('hidden');
+    }
+  } catch (e) {}
 
   const list = $('#admin-pending-list');
   if (!list) return;
@@ -10801,76 +10975,75 @@ async function loadAdminPending() {
 
     const total = games.length + mods.length + media.length + assets.length + builds.length;
     updateAdminPendingBadge(total);
+    window.__adminPendingCount = total;
     if (!total) {
       list.innerHTML = '<div class="friends-empty">Нет заявок на модерации</div>';
       return;
     }
 
     const parts = [];
+    // Единый список как уведомления: тип сразу в карточке + 3 квадратные кнопки
     if (games.length) {
-      parts.push('<div class="admin-pending-section">Игры</div>');
       parts.push(games.map(g => `
-        <button type="button" class="admin-pending-item" data-kind="game" data-id="${g.id}">
-          <img src="${escapeHtml(g.cover_url ? bustUrl(g.cover_url) : '')}" alt="" onerror="this.style.display='none'" />
-          <div>
-            <div class="t">${escapeHtml(g.title)}</div>
+        <div class="admin-pending-item" data-kind="game" data-id="${g.id}" role="button" tabindex="0">
+          ${adminCoverHtml(g.cover_url ? bustUrl(g.cover_url) : '', 'game')}
+          <div style="flex:1;min-width:0">
+            <div class="t"><span class="admin-pending-type is-game">Игра</span>${escapeHtml(g.title)}</div>
             <div class="s">${escapeHtml(g.submitter || '—')} · ${escapeHtml(g.genre || '')}</div>
           </div>
-        </button>`).join(''));
+          ${adminPendingActionsHtml({ kind: 'game', id: g.id, title: g.title || '' })}
+        </div>`).join(''));
     }
     if (builds.length) {
-      parts.push('<div class="admin-pending-section">Обновления версий</div>');
       parts.push(builds.map(b => `
         <div class="admin-pending-item admin-pending-build" data-kind="build" data-id="${b.id}">
-          <img src="${escapeHtml(b.cover_url ? bustUrl(b.cover_url) : '')}" alt="" onerror="this.style.display='none'" />
+          ${adminCoverHtml(b.cover_url ? bustUrl(b.cover_url) : '', 'build')}
           <div style="flex:1;min-width:0">
-            <div class="t">${escapeHtml(b.game_title || 'Игра')} <span style="opacity:.75;font-weight:500">v${escapeHtml(b.version || '')}</span></div>
+            <div class="t"><span class="admin-pending-type is-build">Версия</span>${escapeHtml(b.game_title || 'Игра')} <span style="opacity:.75;font-weight:500">v${escapeHtml(b.version || '')}</span></div>
             <div class="s">${escapeHtml(b.submitter || b.author_name || '—')} · ${escapeHtml(String(b.changelog || '').slice(0, 80))}</div>
             <div class="s">${escapeHtml(b.file_name || '')}${b.file_size_bytes ? ' · ' + (typeof formatBytes === 'function' ? formatBytes(b.file_size_bytes) : '') : ''}</div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <button type="button" class="hp-btn-edit" data-approve-build="${b.id}" style="background:var(--accent);color:#12110e;border-color:var(--accent);font-size:12px;padding:4px 8px">Одобрить</button>
-            <button type="button" class="hp-btn-edit" data-reject-build="${b.id}" style="color:#f66;font-size:12px;padding:4px 8px">Отклонить</button>
-          </div>
+          ${adminPendingActionsHtml({ kind: 'build', id: b.id, title: b.game_title || 'Игра', extra: { buildId: b.id, gameId: b.game_id, version: b.version || '' } })}
         </div>`).join(''));
     }
     if (mods.length) {
-      parts.push('<div class="admin-pending-section">Моды</div>');
       parts.push(mods.map(m => `
-        <button type="button" class="admin-pending-item" data-kind="mod" data-id="${m.id}">
-          <img src="${escapeHtml(m.cover_url || '')}" alt="" onerror="this.style.display='none'" />
-          <div>
-            <div class="t">${escapeHtml(m.title || 'Мод')}</div>
+        <div class="admin-pending-item" data-kind="mod" data-id="${m.id}" role="button" tabindex="0">
+          ${adminCoverHtml(m.cover_url || '', 'mod')}
+          <div style="flex:1;min-width:0">
+            <div class="t"><span class="admin-pending-type is-mod">Мод</span>${escapeHtml(m.title || 'Мод')}</div>
             <div class="s">${escapeHtml(m.submitter || '—')} · ${escapeHtml(m.game_title || '')}</div>
           </div>
-        </button>`).join(''));
+          ${adminPendingActionsHtml({ kind: 'mod', id: m.id, title: m.title || 'Мод', preload: false })}
+        </div>`).join(''));
     }
     if (media.length) {
-      parts.push('<div class="admin-pending-section">Медиа</div>');
       parts.push(media.map(m => `
-        <button type="button" class="admin-pending-item" data-kind="media" data-id="${m.id}">
-          <img src="${escapeHtml(m.image_url || '')}" alt="" onerror="this.style.display='none'" />
-          <div>
-            <div class="t">${escapeHtml(m.title || 'Медиа')}</div>
+        <div class="admin-pending-item" data-kind="media" data-id="${m.id}" role="button" tabindex="0">
+          ${adminCoverHtml(m.image_url || '', 'media')}
+          <div style="flex:1;min-width:0">
+            <div class="t"><span class="admin-pending-type is-media">Медиа</span>${escapeHtml(m.title || 'Медиа')}</div>
             <div class="s">${escapeHtml(m.submitter || '—')} · ${escapeHtml(m.game_title || '')}</div>
           </div>
-        </button>`).join(''));
+          ${adminPendingActionsHtml({ kind: 'media', id: m.id, title: m.title || 'Медиа', preload: false })}
+        </div>`).join(''));
     }
     if (assets.length) {
-      parts.push('<div class="admin-pending-section">Ассеты</div>');
       parts.push(assets.map(m => `
-        <button type="button" class="admin-pending-item" data-kind="asset" data-id="${m.id}">
-          <img src="${escapeHtml(m.cover_url || '')}" alt="" onerror="this.style.display='none'" />
-          <div>
-            <div class="t">${escapeHtml(m.title || 'Ассет')}</div>
+        <div class="admin-pending-item" data-kind="asset" data-id="${m.id}" role="button" tabindex="0">
+          ${adminCoverHtml(m.cover_url || '', 'asset')}
+          <div style="flex:1;min-width:0">
+            <div class="t"><span class="admin-pending-type is-asset">Ассет</span>${escapeHtml(m.title || 'Ассет')}</div>
             <div class="s">${escapeHtml(m.submitter || '—')} · ${escapeHtml(m.game_title || 'без игры')}</div>
           </div>
-        </button>`).join(''));
+          ${adminPendingActionsHtml({ kind: 'asset', id: m.id, title: m.title || 'Ассет', preload: false })}
+        </div>`).join(''));
     }
     list.innerHTML = parts.join('');
 
     $$('.admin-pending-item', list).forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        if (e.target.closest && e.target.closest('.admin-act-btn')) return;
         const kind = btn.getAttribute('data-kind');
         const id = +btn.dataset.id;
         if (kind === 'game') openAdminGame(id);
@@ -10879,32 +11052,85 @@ async function loadAdminPending() {
         else if (kind === 'asset') openAdminWorkshopItem('asset', id);
       });
     });
-    $$('[data-approve-build]', list).forEach(btn => {
+
+    $$('[data-admin-act]', list).forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        e.preventDefault();
+        const act = btn.dataset.adminAct;
+        const kind = btn.dataset.kind;
+        const id = +btn.dataset.id;
+        btn.disabled = true;
         try {
-          const res = await postJSON(SUBMIT_API + '?action=approve_build', { csrf_token: window.CSRF_TOKEN || '', id: +btn.dataset.approveBuild });
-          if (!res.ok) throw new Error(res.error || 'Ошибка');
-          toast('Версия опубликована');
-          loadAdminPending();
-        } catch (err) { toast(err.message || 'Ошибка'); }
-      });
-    });
-    $$('[data-reject-build]', list).forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm('Отклонить и удалить эту сборку?')) return;
-        try {
-          const res = await postJSON(SUBMIT_API + '?action=reject_build', { csrf_token: window.CSRF_TOKEN || '', id: +btn.dataset.rejectBuild });
-          if (!res.ok) throw new Error(res.error || 'Ошибка');
-          toast('Отклонено');
-          loadAdminPending();
-        } catch (err) { toast(err.message || 'Ошибка'); }
+          if (act === 'preload') {
+            if (kind === 'game') {
+              await adminPreloadGame(id, btn.dataset.title || '');
+            } else if (kind === 'build') {
+              adminEnqueueBuildPreload({
+                buildId: +(btn.dataset.buildId || id),
+                gameId: +(btn.dataset.gameId || 0),
+                title: btn.dataset.title || 'Игра',
+                version: btn.dataset.version || '',
+              });
+            }
+            return;
+          }
+          if (act === 'approve') {
+            if (kind === 'game') {
+              const res = await postJSON(SUBMIT_API + '?action=publish', { csrf_token: window.CSRF_TOKEN || '', id });
+              if (!res.ok) throw new Error(res.error || 'Ошибка');
+              toast('Игра опубликована');
+            } else if (kind === 'build') {
+              const res = await postJSON(SUBMIT_API + '?action=approve_build', { csrf_token: window.CSRF_TOKEN || '', id });
+              if (!res.ok) throw new Error(res.error || 'Ошибка');
+              toast('Версия опубликована');
+            } else if (kind === 'mod' || kind === 'media' || kind === 'asset') {
+              const data = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_set_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: kind, id, status: 'published' })
+              });
+              if (!data || !data.ok) throw new Error((data && data.error) || 'Ошибка');
+              toast('Опубликовано');
+            }
+            loadAdminPending();
+            return;
+          }
+          if (act === 'reject') {
+            if (kind === 'build') {
+              if (!confirm('Отклонить и удалить эту сборку?')) return;
+              const res = await postJSON(SUBMIT_API + '?action=reject_build', { csrf_token: window.CSRF_TOKEN || '', id });
+              if (!res.ok) throw new Error(res.error || 'Ошибка');
+              toast('Отклонено');
+            } else if (kind === 'game') {
+              const note = prompt('Причина отказа (необязательно):', '') || '';
+              const res = await postJSON(SUBMIT_API + '?action=reject', { csrf_token: window.CSRF_TOKEN || '', id, note });
+              if (!res.ok) throw new Error(res.error || 'Ошибка');
+              toast('Отклонено');
+            } else if (kind === 'mod' || kind === 'media' || kind === 'asset') {
+              if (!confirm('Отклонить заявку?')) return;
+              const data = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_set_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: kind, id, status: 'rejected' })
+              });
+              if (!data || !data.ok) throw new Error((data && data.error) || 'Ошибка');
+              toast('Отклонено');
+            }
+            loadAdminPending();
+          }
+        } catch (err) {
+          toast(err.message || 'Ошибка');
+        } finally {
+          btn.disabled = false;
+        }
       });
     });
   } catch (err) {
     list.innerHTML = `<div class="friends-empty">${escapeHtml(err.message || 'Ошибка')}<br><button type="button" class="btn-retry" id="admin-retry">Повторить</button></div>`;
     $('#admin-retry')?.addEventListener('click', loadAdminPending);
+  } finally {
+    window.__adminPendingLoading = false;
   }
 }
 
@@ -10917,7 +11143,7 @@ async function openAdminWorkshopItem(type, id) {
     existing.className = 'submit-modal hidden';
     existing.innerHTML = `
       <div class="submit-modal-backdrop" data-close-ws-admin></div>
-      <div class="submit-modal-box" style="max-width:480px">
+      <div class="submit-modal-box" style="max-width:520px">
         <div class="submit-modal-head">
           <h2 id="ws-admin-mod-title">Модерация</h2>
           <button type="button" class="pub-modal-close" data-close-ws-admin aria-label="Закрыть">
@@ -10927,7 +11153,8 @@ async function openAdminWorkshopItem(type, id) {
         <div class="submit-modal-body">
           <div id="ws-admin-mod-body" class="ws-admin-mod-body"></div>
         </div>
-        <div class="submit-modal-foot">
+        <div class="submit-modal-foot" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+          <button type="button" class="btn-ghost" id="ws-admin-cancel" data-close-ws-admin>Отменить</button>
           <button type="button" class="hp-btn-edit" id="ws-admin-reject" style="color:#f66">Отклонить</button>
           <button type="button" class="hp-btn-edit" id="ws-admin-approve" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Опубликовать</button>
         </div>
@@ -11140,11 +11367,16 @@ async function openAdminGame(id) {
     // обложка в списке слева — актуальная с сервера (с cache-bust)
     const coverUrl = g.cover_url || g.cover_src || (g.id ? ('media.php?type=cover&id=' + g.id) : '');
     if (coverUrl) setPendingItemCover(id, bustUrl(coverUrl));
-    // title в списке
+    // title в списке — не затирать бейдж типа (Игра / Медиа / …)
     const pend = document.querySelector(`.admin-pending-item[data-id="${id}"]`);
     if (pend) {
       const t = pend.querySelector('.t');
-      if (t && g.title) t.textContent = g.title;
+      if (t && g.title) {
+        const badge = t.querySelector('.admin-pending-type');
+        t.textContent = '';
+        if (badge) t.appendChild(badge);
+        t.appendChild(document.createTextNode(g.title));
+      }
     }
     $$('.admin-pending-item').forEach(el => el.classList.toggle('active', +el.dataset.id === id));
   } catch (err) {
@@ -11228,13 +11460,23 @@ function setPendingItemCover(gameId, url) {
   const btn = document.querySelector(`.admin-pending-item[data-id="${gameId}"]`);
   if (!btn) return;
   let img = btn.querySelector('img');
+  const ph = btn.querySelector('.admin-pending-cover.is-ph');
   if (!img) {
     img = document.createElement('img');
     img.alt = '';
-    btn.insertBefore(img, btn.firstChild);
+    if (ph) ph.replaceWith(img);
+    else btn.insertBefore(img, btn.firstChild);
+  } else if (ph) {
+    ph.remove();
   }
   img.style.display = '';
-  img.onerror = () => { img.style.display = 'none'; };
+  img.onerror = () => {
+    // вернуть серую заглушку с иконкой игры
+    const d = document.createElement('div');
+    d.className = 'admin-pending-cover is-ph is-game';
+    d.innerHTML = (typeof ADMIN_SECTION_ICO !== 'undefined' && ADMIN_SECTION_ICO.game) ? ADMIN_SECTION_ICO.game : '';
+    img.replaceWith(d);
+  };
   img.src = url;
 }
 

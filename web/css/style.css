@@ -3970,8 +3970,10 @@ body.client .content > .main:has(#view-library.active) {
   flex-direction: column;
   gap: 4px;
   position: sticky;
-  top: 16px;
+  top: 0;
   align-self: start;
+  margin-top: 0;
+  padding-top: 0;
   max-height: none;
   overflow: visible;
 }
@@ -17921,4 +17923,400 @@ textarea.field-changed,
     border-bottom: 1px solid var(--border);
     max-height: 48%;
   }
+}
+
+/* ===== Settings rows: label left, control right (one line) ===== */
+#view-settings .settings-rows-block {
+  margin-bottom: 16px;
+  max-width: 560px;
+}
+#view-settings .settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 0 !important;
+}
+#view-settings .settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+  padding: 8px 14px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+}
+#view-settings .settings-row:last-of-type {
+  border-bottom: none;
+}
+#view-settings .settings-row-label {
+  flex: 0 0 auto;
+  min-width: 160px;
+  max-width: 45%;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-bright);
+  line-height: 1.3;
+}
+#view-settings .settings-row .settings-select,
+#view-settings .settings-row .sort-select,
+#view-settings .settings-row .auth-input,
+#view-settings .settings-row .settings-row-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 280px;
+  width: auto;
+  height: 36px;
+  margin: 0;
+  box-sizing: border-box;
+  font-size: 0.88rem;
+}
+#view-settings .settings-row .catio-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 280px;
+  width: auto !important;
+}
+#view-settings .settings-row .catio-select__btn {
+  height: 36px;
+  min-height: 36px;
+}
+#view-settings .settings-row-check .settings-row-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  max-width: 280px;
+  justify-content: flex-end;
+}
+#view-settings .settings-row-check-text {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+#view-settings .settings-row-hint {
+  margin: 0;
+  padding: 6px 14px 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  border-bottom: none;
+}
+
+/* Admin pending list — notification-like items with type badge */
+.admin-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.admin-pending-section {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 12px 0 4px;
+  padding: 0 4px;
+}
+.admin-pending-section:first-child { margin-top: 0; }
+
+.admin-pending-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.admin-pending-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+.admin-pending-item img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+}
+.admin-pending-item .t {
+  font-weight: 600;
+  color: var(--text-bright);
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-pending-item .s {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.admin-pending-type {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 5px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.admin-pending-type.is-game { background: rgba(94, 160, 255, 0.15); color: #7eb6ff; border-color: rgba(94,160,255,0.3); }
+.admin-pending-type.is-mod { background: rgba(180, 120, 255, 0.15); color: #c9a0ff; border-color: rgba(180,120,255,0.3); }
+.admin-pending-type.is-asset { background: rgba(80, 200, 140, 0.15); color: #6ed9a0; border-color: rgba(80,200,140,0.3); }
+.admin-pending-type.is-media { background: rgba(255, 180, 80, 0.15); color: #ffc060; border-color: rgba(255,180,80,0.3); }
+.admin-pending-type.is-build { background: rgba(255, 100, 120, 0.12); color: #ff8a9a; border-color: rgba(255,100,120,0.28); }
+
+/* Unify workshop admin modal footer with game publish modal */
+#ws-admin-mod-modal .submit-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+#ws-admin-mod-modal .submit-modal-foot .btn-ghost,
+#ws-admin-mod-modal .submit-modal-foot .hp-btn-edit {
+  min-width: 110px;
+}
+
+/* ===== Admin = same layout/feel as Settings ===== */
+#view-admin .admin-settings-layout {
+  display: grid !important;
+  grid-template-columns: 240px minmax(0, 1fr) !important;
+  gap: 20px !important;
+  align-items: start !important;
+  width: 100%;
+  flex: none !important;
+  min-height: calc(100vh - 140px);
+}
+#view-admin .settings-nav#admin-nav,
+#view-admin aside.settings-nav {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-width: none !important;
+  width: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  flex-shrink: 0;
+}
+#view-admin .settings-nav-btn {
+  background: none !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 11px 14px !important;
+  color: var(--text-muted) !important;
+  font-family: inherit;
+  font-size: 0.88rem !important;
+  text-align: left;
+  cursor: pointer;
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  font-weight: 400 !important;
+}
+#view-admin .settings-nav-btn:hover {
+  background: var(--bg-card) !important;
+  color: var(--text-bright) !important;
+}
+#view-admin .settings-nav-btn.active {
+  background: var(--bg-card) !important;
+  color: var(--text-bright) !important;
+  font-weight: 600 !important;
+}
+#view-admin .settings-main {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  padding: 22px 26px !important;
+  min-width: 0;
+  flex: none !important;
+}
+#view-admin .settings-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+#view-admin .settings-sub,
+#view-admin .settings-desc {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  margin: 6px 0 18px;
+}
+#view-admin .admin-mod-list-wrap {
+  max-width: none;
+  margin-bottom: 0;
+}
+#view-admin .admin-pending-list {
+  max-height: none;
+  gap: 6px;
+}
+#view-admin .admin-pending-item {
+  background: var(--bg-elevated, rgba(0,0,0,0.2));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 0;
+}
+#view-admin .admin-pending-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+
+/* Native select (издательство) — как остальные контролы в строке */
+#view-settings #settings-display-pub.settings-select,
+#view-settings .settings-row select.settings-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg-elevated);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%999' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-bright);
+  padding: 0 32px 0 12px;
+  height: 36px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+#view-settings #settings-display-pub.settings-select:focus,
+#view-settings .settings-row select.settings-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+@media (max-width: 900px) {
+  #view-admin .admin-settings-layout {
+    grid-template-columns: 1fr !important;
+  }
+  #view-admin .settings-nav#admin-nav {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    position: static;
+  }
+}
+
+
+/* Nav flush with top of settings-main card */
+#view-settings .settings-layout,
+#view-admin .admin-settings-layout {
+  align-items: start !important;
+}
+#view-settings .settings-nav,
+#view-admin .settings-nav#admin-nav,
+#view-admin aside.settings-nav {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  top: 0 !important;
+  align-self: start !important;
+}
+#view-settings .settings-main,
+#view-admin .settings-main {
+  margin-top: 0 !important;
+}
+
+/* Admin pending: square icon action buttons */
+.admin-pending-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.admin-act-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s, transform .1s;
+  flex-shrink: 0;
+}
+.admin-act-btn:hover {
+  color: var(--text-bright);
+  border-color: var(--text-muted);
+  background: var(--bg-hover);
+}
+.admin-act-btn:active { transform: scale(0.96); }
+.admin-act-btn:disabled { opacity: 0.45; pointer-events: none; }
+.admin-act-btn svg { display: block; pointer-events: none; }
+
+.admin-act-btn.is-approve:hover {
+  color: #7dffa0;
+  border-color: rgba(80, 200, 120, 0.45);
+  background: rgba(80, 200, 120, 0.12);
+}
+.admin-act-btn.is-reject:hover {
+  color: #ff8a9a;
+  border-color: rgba(255, 100, 120, 0.4);
+  background: rgba(255, 100, 120, 0.12);
+}
+.admin-act-btn.is-preload:hover {
+  color: #7eb6ff;
+  border-color: rgba(94, 160, 255, 0.4);
+  background: rgba(94, 160, 255, 0.12);
+}
+
+#view-admin .admin-pending-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Admin pending: gray stock cover with section icon */
+.admin-pending-cover.is-ph {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2a2a2e;
+  color: rgba(255,255,255,0.45);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.admin-pending-cover.is-ph.is-game,
+.admin-pending-cover.is-ph.is-build { color: #7eb6ff; background: rgba(94, 160, 255, 0.12); }
+.admin-pending-cover.is-ph.is-mod { color: #c9a0ff; background: rgba(180, 120, 255, 0.12); }
+.admin-pending-cover.is-ph.is-media { color: #ffc060; background: rgba(255, 180, 80, 0.12); }
+.admin-pending-cover.is-ph.is-asset { color: #6ed9a0; background: rgba(80, 200, 140, 0.12); }
+.admin-pending-cover.is-ph svg { display: block; opacity: 0.9; }
+#view-admin .admin-pending-item img,
+.admin-pending-item img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: #2a2a2e;
 }

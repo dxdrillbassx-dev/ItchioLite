@@ -414,6 +414,9 @@ try {
             ]);
             $gameId = (int)$pdo->lastInsertId();
             insert_trailer_media($pdo, $gameId, $video);
+            // Первая публикация: сборка привязана к заявке игры, отдельной «версии» в модерации нет.
+            // status=pending только при submit_update (обновление уже опубликованной игры).
+            $GLOBALS['__build_status_override'] = 'attached';
             try { save_builds_from_request($pdo, (int)$gameId); } catch (Throwable $e) {}
             // обязательна хотя бы одна сборка
             try {
@@ -940,7 +943,7 @@ try {
                 $pdo->prepare("UPDATE games SET status='published', is_published=1, category=IF(category='' OR category IS NULL,'game',category) WHERE id=?")->execute([$id]);
                 try {
                     ensure_game_builds_table($pdo);
-                    $pdo->prepare("UPDATE game_builds SET status='published' WHERE game_id=? AND (status='pending' OR status IS NULL OR status='')")->execute([$id]);
+                    $pdo->prepare("UPDATE game_builds SET status='published' WHERE game_id=? AND (status='pending' OR status='attached' OR status IS NULL OR status='')")->execute([$id]);
                 } catch (Throwable $e) {}
                 $type = 'game_published';
                 $titleN = 'Ваша игра опубликована';
@@ -1154,12 +1157,15 @@ try {
             $user = requireUserS();
             if (($user['role'] ?? '') !== 'admin') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'Нет доступа']); break; }
             ensure_game_builds_table($pdo);
+            // Только обновления уже опубликованных игр.
+            // Первая сборка при подаче игры имеет status=attached и здесь не показывается.
             $st = $pdo->query("SELECT b.*, g.title AS game_title, g.cover_url, g.banner_url, g.icon_url,
                 u.username AS author_name
                 FROM game_builds b
                 JOIN games g ON g.id = b.game_id
                 LEFT JOIN users u ON u.id = b.submitted_by
                 WHERE b.status = 'pending'
+                  AND (g.is_published = 1 OR g.status = 'published')
                 ORDER BY b.created_at ASC
                 LIMIT 100");
             echo json_encode(['ok'=>true, 'builds'=>$st->fetchAll(PDO::FETCH_ASSOC)], JSON_UNESCAPED_UNICODE);
