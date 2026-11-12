@@ -61,6 +61,9 @@ try {
             $user = requireUserP();
             $uid = (int)$user['id'];
             $rows = [];
+            $byId = [];
+
+            // 1) по membership
             try {
                 $st = $pdo->prepare("
                   SELECT p.id, p.name, p.slug, p.avatar_url, p.owner_id,
@@ -71,29 +74,38 @@ try {
                   ORDER BY p.name ASC
                 ");
                 $st->execute([$uid]);
-                $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                    $byId[(int)$r['id']] = $r;
+                }
             } catch (Throwable $e) {
-                jsonOut(['ok' => false, 'error' => 'DB members: ' . $e->getMessage()], 500);
+                // таблица members может отсутствовать — не валим весь mine
             }
+
+            // 2) где пользователь owner (даже без строки в members)
             try {
                 $st2 = $pdo->prepare("SELECT id, name, slug, avatar_url, owner_id FROM publishers WHERE owner_id = ?");
                 $st2->execute([$uid]);
                 foreach ($st2->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
-                    $found = false;
-                    foreach ($rows as $ex) {
-                        if ((int)$ex['id'] === (int)$r['id']) { $found = true; break; }
-                    }
-                    if (!$found) {
+                    $pid = (int)$r['id'];
+                    if (!isset($byId[$pid])) {
                         $r['my_role'] = 'owner';
-                        $rows[] = $r;
-                        try {
-                            $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')")
-                                ->execute([(int)$r['id'], $uid]);
-                        } catch (Throwable $e) {}
+                        $byId[$pid] = $r;
                     }
+                    try {
+                        $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, 'owner')")
+                            ->execute([$pid, $uid]);
+                    } catch (Throwable $e) {}
                 }
-            } catch (Throwable $e) {}
+            } catch (Throwable $e) {
+                jsonOut(['ok' => false, 'error' => 'DB publishers: ' . $e->getMessage()], 500);
+            }
+
+            $rows = array_values($byId);
+            usort($rows, function ($a, $b) {
+                return strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
+            });
             jsonOut(['ok' => true, 'publishers' => $rows, 'user_id' => $uid, 'count' => count($rows)]);
+            break;
         }
 
         case 'get': {

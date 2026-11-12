@@ -2560,7 +2560,11 @@ function socialAuth(provider) {
               <label class="settings-label"><span>Название *</span><input class="auth-input" name="title" id="sg-title" required maxlength="120" /></label>
               <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" name="price" id="sg-price" type="text" inputmode="numeric" pattern="[0-9]*" value="0" maxlength="7" autocomplete="off" /></label>
               <label class="settings-label"><span>Разработчик</span><input class="auth-input" name="developer" id="sg-developer" maxlength="120" placeholder="Студия или автор" /></label>
-              <label class="settings-label"><span>Издательство</span>
+              <label class="settings-label sg-pub-field">
+                <div class="sg-pub-label-row">
+                  <span class="sg-pub-label-title">Издательство</span>
+                  <span class="sg-pub-admin-hint" hidden></span>
+                </div>
                 <select class="settings-select" id="sg-publisher-id" name="publisher_id">
                   <option value="">— без издательства —</option>
                 </select>

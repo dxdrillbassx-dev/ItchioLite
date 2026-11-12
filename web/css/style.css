@@ -18320,3 +18320,190 @@ textarea.field-changed,
   flex-shrink: 0;
   background: #2a2a2e;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===== Издательство: как catio-select, вровень с «Разработчик» ===== */
+#submit-form-modal .sg-pub-field {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+}
+#submit-form-modal .sg-pub-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 1.15em;
+  line-height: 1.15;
+}
+#submit-form-modal .sg-pub-label-title {
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  color: rgba(255,255,255,0.45) !important;
+  letter-spacing: 0.01em !important;
+}
+#submit-form-modal .sg-pub-admin-hint {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #f0c14b;
+  white-space: nowrap;
+  line-height: 1.15;
+}
+#submit-form-modal .sg-pub-admin-hint[hidden] { display: none !important; }
+
+#submit-form-modal .sg-pub-field #sg-publisher-id,
+#submit-form-modal #sg-publisher-id.select-native-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  clip: rect(0,0,0,0);
+}
+
+/* копия визуала .catio-select / .catio-select__btn */
+#submit-form-modal .sg-pub-dd {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  font-family: inherit;
+  user-select: none;
+  z-index: 6;
+}
+#submit-form-modal .sg-pub-dd-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 40px 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.92);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  outline: none;
+}
+#submit-form-modal .sg-pub-dd-btn:hover {
+  background: rgba(255,255,255,0.055);
+  border-color: rgba(255,255,255,0.12);
+}
+#submit-form-modal .sg-pub-dd.is-open .sg-pub-dd-btn,
+#submit-form-modal .sg-pub-dd-btn:focus-visible {
+  border-color: rgba(239, 91, 44, 0.55);
+  background: rgba(255,255,255,0.06);
+  box-shadow: 0 0 0 3px rgba(239, 91, 44, 0.12);
+}
+#submit-form-modal .sg-pub-dd-txt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+#submit-form-modal .sg-pub-dd-chev {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  pointer-events: none;
+  transition: transform 0.18s ease, color 0.12s;
+  flex-shrink: 0;
+  margin: 0;
+}
+#submit-form-modal .sg-pub-dd.is-open .sg-pub-dd-chev {
+  transform: translateY(-50%) rotate(180deg);
+  color: var(--accent);
+}
+
+#submit-form-modal .sg-pub-dd-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 80;
+  min-width: 100%;
+  width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px) scale(0.98);
+  transform-origin: top center;
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s;
+  display: block;
+  box-sizing: border-box;
+}
+#submit-form-modal .sg-pub-dd.is-open .sg-pub-dd-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+#submit-form-modal .sg-pub-dd-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  box-sizing: border-box;
+}
+#submit-form-modal .sg-pub-dd-opt:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+#submit-form-modal .sg-pub-dd-opt.is-on {
+  background: rgba(239, 91, 44, 0.14);
+  color: var(--text-bright);
+}
+#submit-form-modal .sg-pub-dd-opt.is-on::after {
+  content: "";
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+}

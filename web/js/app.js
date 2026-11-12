@@ -3730,7 +3730,15 @@ function clearPublishFormFields() {
   const formModal = document.getElementById('submit-form-modal');
   const form = document.getElementById('submit-game-form') || (formModal && formModal.querySelector('form'));
   try { if (form && form.reset) form.reset(); } catch (e) {}
-  ['sg-title','sg-developer','sg-short','sg-tags','sg-price','sg-desc','sg-video','sg-cover-url','sg-banner-url','sg-logo-url','sg-icon-url','sg-screenshots-urls','sg-trailer-urls','sg-genre','sg-publisher','sg-publisher-id'].forEach(id => {
+  // form.reset() может откатить options у select — восстановим из кэша
+  try {
+    const cached = window.__myPublishersCache && window.__myPublishersCache.list;
+    const sel = document.getElementById('sg-publisher-id');
+    if (sel && cached && cached.length && typeof applyPublisherOptionsToSelect === 'function') {
+      applyPublisherOptionsToSelect(sel, cached, '');
+    }
+  } catch (e) {}
+  ['sg-title','sg-developer','sg-short','sg-tags','sg-price','sg-desc','sg-video','sg-cover-url','sg-banner-url','sg-logo-url','sg-icon-url','sg-screenshots-urls','sg-trailer-urls','sg-genre','sg-publisher'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     if (el.tagName === 'SELECT') el.selectedIndex = 0;
@@ -8779,6 +8787,14 @@ function validatePublishForm() {
   const cover = $('#sg-cover')?.files?.[0];
   const coverUrl = $('#sg-cover-url')?.value;
   if (!cover && !coverUrl) return 'Добавьте обложку';
+  // Издательство обязательно для не-админов
+  const isAdmin = !!(window.AUTH_STATE && window.AUTH_STATE.user && (
+    window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin
+  ));
+  const pubId = ($('#sg-publisher-id')?.value || '').trim();
+  if (!isAdmin && !pubId) {
+    return 'Выберите издательство (публикация без издательства доступна только админам)';
+  }
   return null;
 }
 
@@ -9555,11 +9571,15 @@ function initSubmitGame() {
           updatePublishSectionStatus();
           window.__pendingBuilds = [];
           renderPendingBuilds();
-          window.fillPublishPublisherSelect().then(() => {
+          window.fillPublishPublisherSelect().then((pubs) => {
+            console.log('[publishers] after form open', pubs && pubs.length);
             try { initCatioSelects(formModal); } catch (e2) {}
+            // ещё раз после catio — на случай если что-то сбросило options
+            return window.fillPublishPublisherSelect(pubs);
           }).catch((err) => {
             console.warn(err);
             try { initCatioSelects(formModal); } catch (e2) {}
+            try { window.fillPublishPublisherSelect(); } catch (e3) {}
           });
         } catch (e) {
           try { initCatioSelects(formModal); } catch (e2) {}
@@ -12737,6 +12757,7 @@ window.openSubmitRules = function openSubmitRules() {
     const formModal = document.getElementById('submit-form-modal');
     if (formModal) {
       formModal.classList.remove('hidden');
+      try { window.fillPublishPublisherSelect(); } catch (e) {}
       return;
     }
     alert('Модалка добавления игры не найдена. Обнови index.php');
@@ -12747,6 +12768,8 @@ window.openSubmitRules = function openSubmitRules() {
   const next = document.getElementById('submit-rules-next');
   if (next) next.disabled = true;
   modal.classList.remove('hidden');
+  // прогреем список издательств заранее
+  try { window.fetchMyPublishers(true).catch(() => {}); } catch (e) {}
 };
 window.openCreateMenu = function openCreateMenu() {
   const m = document.getElementById('create-menu-modal');
@@ -13092,7 +13115,7 @@ window.saveNewPublisher = async function saveNewPublisher() {
       games_count: 0
     };
     try {
-      await window.fillPublishPublisherSelect(localPub.id);
+      await window.fillPublishPublisherSelect(localPub);
     } catch (e) {
       console.warn(e);
     }
@@ -13406,11 +13429,11 @@ async function loadGameBuildsIntoForm(gameId) {
 }
 
 
-/** Издательства: прямые запросы (логика a75e210) */
+/** Издательства: простой mine → select, без сложного кэша */
 window.__myPublishersCache = window.__myPublishersCache || { list: null, ts: 0 };
-window.__pendingPublishPublishers = null;
 
 window.fetchMyPublishers = async function fetchMyPublishers(force) {
+  // force всегда = свежий запрос
   const api = (typeof PUB_API !== 'undefined' ? PUB_API : 'api/publishers.php');
   const url = api + '?action=mine&_t=' + Date.now();
   const res = await fetch(url, {
@@ -13425,21 +13448,25 @@ window.fetchMyPublishers = async function fetchMyPublishers(force) {
     const s = text.indexOf('{');
     data = JSON.parse(s >= 0 ? text.slice(s) : text);
   } catch (e) {
-    console.error('[publishers] bad JSON', text.slice(0, 300));
+    console.error('[publishers] bad JSON', text.slice(0, 400));
     throw new Error('Ответ publishers не JSON');
   }
   if (!data || data.ok === false) {
     throw new Error((data && data.error) || ('HTTP ' + res.status));
   }
   const pubs = Array.isArray(data.publishers) ? data.publishers : [];
-  console.log('[publishers] mine ok', pubs.length, pubs);
+  console.log('[publishers] mine', pubs.length, pubs.map(p => p.id + ':' + p.name));
   window.__myPublishersCache = { list: pubs, ts: Date.now() };
   window.__pendingPublishPublishers = pubs;
   return pubs;
-}
+};
 
 window.applyPublisherOptionsToSelect = function applyPublisherOptionsToSelect(sel, pubs, prefer) {
   if (!sel) return;
+  const isAdmin = !!(window.AUTH_STATE && window.AUTH_STATE.user && (
+    window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin
+  ));
+
   try {
     const oldWrap = sel.closest('.catio-select');
     if (oldWrap && oldWrap.parentNode) {
@@ -13448,28 +13475,41 @@ window.applyPublisherOptionsToSelect = function applyPublisherOptionsToSelect(se
     }
   } catch (e) {}
   delete sel.dataset.catioEnhanced;
-  sel.classList.add('settings-select');
-  sel.classList.remove('select-native-hidden', 'hidden');
+  // прячем нативный — рисуем кастомный с аватарками
+  sel.classList.add('settings-select', 'select-native-hidden');
+  sel.classList.remove('hidden');
   sel.hidden = false;
-  sel.style.cssText = 'display:block;visibility:visible;';
+  sel.disabled = false;
+  sel.style.cssText = 'position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;';
   sel.removeAttribute('aria-hidden');
-  sel.removeAttribute('tabindex');
 
-  const list = Array.isArray(pubs) ? pubs : [];
-  // всегда можно без издательства
-  let html = '<option value="">— без издательства —</option>';
-  if (list.length) {
-    html += list.map(p =>
-      '<option value="' + String(p.id) + '">' + escapeHtml(String(p.name || ('#' + p.id))) + '</option>'
-    ).join('');
+  const list = Array.isArray(pubs) ? pubs.filter(p => p && p.id != null) : [];
+
+  while (sel.options.length > 0) sel.remove(0);
+  if (isAdmin) {
+    const empty = new Option('— без издательства —', '', false, false);
+    empty.dataset.avatar = '';
+    empty.dataset.kind = 'empty';
+    sel.add(empty);
   }
-  sel.innerHTML = html;
+  list.forEach(p => {
+    const opt = new Option(String(p.name || ('#' + p.id)), String(p.id), false, false);
+    opt.dataset.avatar = p.avatar_url || p.avatar || '';
+    opt.dataset.kind = 'pub';
+    sel.add(opt);
+  });
 
   const pref = prefer != null && prefer !== '' ? String(prefer) : '';
   if (pref && list.some(p => String(p.id) === pref)) {
     sel.value = pref;
-  } else {
+  } else if (!isAdmin && list.length >= 1) {
+    sel.value = String(list[0].id);
+  } else if (list.length === 1 && isAdmin) {
+    sel.value = String(list[0].id);
+  } else if (!isAdmin && list.length === 0) {
     sel.value = '';
+  } else {
+    sel.value = isAdmin ? '' : (list[0] ? String(list[0].id) : '');
   }
 
   const hid = document.getElementById('sg-publisher');
@@ -13478,45 +13518,212 @@ window.applyPublisherOptionsToSelect = function applyPublisherOptionsToSelect(se
     if (hid) hid.value = c ? (c.name || '') : '';
   };
   syncHid();
-  sel.onchange = syncHid;
+  sel.onchange = () => {
+    syncHid();
+    updatePublisherAdminHint(sel);
+    rebuildPublisherSelectUI(sel, list);
+  };
+
+  updatePublisherAdminHint(sel);
+  rebuildPublisherSelectUI(sel, list);
+
+  console.log('[publishers] applied to #' + (sel.id || '?'), 'options=', sel.options.length, 'admin=', isAdmin);
+};
+
+function updatePublisherAdminHint(sel) {
+  if (!sel) return;
+  const label = sel.closest('label.settings-label') || sel.parentElement;
+  if (!label) return;
+  let head = label.querySelector('.sg-pub-label-row');
+  if (!head) {
+    head = document.createElement('div');
+    head.className = 'sg-pub-label-row';
+    const title = label.querySelector('.sg-pub-label-title, :scope > span');
+    if (title) {
+      title.classList.add('sg-pub-label-title');
+      head.appendChild(title);
+    } else {
+      const t = document.createElement('span');
+      t.className = 'sg-pub-label-title';
+      t.textContent = 'Издательство';
+      head.appendChild(t);
+    }
+    const hint = document.createElement('span');
+    hint.className = 'sg-pub-admin-hint';
+    hint.hidden = true;
+    head.appendChild(hint);
+    label.insertBefore(head, label.firstChild);
+  }
+  const hint = head.querySelector('.sg-pub-admin-hint');
+  if (!hint) return;
+  if (!sel.value) {
+    hint.hidden = false;
+    hint.textContent = 'Доступно только админам';
+  } else {
+    hint.hidden = true;
+    hint.textContent = '';
+  }
 }
 
+/** Простой дропдаун издательств — без аватарок, высота как у input */
+function rebuildPublisherSelectUI(sel, list) {
+  if (!sel) return;
+  const parent = sel.parentElement;
+  if (!parent) return;
+
+  parent.querySelectorAll(':scope > .catio-select, :scope > .sg-pub-dd').forEach(n => n.remove());
+
+  const wrap = document.createElement('div');
+  wrap.className = 'sg-pub-dd';
+  parent.appendChild(wrap);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'sg-pub-dd-btn';
+  wrap.appendChild(btn);
+
+  const menu = document.createElement('div');
+  menu.className = 'sg-pub-dd-menu';
+  wrap.appendChild(menu);
+
+  const isAdmin = !!(window.AUTH_STATE && window.AUTH_STATE.user && (
+    window.AUTH_STATE.user.role === 'admin' || window.AUTH_STATE.user.is_admin
+  ));
+
+  const paintBtn = () => {
+    const v = sel.value;
+    let text;
+    if (!v) {
+      text = isAdmin ? '— без издательства —' : 'Выберите издательство';
+    } else {
+      const opt = sel.selectedOptions[0];
+      text = (opt && opt.textContent) || ('#' + v);
+    }
+    btn.innerHTML = '';
+    const t = document.createElement('span');
+    t.className = 'sg-pub-dd-txt';
+    t.textContent = text;
+    btn.appendChild(t);
+    const chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    chev.setAttribute('class', 'sg-pub-dd-chev');
+    chev.setAttribute('width', '16');
+    chev.setAttribute('height', '16');
+    chev.setAttribute('viewBox', '0 0 24 24');
+    chev.setAttribute('fill', 'none');
+    chev.setAttribute('stroke', 'currentColor');
+    chev.setAttribute('stroke-width', '2');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M6 9l6 6 6-6');
+    chev.appendChild(path);
+    btn.appendChild(chev);
+  };
+
+  menu.innerHTML = '';
+  [...sel.options].forEach(opt => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'sg-pub-dd-opt' + (String(opt.value) === String(sel.value) ? ' is-on' : '');
+    row.textContent = opt.textContent;
+    row.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      sel.value = opt.value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      wrap.classList.remove('is-open');
+      menu.querySelectorAll('.sg-pub-dd-opt').forEach(x => x.classList.toggle('is-on', x === row));
+      paintBtn();
+    });
+    menu.appendChild(row);
+  });
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const open = wrap.classList.toggle('is-open');
+    if (open) {
+      document.querySelectorAll('.sg-pub-dd.is-open').forEach(w => {
+        if (w !== wrap) w.classList.remove('is-open');
+      });
+    }
+  });
+
+  paintBtn();
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest || e.target.closest('.sg-pub-dd')) return;
+  document.querySelectorAll('.sg-pub-dd.is-open').forEach(w => w.classList.remove('is-open'));
+});
+
 window.fillPublishPublisherSelect = async function fillPublishPublisherSelect(preloaded) {
+  // Ищем select максимально широко
   const formModal = document.getElementById('submit-form-modal');
-  let sel = (formModal && formModal.querySelector('#sg-publisher-id'))
-    || document.getElementById('sg-publisher-id')
-    || document.querySelector('select[name="publisher_id"]');
-  if (!sel) {
-    console.warn('[publishers] #sg-publisher-id не найден');
+  const candidates = [];
+  if (formModal) candidates.push(...formModal.querySelectorAll('#sg-publisher-id, select[name="publisher_id"]'));
+  const byId = document.getElementById('sg-publisher-id');
+  if (byId) candidates.push(byId);
+  document.querySelectorAll('select[name="publisher_id"]').forEach(s => candidates.push(s));
+  // unique
+  const sels = [...new Set(candidates.filter(Boolean))];
+  if (!sels.length) {
+    console.warn('[publishers] #sg-publisher-id не найден в DOM');
     return [];
   }
 
-  const cur = sel.value || '';
-  let pubs = Array.isArray(preloaded) && preloaded.length ? preloaded.slice() : null;
-
-  if (!pubs) {
+  let pubs = null;
+  if (Array.isArray(preloaded) && preloaded.length) {
+    pubs = preloaded.slice();
+  } else if (preloaded && typeof preloaded === 'object' && preloaded.id != null) {
+    // один объект — всё равно подтянем полный список
+    try { pubs = await window.fetchMyPublishers(true); } catch (e) { pubs = [preloaded]; }
+  } else {
     try {
       pubs = await window.fetchMyPublishers(true);
     } catch (e) {
       console.error('[publishers] load failed', e);
-      pubs = [];
-      toast('Не удалось загрузить издательства: ' + (e.message || e));
+      pubs = (window.__myPublishersCache && window.__myPublishersCache.list) || [];
+      try { toast('Не удалось загрузить издательства: ' + (e.message || e)); } catch (e2) {}
     }
   }
+  if (!Array.isArray(pubs)) pubs = [];
 
-  applyPublisherOptionsToSelect(sel, pubs, cur);
-
-  if (cur && pubs.some(p => String(p.id) === String(cur))) sel.value = String(cur);
-
-  const hid = document.getElementById('sg-publisher');
-  if (hid) {
-    const p = pubs.find(x => String(x.id) === String(sel.value));
-    hid.value = p ? (p.name || '') : '';
+  let prefer = '';
+  if (preloaded != null && (typeof preloaded === 'number' || typeof preloaded === 'string')) {
+    prefer = String(preloaded);
+  } else if (preloaded && preloaded.id != null) {
+    prefer = String(preloaded.id);
+  } else if (sels[0] && sels[0].value) {
+    prefer = String(sels[0].value);
   }
 
-  return pubs;
-}
+  sels.forEach(sel => applyPublisherOptionsToSelect(sel, pubs, prefer));
 
+  // Повтор через кадр — на случай form.reset() / перерисовки сразу после
+  requestAnimationFrame(() => {
+    sels.forEach(sel => {
+      if (sel.options.length <= 1 && pubs.length > 0) {
+        applyPublisherOptionsToSelect(sel, pubs, prefer);
+      }
+    });
+  });
+  setTimeout(() => {
+    sels.forEach(sel => {
+      if (sel.options.length <= 1 && pubs.length > 0) {
+        console.warn('[publishers] re-apply after timeout');
+        applyPublisherOptionsToSelect(sel, pubs, prefer);
+      }
+    });
+  }, 50);
+  setTimeout(() => {
+    sels.forEach(sel => {
+      if (sel.options.length <= 1 && pubs.length > 0) {
+        applyPublisherOptionsToSelect(sel, pubs, prefer);
+      }
+    });
+  }, 300);
+
+  return pubs;
+};
 
 
 async function openPublisherPage(id, slug) {
