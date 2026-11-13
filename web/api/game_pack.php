@@ -990,6 +990,46 @@ if ($action === 'export_download') {
 
 http_response_code(400);
 
+// Локальные ассеты, сохранённые при импорте игры в uploads/games/{icons,logos,...}.
+// Возвращаем список файлов из общих каталогов проекта, а не только URL из записи games.
+if ($action === 'list_game_assets') {
+    gp_requireAdmin();
+    $type = strtolower(trim((string)($_GET['type'] ?? '')));
+    $allowedTypes = ['icons', 'logos', 'banners', 'covers', 'shots', 'videos'];
+    if (!in_array($type, $allowedTypes, true)) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'Недопустимый тип ассетов'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $gameId = (int)($_GET['game_id'] ?? 0);
+    if (($type === 'icons' || $type === 'logos') && $gameId < 1) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'Для списка иконок и логотипов требуется game_id'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $baseRel = 'uploads/games/' . $type;
+    $baseAbs = dirname(__DIR__) . '/' . $baseRel;
+    $out = [];
+    $requiredPrefix = $gameId > 0 ? 'g' . $gameId . '_' : '';
+    $extOk = $type === 'videos' ? ['mp4', 'webm', 'mov'] : ['png', 'jpg', 'jpeg', 'webp', 'gif', 'ico', 'svg'];
+    if (is_dir($baseAbs) && is_readable($baseAbs)) {
+        $files = scandir($baseAbs) ?: [];
+        sort($files, SORT_NATURAL | SORT_FLAG_CASE);
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') continue;
+            if ($requiredPrefix !== '' && strncasecmp($file, $requiredPrefix, strlen($requiredPrefix)) !== 0) continue;
+            $full = $baseAbs . DIRECTORY_SEPARATOR . $file;
+            if (!is_file($full)) continue;
+            $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+            if (!in_array($ext, $extOk, true)) continue;
+            $url = $baseRel . '/' . rawurlencode($file);
+            $out[] = ['url' => $url, 'thumb' => $url, 'file' => $file];
+        }
+    }
+    echo json_encode(['ok' => true, 'type' => $type, 'assets' => $out, 'count' => count($out)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 if ($action === 'list_catiogrid') {
     gp_requireUser();
     $appid = (int)($_GET['appid'] ?? $_GET['steam_appid'] ?? 0);
@@ -1039,5 +1079,5 @@ if ($action === 'list_catiogrid') {
 echo json_encode([
     'ok' => false,
     'error' => 'Unknown action',
-    'available' => ['export', 'import_pack', 'sgdb_by_name', 'list_catiogrid'],
+    'available' => ['export', 'import_pack', 'sgdb_by_name', 'list_catiogrid', 'list_game_assets'],
 ], JSON_UNESCAPED_UNICODE);

@@ -237,6 +237,39 @@ function saveUpload(string $field, string $dir, array $allowed, int $maxMb = 8):
     return 'uploads/games/' . basename($dir) . '/' . $name;
 }
 
+
+/**
+ * После создания записи переносит icon/logo из временного пакета или старого
+ * имени в постоянные каталоги uploads/games/{icons,logos} и привязывает имя к ID игры.
+ */
+function finalizeGameBrandAsset(PDO $pdo, int $gameId, string $field, ?string $url, string $title): ?string {
+    if (!$url || $gameId < 1 || !in_array($field, ['icon', 'logo'], true)) return $url;
+    $relative = ltrim(str_replace('\\', '/', trim($url)), '/');
+    if (!str_starts_with($relative, 'uploads/')) return $url;
+
+    $uploadsRoot = realpath(dirname(__DIR__) . '/uploads');
+    $source = realpath(dirname(__DIR__) . '/' . $relative);
+    if (!$uploadsRoot || !$source || !is_file($source) ||
+        !str_starts_with($source, $uploadsRoot . DIRECTORY_SEPARATOR)) return $url;
+
+    $subdir = $field === 'icon' ? 'icons' : 'logos';
+    $destDir = dirname(__DIR__) . '/uploads/games/' . $subdir;
+    if (!is_dir($destDir) && !@mkdir($destDir, 0755, true) && !is_dir($destDir)) return $url;
+
+    $ext = strtolower(pathinfo($source, PATHINFO_EXTENSION) ?: 'png');
+    if ($ext === 'jpeg') $ext = 'jpg';
+    if (!in_array($ext, ['jpg', 'png', 'webp', 'gif', 'ico'], true)) $ext = 'png';
+    $hash = substr(hash_file('sha256', $source) ?: hash('sha256', $source), 0, 8);
+    $destName = 'g' . $gameId . '_' . $field . '_' . $hash . '.' . $ext;
+    $dest = $destDir . '/' . $destName;
+    if (!is_file($dest) && !@copy($source, $dest)) return $url;
+
+    $newUrl = 'uploads/games/' . $subdir . '/' . $destName;
+    $column = $field . '_url';
+    $pdo->prepare("UPDATE games SET {$column} = ? WHERE id = ?")->execute([$newUrl, $gameId]);
+    return $newUrl;
+}
+
 $imgAllowed = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif'];
 
 try {
@@ -392,6 +425,10 @@ try {
                 (int)$user['id'], $isAdult, $publisherId ?: null,
             ]);
             $gameId = (int)$pdo->lastInsertId();
+            // Иконка и логотип из ZIP/SteamGridDB/формы всегда сохраняются
+            // в постоянные каталоги и получают имя g<ID>_<тип>_<hash>.<ext>.
+            $iconUrl = finalizeGameBrandAsset($pdo, $gameId, 'icon', $iconUrl, $title);
+            $logoUrl = finalizeGameBrandAsset($pdo, $gameId, 'logo', $logoUrl, $title);
             insert_trailer_media($pdo, $gameId, $video);
             // Первая публикация: сборка привязана к заявке игры, отдельной «версии» в модерации нет.
             // status=pending только при submit_update (обновление уже опубликованной игры).

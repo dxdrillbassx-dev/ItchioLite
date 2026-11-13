@@ -1198,6 +1198,28 @@ function initAdminUI() {
     grid.className = 'sgdb-asset-grid is-' + type;
     grid.innerHTML = '<div class="settings-hint">Загрузка…</div>';
 
+    // 0) Локальные ассеты именно текущей игры: имена файлов имеют префикс g{ID}_
+    // (например g18_icon_*.png). Каталоги общие, поэтому без фильтра по ID
+    // нельзя показывать ассеты соседних игр.
+    const currentGame = window.__steamEditGameData || window.__lastGameForCart || (window.wrap && window.wrap._gameData) || null;
+    const currentGameId = Number(window.__steamEditGameId || (currentGame && currentGame.id) || 0);
+    if ((type === 'icons' || type === 'logos') && currentGameId > 0) {
+      try {
+        const localData = await fetchJSON('api/game_pack.php?action=list_game_assets&type=' + encodeURIComponent(type) + '&game_id=' + currentGameId);
+        const localFiles = mapPackList((localData && localData.assets) || []);
+        if (localData && localData.ok) {
+          sgdbCache[type] = localFiles;
+          renderSgdbGrid(localFiles, type);
+          // В режиме редактирования не подмешиваем файлы из ZIP/других источников,
+          // если у этой игры в локальной папке пока нет подходящих изображений.
+          if (window.__steamEditMode || window.__steamEditGameId) return;
+          if (localFiles.length) return;
+        }
+      } catch (e) {
+        console.warn('[local game assets]', e);
+      }
+    }
+
     // 1) ассеты из ZIP-пакета (импорт) — keys: icons/logos/heroes/grids (+ covers)
     const pack = window.__sgdbAssetsFromPack || window.__packSgdbAssets;
     if (pack) {
