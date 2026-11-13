@@ -563,19 +563,35 @@ function mediaCoverUrl(m) {
 
 async function loadGameCommunityMedia(gameId) {
   const body = document.getElementById('gp-comm-body');
+  const card = document.getElementById('gp-comm-card') || (body && body.closest('.gp-side-card'));
+  const hideCard = () => {
+    if (card) {
+      card.style.display = 'none';
+      card.setAttribute('hidden', '');
+    } else if (body) {
+      body.innerHTML = '';
+    }
+  };
+  const showCard = () => {
+    if (card) {
+      card.style.display = '';
+      card.removeAttribute('hidden');
+    }
+  };
   if (!body) return;
   gameId = +gameId || 0;
   if (!gameId) {
-    body.innerHTML = '<div class="gp-ach-empty">Пока нет работ сообщества</div>';
+    hideCard();
     return;
   }
   try {
-    const data = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=media&game_id=' + gameId + '&limit=6');
+    const data = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : (window.WS_API || 'api/workshop.php')) + '?action=media&game_id=' + gameId + '&limit=6');
     const list = (data && data.ok && Array.isArray(data.media)) ? data.media : [];
     if (!list.length) {
-      body.innerHTML = '<div class="gp-ach-empty">Пока нет работ сообщества</div>';
+      hideCard();
       return;
     }
+    showCard();
     const shots = list.slice(0, 3).map(m => {
       const src = mediaCoverUrl(m);
       if (!src) return '';
@@ -603,7 +619,7 @@ async function loadGameCommunityMedia(gameId) {
       });
     }
   } catch (e) {
-    body.innerHTML = '<div class="gp-ach-empty">Не удалось загрузить</div>';
+    hideCard();
   }
 }
 

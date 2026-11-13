@@ -642,11 +642,25 @@ async function uploadProfileImage(kind, file) {
   if (kind === 'avatar') {
     const applyAva = (el) => {
       if (!el) return;
-      el.style.backgroundImage = `url('${url}')`;
+      el.style.backgroundImage = "url('" + url.replace(/'/g, "%27") + "')";
       el.style.backgroundSize = 'cover';
       el.style.backgroundPosition = 'center';
+      el.style.backgroundRepeat = 'no-repeat';
       el.style.backgroundColor = 'transparent';
       el.textContent = '';
+      // сайдбар: не давать аве растягиваться после смены фона
+      if (el.classList.contains('side-avatar') || el.id === 'side-avatar' || el.id === 'avatar-btn') {
+        el.style.width = '36px';
+        el.style.height = '36px';
+        el.style.minWidth = '36px';
+        el.style.minHeight = '36px';
+        el.style.maxWidth = '36px';
+        el.style.maxHeight = '36px';
+        el.style.flexShrink = '0';
+        el.style.aspectRatio = '1 / 1';
+        el.style.overflow = 'hidden';
+        el.style.boxSizing = 'border-box';
+      }
     };
     applyAva($('#hp-avatar'));
     applyAva($('#hp-edit-avatar'));

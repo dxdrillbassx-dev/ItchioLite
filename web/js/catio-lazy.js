@@ -1,6 +1,9 @@
 /* CATio — ленивая подгрузка тяжёлых админ/publish скриптов */
 (function () {
   'use strict';
+  window.SUBMIT_API = window.SUBMIT_API || 'api/submit.php';
+  window.ADMIN_API = window.ADMIN_API || 'api/admin.php';
+  window.WS_API = window.WS_API || 'api/workshop.php';
   const loaded = new Set();
 
   function assetVer() {
@@ -69,10 +72,18 @@
   });
 
   window.loadAdminPending = async function loadAdminPendingStub() {
-    await window.loadAdminBundle();
-    const real = window.__loadAdminPendingReal;
-    if (typeof real === 'function') return real.apply(this, arguments);
-    console.warn('[CATio] loadAdminPending not in bundle');
+    try {
+      await window.loadAdminBundle();
+      const real = window.__loadAdminPendingReal;
+      if (typeof real === 'function') return real.apply(this, arguments);
+      // admin-import already on page — call global if stub was overwritten wrong
+      if (typeof loadAdminPending === 'function' && loadAdminPending !== loadAdminPendingStub) {
+        return loadAdminPending.apply(this, arguments);
+      }
+      console.warn('[CATio] loadAdminPending not in bundle');
+    } finally {
+      window.__adminPendingLoading = false;
+    }
   };
 
   window.loadAdminPendingWhenReady = window.loadAdminPending;

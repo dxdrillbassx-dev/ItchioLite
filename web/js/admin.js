@@ -8,9 +8,9 @@
 // ============================================================
 //  ЗАГРУЗКА ИГР + АДМИН-МОДЕРАЦИЯ
 // ============================================================
-const STEAM_API = ''; // diploma: no Steam web API
-const STEAM_DISABLED = true;
-const SUBMIT_API = 'api/submit.php';
+window.STEAM_API = window.STEAM_API || '';// diploma: no Steam web API
+window.STEAM_DISABLED = true;
+window.SUBMIT_API = 'api/submit.php';
 
 const SYSREQ_LABELS = {
   os: 'ОС',
@@ -721,14 +721,14 @@ function initGameCollapsibles(wrap) {
 let adminDeleteMedia = [];
 
 
-const GAME_PACK_API = 'api/game_pack.php';
+window.GAME_PACK_API = window.GAME_PACK_API || 'api/game_pack.php';
 
 async function importGamePackFile(file) {
   if (!file) return;
   const fd = new FormData();
   fd.append('pack', file);
   fd.append('action', 'import_pack');
-  const res = await fetch(GAME_PACK_API + '?action=import_pack', {
+  const res = await fetch(window.GAME_PACK_API + '?action=import_pack', {
     method: 'POST',
     body: fd,
     credentials: 'same-origin',
@@ -1046,7 +1046,7 @@ function openAdminUserModal(p) {
   $('#admin-user-ban-days').value = 0;
   $('#admin-user-status').textContent = p.is_banned ? 'Пользователь сейчас забанен' : '';
   // подтянуть свежие данные
-  fetchJSON(`${ADMIN_API}?action=get_user&id=${p.id}`).then(data => {
+  fetchJSON(`${window.ADMIN_API}?action=get_user&id=${p.id}`).then(data => {
     if (!data.ok || !data.user) return;
     const u = data.user;
     $('#admin-user-name').value = u.username || '';
@@ -1074,7 +1074,7 @@ function initAdminUserModal() {
     if (!id) return;
     const status = $('#admin-user-status');
     try {
-      const res = await postJSON(`${ADMIN_API}?action=update_user`, {
+      const res = await postJSON(`${window.ADMIN_API}?action=update_user`, {
         user_id: id,
         username: $('#admin-user-name')?.value || '',
         role: $('#admin-user-role')?.value || 'user',
@@ -1092,7 +1092,7 @@ function initAdminUserModal() {
         fd.append('user_id', String(id));
         fd.append('kind', kind);
         fd.append('file', file);
-        const r = await fetch(`${ADMIN_API}?action=upload_user_media`, { method: 'POST', body: fd, credentials: 'same-origin' });
+        const r = await fetch(`${window.ADMIN_API}?action=upload_user_media`, { method: 'POST', body: fd, credentials: 'same-origin' });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'Ошибка загрузки');
       };
@@ -1114,7 +1114,7 @@ function initAdminUserModal() {
     if (!id) return;
     if (!confirm('Забанить этого пользователя?')) return;
     try {
-      const res = await postJSON(`${ADMIN_API}?action=ban`, {
+      const res = await postJSON(`${window.ADMIN_API}?action=ban`, {
         user_id: id,
         reason: $('#admin-user-ban-reason')?.value || 'Нарушение правил',
         days: +($('#admin-user-ban-days')?.value || 0),
@@ -1131,7 +1131,7 @@ function initAdminUserModal() {
     const id = +($('#admin-user-id')?.value || 0);
     if (!id) return;
     try {
-      const res = await postJSON(`${ADMIN_API}?action=unban`, { user_id: id });
+      const res = await postJSON(`${window.ADMIN_API}?action=unban`, { user_id: id });
       if (!res.ok) throw new Error(res.error || 'Ошибка');
       toast('Бан снят');
       $('#admin-user-status').textContent = 'Бан снят';

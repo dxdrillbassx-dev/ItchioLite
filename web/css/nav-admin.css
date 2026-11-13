@@ -1,0 +1,71 @@
+/* Nav colors: active = серый, active:hover = оранжевый */
+.settings-nav-btn:hover,
+#view-settings .settings-nav-btn:hover,
+#view-admin .settings-nav-btn:hover,
+.sgdb-nav-btn:hover,
+#submit-form-modal .sgdb-nav-btn:hover,
+#steam-import-modal .sgdb-nav-btn:hover,
+.pub-nav-btn:hover,
+.side-nav .nav-btn:hover,
+nav.side-nav .nav-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text-bright, #f5f2eb) !important;
+}
+
+/* выбранный — такой же серый, не оранжевый */
+.settings-nav-btn.active,
+#view-settings .settings-nav-btn.active,
+#view-admin .settings-nav-btn.active,
+.sgdb-nav-btn.active,
+#submit-form-modal .sgdb-nav-btn.active,
+#steam-import-modal .sgdb-nav-btn.active,
+.pub-nav-btn.active,
+.side-nav .nav-btn.active,
+nav.side-nav .nav-btn.active {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text-bright, #f5f2eb) !important;
+  font-weight: 600 !important;
+}
+
+/* иконка выбранного — обычная (не оранжевая), пока нет hover */
+.settings-nav-btn.active svg,
+.sgdb-nav-btn.active svg,
+.pub-nav-btn.active svg,
+.side-nav .nav-btn.active svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+  opacity: 1 !important;
+}
+.settings-nav-btn.active svg *,
+.sgdb-nav-btn.active svg *,
+.side-nav .nav-btn.active svg * {
+  stroke: currentColor !important;
+}
+
+/* hover на выбранном — оранжевый */
+.settings-nav-btn.active:hover,
+#view-settings .settings-nav-btn.active:hover,
+#view-admin .settings-nav-btn.active:hover,
+.sgdb-nav-btn.active:hover,
+#submit-form-modal .sgdb-nav-btn.active:hover,
+#steam-import-modal .sgdb-nav-btn.active:hover,
+.pub-nav-btn.active:hover,
+.side-nav .nav-btn.active:hover,
+nav.side-nav .nav-btn.active:hover {
+  background: rgba(239, 91, 44, 0.18) !important;
+  color: #ffb08a !important;
+}
+
+.settings-nav-btn.active:hover svg,
+.sgdb-nav-btn.active:hover svg,
+.pub-nav-btn.active:hover svg,
+.side-nav .nav-btn.active:hover svg {
+  color: #ef5b2c !important;
+  stroke: #ef5b2c !important;
+  opacity: 1 !important;
+}
+.settings-nav-btn.active:hover svg *,
+.sgdb-nav-btn.active:hover svg *,
+.side-nav .nav-btn.active:hover svg * {
+  stroke: #ef5b2c !important;
+}

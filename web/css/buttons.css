@@ -1,0 +1,524 @@
+/* ============================================================
+   CATio — единые action-кнопки (полная карта классов)
+   Форма одна; отличаются цвет заливки + читаемый бордер.
+   Подключать последним среди CSS.
+   ============================================================ */
+
+:root {
+  --c-btn-h: 36px;
+  --c-btn-h-lg: 44px;
+  --c-btn-h-sm: 30px;
+  --c-btn-radius: 10px;
+  --c-btn-pad-x: 14px;
+  --c-btn-gap: 8px;
+  --c-btn-font: 0.85rem;
+  --c-btn-weight: 600;
+  --c-btn-border: rgba(255, 255, 255, 0.12);
+  --c-btn-border-hover: rgba(255, 255, 255, 0.2);
+  --c-btn-border-on-fill: rgba(0, 0, 0, 0.28);
+  --c-btn-border-on-fill-hover: rgba(0, 0, 0, 0.38);
+  --c-btn-orange: var(--accent, #ef5b2c);
+  --c-btn-orange-hover: var(--accent-hover, #ff6b3c);
+  --c-btn-danger-soft: rgba(194, 59, 46, 0.2);
+  --c-btn-danger-border: rgba(194, 59, 46, 0.45);
+  --c-btn-danger-text: #ffb4aa;
+  --c-btn-ghost-bg: rgba(255, 255, 255, 0.06);
+  --c-btn-ghost-text: rgba(255, 255, 255, 0.92);
+  --c-btn-white-bg: rgba(232, 228, 220, 0.95);
+  --c-btn-white-text: #1a1814;
+}
+
+/* ========== БАЗА (все action-кнопки) ========== */
+.c-btn,
+.btn-get,
+.btn-get-sm,
+.btn-buy,
+.btn-primary,
+.btn-auth,
+.btn-retry,
+.btn-download,
+.btn-ghost,
+.btn-logout,
+.btn-danger,
+.btn-topup,
+.btn-settings,
+.btn-back,
+.auth-submit,
+.auth-social-btn,
+.hp-btn-edit,
+.hp-btn-logout,
+.hp-btn-save,
+.hp-btn-subscribe,
+.hp-btn-danger,
+.admin-act-btn,
+.ws-tab-btn.hp-btn-edit,
+.ws-modv-toolbar-right .hp-btn-edit,
+.ws-modv-toolbar-right .hp-btn-danger,
+.pub-file-btn,
+.sg-pub-dd-btn,
+.cart-checkout-btn,
+.cart-clear-btn,
+.cart-empty-btn,
+.cart-modal-btn,
+.cart-clear-icon.gp-bar-btn,
+.gp-bar-btn,
+.submit-done-btn,
+.ban-back-btn,
+.filter-clear-btn,
+.store-filter-clear,
+#submit-rules-next,
+#submit-game-send,
+#sg-import-pack-btn,
+#sg-admin-export,
+#sg-admin-delete,
+#app-confirm-modal .hp-btn-edit,
+#app-confirm-modal .auth-submit,
+#submit-done-modal .submit-done-btn,
+#submit-done-modal .hp-btn-save,
+#pub-page-actions .hp-btn-edit,
+#pub-page-actions .hp-btn-logout,
+#pub-page-actions .hp-btn-subscribe,
+#pub-page-actions .hp-btn-danger,
+#submit-form-modal .submit-modal-foot .hp-btn-edit,
+#submit-form-modal .submit-modal-foot .hp-btn-save,
+#submit-form-modal .submit-modal-foot .auth-submit,
+#submit-form-modal .pub-file-btn,
+#wsg-toolbar .ws-tab-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: var(--c-btn-gap) !important;
+  box-sizing: border-box !important;
+  width: auto !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: var(--c-btn-h) !important;
+  padding: 0 var(--c-btn-pad-x) !important;
+  border-radius: var(--c-btn-radius) !important;
+  border: 1px solid var(--c-btn-border) !important;
+  font-family: inherit !important;
+  font-size: var(--c-btn-font) !important;
+  font-weight: var(--c-btn-weight) !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  outline: none !important;
+  vertical-align: middle !important;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease !important;
+}
+
+.c-btn svg,
+.btn-get svg,
+.btn-ghost svg,
+.auth-submit svg,
+.hp-btn-edit svg,
+.hp-btn-logout svg,
+.admin-act-btn svg,
+.gp-bar-btn svg,
+.cart-checkout-btn svg,
+.pub-file-btn svg {
+  flex-shrink: 0 !important;
+  width: 16px !important;
+  height: 16px !important;
+  display: block !important;
+}
+
+.c-btn:disabled,
+.btn-get:disabled,
+.auth-submit:disabled,
+.hp-btn-edit:disabled,
+#submit-rules-next:disabled,
+#submit-game-send:disabled,
+button:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}
+
+/* ========== 1) ПРОЗРАЧНАЯ ========== */
+.c-btn--ghost,
+.btn-ghost:not(.danger),
+.btn-back,
+.btn-settings,
+.auth-social-btn,
+.hp-btn-edit:not(.hp-btn-primary):not(.hp-btn-danger),
+#sg-import-pack-btn,
+#sg-admin-export,
+.ws-tab-btn.hp-btn-edit,
+#ws-filters-btn,
+.admin-act-btn[data-admin-act="preload"],
+.admin-act-btn.is-preload,
+.pub-file-btn,
+.sg-pub-dd-btn,
+.cart-clear-btn,
+.cart-clear-icon.gp-bar-btn,
+.cart-modal-btn.secondary,
+.gp-bar-btn:not(.primary),
+.ban-back-btn,
+.filter-clear-btn,
+#pub-page-actions .hp-btn-edit:not(.hp-btn-primary),
+#submit-form-modal .submit-modal-foot .hp-btn-edit:not(.hp-btn-primary):not(.auth-submit),
+#app-confirm-modal .hp-btn-edit:not(.hp-btn-primary) {
+  background: var(--c-btn-ghost-bg) !important;
+  border-color: var(--c-btn-border) !important;
+  color: var(--c-btn-ghost-text) !important;
+}
+
+.c-btn--ghost:hover,
+.btn-ghost:not(.danger):hover,
+.btn-back:hover,
+.btn-settings:hover,
+.auth-social-btn:hover,
+.hp-btn-edit:not(.hp-btn-primary):hover,
+#sg-import-pack-btn:hover,
+#sg-admin-export:hover,
+.pub-file-btn:hover,
+.pub-nav-btn:hover,
+.sgdb-nav-btn:hover,
+.sg-pub-dd-btn:hover,
+.cart-clear-btn:hover,
+.cart-clear-icon.gp-bar-btn:hover,
+.cart-modal-btn.secondary:hover,
+.gp-bar-btn:not(.primary):hover,
+.ban-back-btn:hover,
+.filter-clear-btn:hover,
+#pub-page-actions .hp-btn-edit:hover,
+#submit-form-modal .submit-modal-foot .hp-btn-edit:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: var(--c-btn-border-hover) !important;
+  color: #fff !important;
+  filter: none !important;
+}
+
+/* активный таб — чуть ярче ghost, та же форма */
+.pub-nav-btn.active,
+.sgdb-nav-btn.active,
+#ws-toolbar .ws-tab-btn.active,
+#wsg-toolbar .ws-tab-btn.active,
+.ws-tab-btn.active {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--c-btn-border-hover) !important;
+  color: #fff !important;
+}
+
+/* ========== 2) ОРАНЖЕВАЯ ========== */
+.c-btn--orange,
+.btn-get,
+.btn-get-sm,
+.btn-buy:not(.owned),
+.btn-primary,
+.btn-auth,
+.btn-retry,
+.btn-download,
+.btn-topup,
+.auth-submit,
+.hp-btn-save,
+.hp-btn-edit.hp-btn-primary,
+#submit-rules-next:not(:disabled),
+#submit-game-send,
+.admin-act-btn[data-admin-act="approve"],
+.admin-act-btn.is-approve,
+.cart-checkout-btn,
+.cart-checkout-btn.cart-modal-btn.primary,
+.cart-empty-btn,
+.submit-done-btn,
+#submit-done-modal .submit-done-btn,
+#submit-done-modal .hp-btn-save,
+#submit-form-modal .submit-modal-foot .auth-submit,
+#submit-form-modal .submit-modal-foot .hp-btn-save,
+#app-confirm-modal .auth-submit,
+#app-confirm-modal .hp-btn-edit.hp-btn-primary {
+  background: var(--c-btn-orange) !important;
+  border-color: var(--c-btn-border-on-fill) !important;
+  color: #12110e !important;
+  font-weight: 700 !important;
+}
+
+.c-btn--orange:hover,
+.btn-get:hover,
+.btn-get-sm:hover,
+.btn-buy:not(.owned):hover,
+.btn-primary:hover,
+.btn-auth:hover,
+.btn-retry:hover,
+.btn-download:hover,
+.btn-topup:hover,
+.auth-submit:hover,
+.hp-btn-save:hover,
+.hp-btn-edit.hp-btn-primary:hover,
+#submit-rules-next:not(:disabled):hover,
+#submit-game-send:hover,
+.admin-act-btn[data-admin-act="approve"]:hover,
+.admin-act-btn.is-approve:hover,
+.cart-checkout-btn:hover,
+.cart-modal-btn.primary:hover,
+.cart-empty-btn:hover,
+.submit-done-btn:hover,
+#submit-done-modal .submit-done-btn:hover,
+#submit-form-modal .submit-modal-foot .auth-submit:hover,
+#app-confirm-modal .auth-submit:hover {
+  background: var(--c-btn-orange-hover) !important;
+  border-color: var(--c-btn-border-on-fill-hover) !important;
+  color: #12110e !important;
+  filter: none !important;
+}
+
+.btn-get.owned,
+.btn-get-sm.owned,
+.btn-buy.owned {
+  background: #3e7d4e !important;
+  border-color: var(--c-btn-border-on-fill) !important;
+  color: #fff !important;
+}
+.btn-get.owned:hover,
+.btn-get-sm.owned:hover,
+.btn-buy.owned:hover {
+  background: #4a915c !important;
+  border-color: var(--c-btn-border-on-fill-hover) !important;
+  color: #fff !important;
+}
+
+/* ========== 3) БЕЛАЯ ========== */
+.c-btn--white,
+#hp-accept-friend,
+#hp-msg-friend,
+#hp-add-friend,
+.hp-btn-subscribe {
+  background: var(--c-btn-white-bg) !important;
+  border-color: var(--c-btn-border-on-fill) !important;
+  color: var(--c-btn-white-text) !important;
+  font-weight: 700 !important;
+}
+.c-btn--white:hover,
+#hp-accept-friend:hover,
+#hp-msg-friend:hover,
+#hp-add-friend:hover,
+.hp-btn-subscribe:hover,
+#pub-page-actions .hp-btn-subscribe:hover {
+  background: #fff !important;
+  border-color: var(--c-btn-border-on-fill-hover) !important;
+  color: var(--c-btn-white-text) !important;
+}
+.hp-btn-subscribe.is-subscribed {
+  background: var(--c-btn-ghost-bg) !important;
+  border-color: var(--c-btn-border) !important;
+  color: var(--c-btn-ghost-text) !important;
+  font-weight: 600 !important;
+}
+
+/* ========== 4) КРАСНАЯ ========== */
+.c-btn--danger,
+.btn-ghost.danger,
+.btn-logout,
+.btn-danger,
+.hp-btn-logout,
+.hp-btn-danger,
+#hp-remove-friend,
+#hp-decline-friend,
+#hp-cancel-friend,
+#sg-admin-delete,
+.admin-act-btn[data-admin-act="reject"],
+.admin-act-btn.is-reject,
+#pub-page-actions .hp-btn-danger,
+#pub-page-actions .hp-btn-logout,
+#ws-mod-view-modal .hp-btn-danger {
+  background: var(--c-btn-danger-soft) !important;
+  border-color: var(--c-btn-danger-border) !important;
+  color: var(--c-btn-danger-text) !important;
+  font-weight: 600 !important;
+}
+.c-btn--danger:hover,
+.btn-ghost.danger:hover,
+.btn-logout:hover,
+.btn-danger:hover,
+.hp-btn-logout:hover,
+.hp-btn-danger:hover,
+#hp-remove-friend:hover,
+#hp-decline-friend:hover,
+#hp-cancel-friend:hover,
+#sg-admin-delete:hover,
+.admin-act-btn[data-admin-act="reject"]:hover,
+.admin-act-btn.is-reject:hover,
+#pub-page-actions .hp-btn-danger:hover,
+#ws-mod-view-modal .hp-btn-danger:hover {
+  background: rgba(194, 59, 46, 0.34) !important;
+  border-color: rgba(220, 80, 65, 0.55) !important;
+  color: #ffd0c8 !important;
+  filter: none !important;
+}
+
+/* ========== disabled «Дальше» ========== */
+#submit-rules-next:disabled {
+  background: var(--c-btn-ghost-bg) !important;
+  border-color: var(--c-btn-border) !important;
+  color: var(--c-btn-ghost-text) !important;
+  opacity: 0.45 !important;
+}
+
+/* ========== размеры ========== */
+.c-btn--sm,
+.btn-get-sm,
+.admin-act-btn,
+.pub-rte-btn {
+  min-height: var(--c-btn-h-sm) !important;
+  padding: 0 10px !important;
+  font-size: 0.8rem !important;
+}
+.c-btn--lg {
+  min-height: var(--c-btn-h-lg) !important;
+  padding: 0 18px !important;
+}
+
+/* icon-only */
+#pub-page-actions .hp-btn-edit.hp-btn-icon,
+.c-btn--icon {
+  min-width: var(--c-btn-h) !important;
+  width: var(--c-btn-h) !important;
+  padding: 0 !important;
+}
+
+/* ряды */
+.submit-modal-foot,
+.pub-modal-foot,
+.hp-friend-actions,
+.cart-bottom-actions,
+.app-confirm-actions,
+.gp-action-btns {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+/* НЕ трогаем: .nav-btn, .settings-nav-btn, .catio-select__btn,
+   .pub-modal-close, .modal-close, .sysreq-tab, .chat-emoji-panel button —
+   это навигация / селекты / иконки закрытия, не action-кнопки. */
+
+
+
+/* ===== Play / Install — белые (как раньше primary bar) ===== */
+.gp-bar-btn,
+.gp-bar-btn.primary,
+.gp-bar-btn.gp-play-btn,
+.gp-bar-btn.gp-install-btn,
+#game-page .gp-bar-btn.primary,
+#view-game .gp-bar-btn.primary {
+  background: var(--c-btn-white-bg, rgba(232, 228, 220, 0.95)) !important;
+  border: 1px solid var(--c-btn-border-on-fill, rgba(0, 0, 0, 0.28)) !important;
+  color: var(--c-btn-white-text, #1a1814) !important;
+  font-weight: 700 !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+  padding: 0 14px !important;
+}
+.gp-bar-btn:hover,
+.gp-bar-btn.primary:hover,
+.gp-bar-btn.gp-play-btn:hover,
+.gp-bar-btn.gp-install-btn:hover {
+  background: #fff !important;
+  border-color: var(--c-btn-border-on-fill-hover, rgba(0, 0, 0, 0.38)) !important;
+  color: #1a1814 !important;
+}
+.gp-bar-btn:not(.primary) {
+  /* вторичные в баре (настройки и т.п.) — ghost */
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  font-weight: 600 !important;
+}
+.gp-bar-btn:not(.primary):hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+}
+/* но primary / play / install остаются белыми — выше по специфичности за счёт .primary */
+.gp-bar-btn.primary:not(:hover),
+.gp-bar-btn.gp-play-btn:not(:hover),
+.gp-bar-btn.gp-install-btn:not(:hover) {
+  background: rgba(232, 228, 220, 0.95) !important;
+  color: #1a1814 !important;
+}
+
+/* ============================================================
+   Nav colors only (как акцент в админке) — без смены вёрстки
+   ============================================================ */
+
+/* hover — серый */
+.settings-nav-btn:hover,
+#view-settings .settings-nav-btn:hover,
+#view-admin .settings-nav-btn:hover,
+.sgdb-nav-btn:hover,
+#submit-form-modal .sgdb-nav-btn:hover,
+#steam-import-modal .sgdb-nav-btn:hover,
+.pub-nav-btn:hover,
+.side-nav .nav-btn:hover,
+nav.side-nav .nav-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text-bright, #f5f2eb) !important;
+}
+
+/* выбранный раздел */
+.settings-nav-btn.active,
+#view-settings .settings-nav-btn.active,
+#view-admin .settings-nav-btn.active,
+.sgdb-nav-btn.active,
+#submit-form-modal .sgdb-nav-btn.active,
+#steam-import-modal .sgdb-nav-btn.active,
+.pub-nav-btn.active,
+.side-nav .nav-btn.active,
+nav.side-nav .nav-btn.active {
+  background: rgba(239, 91, 44, 0.14) !important;
+  color: #ffb08a !important;
+}
+
+/* hover на уже выбранном — чуть ярче оранжевый */
+.settings-nav-btn.active:hover,
+#view-settings .settings-nav-btn.active:hover,
+#view-admin .settings-nav-btn.active:hover,
+.sgdb-nav-btn.active:hover,
+#submit-form-modal .sgdb-nav-btn.active:hover,
+#steam-import-modal .sgdb-nav-btn.active:hover,
+.pub-nav-btn.active:hover,
+.side-nav .nav-btn.active:hover,
+nav.side-nav .nav-btn.active:hover {
+  background: rgba(239, 91, 44, 0.22) !important;
+  color: #ffc4a8 !important;
+}
+
+/* иконка (svg) у выбранного — оранжевая */
+.settings-nav-btn.active svg,
+#view-settings .settings-nav-btn.active svg,
+#view-admin .settings-nav-btn.active svg,
+.sgdb-nav-btn.active svg,
+#submit-form-modal .sgdb-nav-btn.active svg,
+#steam-import-modal .sgdb-nav-btn.active svg,
+.pub-nav-btn.active svg,
+.side-nav .nav-btn.active svg,
+nav.side-nav .nav-btn.active svg {
+  color: #ef5b2c !important;
+  stroke: #ef5b2c !important;
+  fill: none !important;
+  opacity: 1 !important;
+}
+
+.settings-nav-btn.active svg *,
+.sgdb-nav-btn.active svg *,
+.pub-nav-btn.active svg *,
+.side-nav .nav-btn.active svg * {
+  stroke: #ef5b2c !important;
+}
+
+/* иконка при hover на выбранном */
+.settings-nav-btn.active:hover svg,
+.sgdb-nav-btn.active:hover svg,
+.side-nav .nav-btn.active:hover svg {
+  color: #ff6b3c !important;
+  stroke: #ff6b3c !important;
+}
+.settings-nav-btn.active:hover svg *,
+.sgdb-nav-btn.active:hover svg *,
+.side-nav .nav-btn.active:hover svg * {
+  stroke: #ff6b3c !important;
+}

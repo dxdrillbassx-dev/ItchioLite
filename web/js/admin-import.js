@@ -1,3 +1,12 @@
+/* CATio admin-import — publish + moderation queue
+ * Никаких var/const SUBMIT_API|ADMIN_API|… — только window.*, иначе SyntaxError.
+ */
+window.SUBMIT_API = window.SUBMIT_API || 'api/submit.php';
+window.ADMIN_API = window.ADMIN_API || 'api/admin.php';
+window.WS_API = window.WS_API || 'api/workshop.php';
+window.STEAM_API = window.STEAM_API || '';
+window.GAME_PACK_API = window.GAME_PACK_API || 'api/game_pack.php';
+
 /* CATio — export progress modal + Steam/classic import */
 
 // ===== Модалка прогресса экспорта =====
@@ -720,7 +729,7 @@ async function submitGameForm() {
       if ($('#sg-banner-url') && $('#sg-banner-url').value) fd.append('banner_url', $('#sg-banner-url').value);
       fd.append('builds_meta', JSON.stringify([{ i: 0, version: ver, platform: 'windows', changelog: ch, has_file: true }]));
       fd.append('builds[0]', bf, bf.name || 'build.bin');
-      const res = await fetch((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=publisher_update', { method: 'POST', body: fd });
+      const res = await fetch((typeof window.SUBMIT_API !== 'undefined' ? window.SUBMIT_API : 'api/submit.php') + '?action=publisher_update', { method: 'POST', body: fd });
       const raw = await res.text();
       let data;
       try { data = JSON.parse(raw.slice(raw.indexOf('{'))); } catch (e) { throw new Error('Сервер вернул не JSON'); }
@@ -778,11 +787,11 @@ async function submitGameForm() {
           fd.append('builds[0]', bf, bf.name || 'build.bin');
         }
       } catch (e) { console.warn('admin builds append', e); }
-      let res = await fetch(SUBMIT_API + '?action=admin_save', { method: 'POST', body: fd });
+      let res = await fetch(window.SUBMIT_API + '?action=admin_save', { method: 'POST', body: fd });
       let data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Не удалось сохранить');
       if (isAdminPub) {
-        res = await postJSON(SUBMIT_API + '?action=publish', { csrf_token: window.CSRF_TOKEN || '', id: id });
+        res = await postJSON(window.SUBMIT_API + '?action=publish', { csrf_token: window.CSRF_TOKEN || '', id: id });
         if (!res.ok) throw new Error(res.error || 'Не удалось опубликовать');
         toast('Игра опубликована');
         try { loadAdminPending(); } catch (e) {}
@@ -857,7 +866,7 @@ async function submitGameForm() {
     fd.append('content_flags', flags.join(','));
     fd.append('is_adult', flags.includes('adult') ? '1' : '0');
 
-    const res = await fetch(`${SUBMIT_API}?action=submit`, { method: 'POST', body: fd });
+    const res = await fetch(`${window.SUBMIT_API}?action=submit`, { method: 'POST', body: fd });
     const rawText = await res.text();
     let data;
     try { data = JSON.parse(rawText); }
@@ -968,7 +977,7 @@ function initAdminUI() {
       previewBtn.disabled = true;
       previewBtn.textContent = 'Загрузка...';
       try {
-        const raw = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
+        const raw = await fetchJSON(`${window.STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
         if (!raw.ok) throw new Error(raw.error || 'Ошибка');
         const data = { ...raw, ...(raw.preview || {}) };
         window.__adminSteamPreview = data;
@@ -997,7 +1006,7 @@ function initAdminUI() {
       importBtn.disabled = true;
       importBtn.textContent = 'Импорт...';
       try {
-        const data = await postJSON(`${STEAM_API}?action=import`, {
+        const data = await postJSON(`${window.STEAM_API}?action=import`, {
           url,
           publish: $('#steam-publish-admin')?.checked ? 1 : 0,
         }, FETCH_TIMEOUT_LONG);
@@ -1297,7 +1306,7 @@ function initAdminUI() {
     const btn = $('#steam-preview-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Загрузка...'; }
     try {
-      const data = await fetchJSON(`${STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
+      const data = await fetchJSON(`${window.STEAM_API}?action=preview&url=${encodeURIComponent(url)}`, { timeout: FETCH_TIMEOUT_LONG });
       if (!data.ok) throw new Error(data.error || 'Ошибка');
       const p = data.preview || {};
       steamPreviewData = p;
@@ -1387,7 +1396,7 @@ function initAdminUI() {
         return;
       }
       const url = ($('#steam-url')?.value || '').trim();
-      const data = await postJSON(`${STEAM_API}?action=import`, {
+      const data = await postJSON(`${window.STEAM_API}?action=import`, {
         url,
         publish: $('#steam-publish')?.checked ? 1 : 0,
         icon_url: steamSelected.icon_url || $('#steam-sel-icon')?.value || '',
@@ -1486,7 +1495,7 @@ function adminEnqueueBuildPreload(opts) {
 
 async function adminPreloadGame(gameId, title) {
   try {
-    const data = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=get&id=' + (+gameId));
+    const data = await fetchJSON((typeof window.SUBMIT_API !== 'undefined' ? window.SUBMIT_API : 'api/submit.php') + '?action=get&id=' + (+gameId));
     if (!data || !data.ok) throw new Error((data && data.error) || 'Не удалось получить заявку');
     const g = data.game || data;
     const builds = g.builds || [];
@@ -1527,15 +1536,15 @@ async function refreshAdminPendingBadge() {
     if (!me || me.role !== 'admin') return;
     let total = 0;
     try {
-      const data = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=pending&_t=' + Date.now());
+      const data = await fetchJSON((typeof window.SUBMIT_API !== 'undefined' ? window.SUBMIT_API : 'api/submit.php') + '?action=pending&_t=' + Date.now());
       if (data && data.ok) total += (data.games || []).length;
     } catch (e) {}
     try {
-      const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending&_t=' + Date.now());
+      const ws = await fetchJSON((typeof window.WS_API !== 'undefined' ? window.WS_API : 'api/workshop.php') + '?action=admin_pending&_t=' + Date.now());
       if (ws && ws.ok) total += (ws.mods || []).length + (ws.media || []).length + (ws.assets || []).length;
     } catch (e) {}
     try {
-      const bd = await fetchJSON((typeof SUBMIT_API !== 'undefined' ? SUBMIT_API : 'api/submit.php') + '?action=pending_builds&_t=' + Date.now());
+      const bd = await fetchJSON((typeof window.SUBMIT_API !== 'undefined' ? window.SUBMIT_API : 'api/submit.php') + '?action=pending_builds&_t=' + Date.now());
       if (bd && bd.ok) total += (bd.builds || []).length;
     } catch (e) {}
     updateAdminPendingBadge(total);
@@ -1558,10 +1567,10 @@ async function refreshAdminPendingBadge() {
 
 async function loadAdminPending() {
   window.__loadAdminPendingReal = loadAdminPending;
-  /* real impl */
-
   if (window.__adminPendingLoading) return;
   window.__adminPendingLoading = true;
+
+  try {
   try { initAdminUI(); } catch (e) {}
 
   // гарантия: панель модерации видна
@@ -1579,22 +1588,32 @@ async function loadAdminPending() {
     }
   } catch (e) {}
 
-  const list = $('#admin-pending-list');
-  if (!list) return;
+  const list = (typeof $ === 'function' ? $('#admin-pending-list') : null) || document.getElementById('admin-pending-list');
+  if (!list) {
+    console.warn('[admin] #admin-pending-list not in DOM yet');
+    return;
+  }
   list.innerHTML = '<div class="loading">Загрузка...</div>';
-  // правая панель больше не используется
   const editPanel = document.getElementById('admin-edit-panel');
   if (editPanel) { editPanel.style.display = 'none'; editPanel.classList.add('hidden'); }
+
   try {
-    // Три независимых запроса параллельно (раньше шли строго друг за другом).
-    const wsApi = (typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php');
-    const [pendRes, wsRes, bdRes] = await Promise.all([
-      fetchJSON(`${SUBMIT_API}?action=pending`).catch(e => ({ ok: false, error: e.message || String(e) })),
-      fetchJSON(wsApi + '?action=admin_pending').catch(() => ({ ok: false })),
-      fetchJSON(`${SUBMIT_API}?action=pending_builds`).catch(() => ({ ok: false })),
+    const submitApi = (typeof window.SUBMIT_API !== 'undefined' && window.SUBMIT_API) ? window.SUBMIT_API : (window.SUBMIT_API || 'api/submit.php');
+    const wsApi = (typeof window.WS_API !== 'undefined' && window.WS_API) ? window.WS_API : (window.WS_API || 'api/workshop.php');
+    const withTimeout = (p, ms) => Promise.race([
+      p,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms || 20000)),
     ]);
-    if (!pendRes || !pendRes.ok) throw new Error((pendRes && pendRes.error) || 'Ошибка очереди игр');
-    const games = pendRes.games || [];
+    const [pendRes, wsRes, bdRes] = await Promise.all([
+      withTimeout(Promise.resolve().then(() => fetchJSON(submitApi + '?action=pending'))).catch(e => ({ ok: false, error: e.message || String(e) })),
+      withTimeout(Promise.resolve().then(() => fetchJSON(wsApi + '?action=admin_pending'))).catch(() => ({ ok: false })),
+      withTimeout(Promise.resolve().then(() => fetchJSON(submitApi + '?action=pending_builds'))).catch(() => ({ ok: false })),
+    ]);
+    // Не валим всю очередь, если упал только один endpoint
+    if (!pendRes || !pendRes.ok) {
+      console.warn('[admin] pending games', pendRes && pendRes.error);
+    }
+    const games = (pendRes && pendRes.ok && pendRes.games) ? pendRes.games : [];
 
     let mods = [], media = [], assets = [], builds = [];
     if (wsRes && wsRes.ok) {
@@ -1709,15 +1728,15 @@ async function loadAdminPending() {
           }
           if (act === 'approve') {
             if (kind === 'game') {
-              const res = await postJSON(SUBMIT_API + '?action=publish', { csrf_token: window.CSRF_TOKEN || '', id });
+              const res = await postJSON(window.SUBMIT_API + '?action=publish', { csrf_token: window.CSRF_TOKEN || '', id });
               if (!res.ok) throw new Error(res.error || 'Ошибка');
               toast('Игра опубликована');
             } else if (kind === 'build') {
-              const res = await postJSON(SUBMIT_API + '?action=approve_build', { csrf_token: window.CSRF_TOKEN || '', id });
+              const res = await postJSON(window.SUBMIT_API + '?action=approve_build', { csrf_token: window.CSRF_TOKEN || '', id });
               if (!res.ok) throw new Error(res.error || 'Ошибка');
               toast('Версия опубликована');
             } else if (kind === 'mod' || kind === 'media' || kind === 'asset') {
-              const data = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_set_status', {
+              const data = await fetchJSON((typeof window.WS_API !== 'undefined' ? window.WS_API : 'api/workshop.php') + '?action=admin_set_status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type: kind, id, status: 'published', csrf_token: window.CSRF_TOKEN || '' })
@@ -1731,17 +1750,17 @@ async function loadAdminPending() {
           if (act === 'reject') {
             if (kind === 'build') {
               if (!confirm('Отклонить и удалить эту сборку?')) return;
-              const res = await postJSON(SUBMIT_API + '?action=reject_build', { csrf_token: window.CSRF_TOKEN || '', id });
+              const res = await postJSON(window.SUBMIT_API + '?action=reject_build', { csrf_token: window.CSRF_TOKEN || '', id });
               if (!res.ok) throw new Error(res.error || 'Ошибка');
               toast('Отклонено');
             } else if (kind === 'game') {
               const note = prompt('Причина отказа (необязательно):', '') || '';
-              const res = await postJSON(SUBMIT_API + '?action=reject', { csrf_token: window.CSRF_TOKEN || '', id, note });
+              const res = await postJSON(window.SUBMIT_API + '?action=reject', { csrf_token: window.CSRF_TOKEN || '', id, note });
               if (!res.ok) throw new Error(res.error || 'Ошибка');
               toast('Отклонено');
             } else if (kind === 'mod' || kind === 'media' || kind === 'asset') {
               if (!confirm('Отклонить заявку?')) return;
-              const data = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_set_status', {
+              const data = await fetchJSON((typeof window.WS_API !== 'undefined' ? window.WS_API : 'api/workshop.php') + '?action=admin_set_status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type: kind, id, status: 'rejected', csrf_token: window.CSRF_TOKEN || '' })
@@ -1759,8 +1778,11 @@ async function loadAdminPending() {
       });
     });
   } catch (err) {
+    console.error('[admin] loadAdminPending', err);
     list.innerHTML = `<div class="friends-empty">${escapeHtml(err.message || 'Ошибка')}<br><button type="button" class="btn-retry" id="admin-retry">Повторить</button></div>`;
-    $('#admin-retry')?.addEventListener('click', loadAdminPending);
+    const retry = document.getElementById('admin-retry');
+    if (retry) retry.addEventListener('click', () => { window.__adminPendingLoading = false; loadAdminPending(); });
+  }
   } finally {
     window.__adminPendingLoading = false;
   }
@@ -1812,7 +1834,7 @@ async function openAdminWorkshopItem(type, id) {
       item = arr.find(x => +x.id === +id) || null;
     }
     if (!item) {
-      const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending');
+      const ws = await fetchJSON((typeof window.WS_API !== 'undefined' ? window.WS_API : 'api/workshop.php') + '?action=admin_pending');
       if (ws && ws.ok) {
         window.__adminWsPending = { mods: ws.mods || [], media: ws.media || [], assets: ws.assets || [], ts: Date.now() };
         const arr = type === 'mod' ? (ws.mods || []) : (type === 'asset' ? (ws.assets || []) : (ws.media || []));
@@ -1842,7 +1864,7 @@ async function openAdminWorkshopItem(type, id) {
     btn.onclick = async () => {
       btn.disabled = true;
       try {
-        const data = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_set_status', {
+        const data = await fetchJSON((typeof window.WS_API !== 'undefined' ? window.WS_API : 'api/workshop.php') + '?action=admin_set_status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type, id, status, csrf_token: window.CSRF_TOKEN || '' })
@@ -1866,7 +1888,7 @@ window.openAdminWorkshopItem = openAdminWorkshopItem;
 async function openAdminGame(id) {
   adminDeleteMedia = [];
   try {
-    const data = await fetchJSON(`${SUBMIT_API}?action=get&id=${id}`);
+    const data = await fetchJSON(`${window.SUBMIT_API}?action=get&id=${id}`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     const g = data.game;
     // основная форма = публикация (модалку открываем сразу)
@@ -1957,7 +1979,7 @@ async function openAdminGame(id) {
           rej.addEventListener('click', async () => {
             const note = prompt('Причина отказа (необязательно):', '') || '';
             try {
-              const res = await postJSON(SUBMIT_API + '?action=reject', {
+              const res = await postJSON(window.SUBMIT_API + '?action=reject', {
                 csrf_token: window.CSRF_TOKEN || '',
                 id: window.__adminModeratingId,
                 note
@@ -2028,62 +2050,89 @@ async function openAdminGame(id) {
 
 
 async function loadAdminUsers() {
-  const list = $('#admin-users-list');
+  const list = document.getElementById('admin-users-list');
   if (!list) return;
-  const q = ($('#admin-users-search')?.value || '').trim();
-  const filter = $('#admin-users-filter')?.value || 'all';
+  const q = ((document.getElementById('admin-users-search') || {}).value || '').trim();
+  const filter = ((document.getElementById('admin-users-filter') || {}).value || 'all');
   list.innerHTML = '<div class="loading">Загрузка...</div>';
   try {
-    const data = await fetchJSON(`${ADMIN_API}?action=list_users&q=${encodeURIComponent(q)}&filter=${encodeURIComponent(filter)}`);
+    const api = (window.ADMIN_API || 'api/admin.php');
+    const data = await fetchJSON(api + '?action=list_users&q=' + encodeURIComponent(q) + '&filter=' + encodeURIComponent(filter));
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     const users = data.users || [];
     if (!users.length) {
       list.innerHTML = '<div class="friends-empty">Никого не найдено</div>';
       return;
     }
-    list.innerHTML = users.map(u => {
-      const avStyle = u.avatar_url
-        ? `background-image:url('${escapeHtml(avatarUrlBust(u.avatar_url, u.id))}');background-size:cover;background-position:center;`
-        : `background:${escapeHtml(u.avatar_color || '#ef5b2c')}`;
-      const letter = (u.username || '?').slice(0, 1).toUpperCase();
-      const badges = [];
-      if (+u.is_banned) badges.push('<span class="admin-user-badge is-banned">Забанен</span>');
-      if (u.role === 'admin') badges.push('<span class="admin-user-badge is-admin">Админ</span>');
-      else if (u.role === 'developer') badges.push('<span class="admin-user-badge is-dev">Разработчик</span>');
-      else {
-        // та же логика, что на профиле: < 30 дней = Новичок
-        let isNewbie = false;
-        if (u.created_at) {
-          const ts = new Date(String(u.created_at).replace(' ', 'T')).getTime();
-          if (ts && (Date.now() - ts) < 30 * 86400 * 1000) isNewbie = true;
-        }
-        if (isNewbie) badges.push('<span class="admin-user-badge is-newbie">Новичок</span>');
-        else badges.push('<span class="admin-user-badge is-user">Игрок</span>');
+    list.innerHTML = users.map(function (u) {
+      const avUrl = u.avatar_url
+        ? (typeof avatarUrlBust === 'function' ? avatarUrlBust(u.avatar_url, u.id) : u.avatar_url)
+        : '';
+      const cover = avUrl
+        ? '<img src="' + escapeHtml(avUrl) + '" alt="" />'
+        : (typeof adminCoverHtml === 'function'
+            ? adminCoverHtml('', 'game')
+            : '<div class="admin-pending-cover is-ph"></div>');
+      let roleLabel = 'Игрок';
+      let roleClass = 'is-user';
+      if (+u.is_banned) { roleLabel = 'Забанен'; roleClass = 'is-banned'; }
+      else if (u.role === 'admin') { roleLabel = 'Админ'; roleClass = 'is-admin'; }
+      else if (u.role === 'developer') { roleLabel = 'Разработчик'; roleClass = 'is-dev'; }
+      else if (u.created_at) {
+        const ts = new Date(String(u.created_at).replace(' ', 'T')).getTime();
+        if (ts && (Date.now() - ts) < 30 * 86400 * 1000) { roleLabel = 'Новичок'; roleClass = 'is-newbie'; }
       }
-      return `
-        <div class="admin-user-row" data-id="${u.id}" data-username="${escapeHtml(u.username)}">
-          <div class="admin-user-av" style="${avStyle}">${u.avatar_url ? '' : escapeHtml(letter)}</div>
-          <div class="admin-user-info">
-            <div class="admin-user-name">${escapeHtml(u.username)}</div>
-            <div class="admin-user-meta">${escapeHtml(u.email || '')} · id ${u.id}</div>
-            <div class="admin-user-badges">${badges.join('')}</div>
-          </div>
-          <div class="admin-user-actions">
-            <button type="button" class="hp-btn-edit" data-act="profile">Профиль</button>
-            <button type="button" class="hp-btn-edit" data-act="edit">Редактировать</button>
-          </div>
-        </div>`;
+      const banner = (u.banner_url || '').trim();
+      const bannerAttr = banner
+        ? ' style="--user-banner:url(\'' + String(banner).replace(/'/g, '%27') + '\')"'
+        : '';
+      const icoUser = (typeof icon === 'function' ? icon('user', 16) : '');
+      const icoEdit = (typeof icon === 'function' ? (icon('edit', 16) || icon('pencil', 16) || icon('settings', 16)) : '');
+      return (
+        '<div class="admin-pending-item admin-user-row' + (banner ? ' has-banner' : '') +
+        '" data-id="' + u.id + '" data-username="' + escapeHtml(u.username) + '"' + bannerAttr + '>' +
+          cover +
+          '<div style="flex:1;min-width:0">' +
+            '<div class="t"><span class="admin-pending-type ' + roleClass + '">' + roleLabel + '</span>' +
+              escapeHtml(u.username || '') + '</div>' +
+            '<div class="s">' + escapeHtml(u.email || '—') + ' · id ' + u.id + '</div>' +
+          '</div>' +
+          '<div class="admin-pending-actions" onclick="event.stopPropagation()">' +
+            '<button type="button" class="admin-act-btn" data-act="profile" title="Профиль" aria-label="Профиль">' + icoUser + '</button>' +
+            '<button type="button" class="admin-act-btn" data-act="edit" title="Редактировать" aria-label="Редактировать">' + icoEdit + '</button>' +
+          '</div>' +
+        '</div>'
+      );
     }).join('');
-    $$('.admin-user-row', list).forEach(row => {
-      const id = +row.dataset.id;
-      const uname = row.dataset.username;
-      row.querySelector('[data-act="profile"]')?.addEventListener('click', () => openUserProfile(uname, id));
-      row.querySelector('[data-act="edit"]')?.addEventListener('click', () => {
-        openAdminUserModal({ id, username: uname, role: 'user' });
+
+    list.querySelectorAll('.admin-user-row').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest && e.target.closest('[data-act]')) return;
+        const id = +row.dataset.id;
+        if (id && typeof openAdminUserModal === 'function') {
+          openAdminUserModal({ id: id, username: row.dataset.username });
+        }
+      });
+      row.querySelectorAll('[data-act]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          const id = +row.dataset.id;
+          const act = btn.getAttribute('data-act');
+          if (act === 'profile') {
+            if (typeof openProfile === 'function') openProfile(id);
+            else if (typeof showView === 'function') {
+              try { window.viewingUserId = id; } catch (err) {}
+              showView('profile');
+            }
+          } else if (act === 'edit' && typeof openAdminUserModal === 'function') {
+            openAdminUserModal({ id: id, username: row.dataset.username });
+          }
+        });
       });
     });
   } catch (err) {
-    list.innerHTML = `<div class="friends-empty">${escapeHtml(err.message || 'Ошибка')}</div>`;
+    list.innerHTML = '<div class="friends-empty">' + escapeHtml(err.message || 'Ошибка') + '</div>';
   }
 }
 
@@ -2237,7 +2286,7 @@ function initAdminPanel() {
     const shots = $('#admin-shots')?.files;
     if (shots) for (let i = 0; i < shots.length; i++) fd.append('screenshots[]', shots[i]);
     try {
-      const res = await fetch(`${SUBMIT_API}?action=admin_save`, { method: 'POST', body: fd });
+      const res = await fetch(`${window.SUBMIT_API}?action=admin_save`, { method: 'POST', body: fd });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Ошибка');
       toast('Сохранено');
@@ -2279,11 +2328,11 @@ function initAdminPanel() {
       const shots = $('#admin-shots')?.files;
       if (shots) for (let i = 0; i < shots.length; i++) fd.append('screenshots[]', shots[i]);
 
-      const saveRes = await fetch(`${SUBMIT_API}?action=admin_save`, { method: 'POST', body: fd });
+      const saveRes = await fetch(`${window.SUBMIT_API}?action=admin_save`, { method: 'POST', body: fd });
       const saveData = await saveRes.json();
       if (!saveData.ok) throw new Error(saveData.error || 'Ошибка сохранения перед публикацией');
 
-      const res = await postJSON(`${SUBMIT_API}?action=publish`, { id }, FETCH_TIMEOUT_LONG);
+      const res = await postJSON(`${window.SUBMIT_API}?action=publish`, { id }, FETCH_TIMEOUT_LONG);
       if (!res.ok) throw new Error(res.error || 'Ошибка публикации');
       toast('Игра опубликована');
       homeCache = null;
@@ -2299,7 +2348,7 @@ function initAdminPanel() {
     const id = +($('#admin-game-id')?.value || 0);
     if (!id) return;
     try {
-      const res = await postJSON(`${SUBMIT_API}?action=reject`, {
+      const res = await postJSON(`${window.SUBMIT_API}?action=reject`, {
         id,
         note: $('#admin-note')?.value || '',
       }, FETCH_TIMEOUT_LONG);
@@ -2320,3 +2369,322 @@ try {
   window.loadAdminPending = loadAdminPending;
   if (typeof openAdminGame === 'function') window.openAdminGame = openAdminGame;
 } catch (e) {}
+
+
+/* pack import (moved from admin.js) */
+async function importGamePackFile(file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('pack', file);
+  fd.append('action', 'import_pack');
+  const res = await fetch(window.GAME_PACK_API + '?action=import_pack', {
+    method: 'POST',
+    body: fd,
+    credentials: 'same-origin',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || 'Не удалось импортировать пакет');
+  return data;
+}
+
+function applyGamePackToSubmitForm(data) {
+  const game = data.game || {};
+  const files = data.files || {};
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (!el || v == null || v === '') return;
+    el.value = v;
+  };
+  const setPreview = (previewId, url, nameId, label) => {
+    if (!url) return;
+    if (typeof setPubPreviewImg === 'function') setPubPreviewImg(previewId, url);
+    if (nameId) {
+      const n = document.getElementById(nameId);
+      if (n) n.textContent = label || url.split('/').pop() || 'из пакета';
+    }
+  };
+
+  set('sg-title', game.title || '');
+  set('sg-developer', game.developer || '');
+  set('sg-short', game.short_description || '');
+  set('sg-tags', game.tags || '');
+  set('sg-price', game.price != null ? String(game.price) : '');
+  set('sg-release', game.release_date || '');
+  set('sg-video', game.video_url || '');
+
+  // описание: contenteditable #sg-desc-editor + textarea #sg-desc
+  const desc = game.description || '';
+  if (desc) {
+    const ed = document.getElementById('sg-desc-editor');
+    const ta = document.getElementById('sg-desc');
+    if (ed) {
+      ed.innerHTML = desc;
+      ed.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (ta) ta.value = desc;
+    try { if (typeof syncPublishDescription === 'function') syncPublishDescription(); } catch (e) {}
+  }
+
+  // жанры
+  const genreStr = String(game.genre || '');
+  const parts = genreStr.split(/[,;/|]+/).map(s => s.trim()).filter(Boolean);
+  document.querySelectorAll('.sg-genre').forEach(cb => {
+    cb.checked = parts.some(p => p.toLowerCase() === String(cb.value).toLowerCase());
+  });
+  try { if (typeof syncPublishGenres === 'function') syncPublishGenres(); } catch (e) {}
+
+  // платформы
+  let plats = game.platforms;
+  if (typeof plats === 'string') {
+    try { plats = JSON.parse(plats); } catch (e) { plats = String(plats).split(/[,;]+/); }
+  }
+  if (Array.isArray(plats)) {
+    const setP = new Set(plats.map(p => String(p).toLowerCase().trim()));
+    document.querySelectorAll('.sg-platform').forEach(cb => {
+      const v = String(cb.value).toLowerCase();
+      cb.checked = setP.has(v) || [...setP].some(x => x.includes(v) || v.includes(x));
+    });
+  }
+
+  // управление
+  let ctrls = game.controllers;
+  if (typeof ctrls === 'string') {
+    ctrls = ctrls.split(/[,;|]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+  }
+  if (Array.isArray(ctrls) && ctrls.length) {
+    const expanded = new Set();
+    ctrls.forEach(c => {
+      const x = String(c).toLowerCase();
+      if (x === 'full' || x === 'partial' || x === 'supported' || x === 'controller' || x === 'gamepad') {
+        expanded.add('xbox'); expanded.add('playstation'); expanded.add('keyboard');
+      } else expanded.add(x);
+    });
+    document.querySelectorAll('.sg-ctrl').forEach(cb => {
+      const v = String(cb.value).toLowerCase();
+      cb.checked = expanded.has(v) || [...expanded].some(c => c.includes(v) || v.includes(c));
+    });
+  }
+
+  // системные требования (объект или notes/HTML)
+  const normSys = (raw) => {
+    if (raw == null || raw === '') return null;
+    let obj = raw;
+    if (typeof raw === 'string') {
+      try { obj = JSON.parse(raw); } catch (e) { return { other: raw }; }
+    }
+    if (obj && typeof obj === 'object') {
+      if (obj.os || obj.processor || obj.memory || obj.gpu || obj.storage) return obj;
+      if (obj.notes) return { other: String(obj.notes) };
+    }
+    return obj;
+  };
+  try {
+    const mn = normSys(game.sys_req_min);
+    const rc = normSys(game.sys_req_rec);
+    if (mn) fillSysReq('#sg-sys-min-fields', mn);
+    if (rc) fillSysReq('#sg-sys-rec-fields', rc);
+  } catch (e) { console.warn('sysreq', e); }
+
+  // языки: ["English"] или [{name,subtitles,audio}]
+  try {
+    let langs = game.languages;
+    if (typeof langs === 'string') {
+      try { langs = JSON.parse(langs); } catch (e) { langs = langs.split(/[,;]+/).map(s => s.trim()).filter(Boolean); }
+    }
+    if (Array.isArray(langs) && langs.length) {
+      if (typeof langs[0] === 'string') {
+        langs = langs.map(name => ({ name, subtitles: true, audio: true }));
+      }
+      renderLangTable('#sg-lang-table', langs);
+    }
+  } catch (e) { console.warn('lang', e); }
+
+  // медиа
+  if (files.cover) {
+    set('sg-cover-url', files.cover);
+    setPreview('sg-cover-preview', files.cover, 'sg-cover-name', 'обложка из пакета');
+  }
+  if (files.banner) {
+    set('sg-banner-url', files.banner);
+    setPreview('sg-banner-preview', files.banner, 'sg-banner-name', 'баннер из пакета');
+  }
+  if (files.logo) {
+    set('sg-logo-url', files.logo);
+    setPreview('sg-logo-preview', files.logo, 'sg-logo-name', 'логотип из пакета');
+  }
+  if (files.icon) {
+    set('sg-icon-url', files.icon);
+    setPreview('sg-icon-preview', files.icon, 'sg-icon-name', 'иконка из пакета');
+  } else {
+    // нет своей иконки — берём первую из SGDB в пакете
+    try {
+      const sg = (files && files.sgdb) || (data.manifest && data.manifest.files && data.manifest.files.sgdb) || {};
+      const icons = sg.icons || [];
+      let firstIcon = '';
+      if (Array.isArray(icons) && icons.length) {
+        const it = icons[0];
+        firstIcon = typeof it === 'string' ? it : (it && (it.url || it.path || it.file || '')) || '';
+      }
+      if (firstIcon) {
+        set('sg-icon-url', firstIcon);
+        setPreview('sg-icon-preview', firstIcon, 'sg-icon-name', 'иконка SGDB');
+      }
+    } catch (e) { console.warn('sgdb icon fallback', e); }
+  }
+
+  // скриншоты
+  window.__importedGamePack = data;
+  let shotUrls = [];
+  if (files.screenshots && files.screenshots.length) shotUrls = files.screenshots.slice();
+  else if (data.manifest && Array.isArray(data.manifest.screenshots)) shotUrls = data.manifest.screenshots.slice();
+  // только реальные URL/пути
+  shotUrls = shotUrls.filter(u => !!u && String(u).length > 3);
+  if (shotUrls.length) {
+    let box = document.getElementById('sg-screenshots-urls');
+    if (!box) {
+      box = document.createElement('input');
+      box.type = 'hidden';
+      box.id = 'sg-screenshots-urls';
+      box.name = 'screenshot_urls';
+      (document.getElementById('submit-game-form') || document.body).appendChild(box);
+    }
+    // нормализуем пути (без ведущего /)
+    shotUrls = shotUrls.map(u => String(u).replace(/^\//, ''));
+    box.value = shotUrls.join('\n');
+    const prevBox = document.getElementById('sg-shots-preview');
+    if (prevBox) {
+      prevBox.style.display = 'flex';
+      prevBox.style.flexWrap = 'wrap';
+      prevBox.style.gap = '6px';
+      prevBox.innerHTML = shotUrls.slice(0, 12).map(u => {
+        const src = (u.startsWith('http') || u.startsWith('uploads/') || u.startsWith('/')) ? u : u;
+        return '<div class="pub-shot-item" title="' + escapeHtml(src) + '" style="background-image:url(\'' + String(src).replace(/'/g, '%27') + '\');background-size:cover;background-position:center;width:72px;height:48px;border-radius:6px;display:inline-block;border:1px solid rgba(255,255,255,0.12)"></div>';
+      }).join('');
+    }
+    console.log('[import] screenshots', shotUrls.length, shotUrls);
+  } else {
+    console.warn('[import] no screenshots in pack', data.files, data.manifest && data.manifest.files);
+  }
+
+  // трейлеры: video_url или первый movie
+  const movies = data.movies || (data.manifest && data.manifest.movies) || [];
+  let videoSet = game.video_url || '';
+  if (!videoSet && movies.length) {
+    const first = movies[0];
+    videoSet = first.url || first.source_url || first.mp4 || first.file || '';
+  }
+  try { ensureTrailersEditorUi(); } catch (e) {}
+  const allTrailers = [];
+  if (videoSet) allTrailers.push(videoSet);
+  movies.forEach(m => {
+    const u = m.url || m.source_url || m.mp4 || m.file || '';
+    if (u && !allTrailers.includes(u)) allTrailers.push(u);
+  });
+  renderTrailersEditor(allTrailers.length ? allTrailers : ['']);
+  if (allTrailers.length) set('sg-video', serializeTrailerList(allTrailers));
+  // локальные mp4 трейлеры — сохраняем список для submit
+  const localTrailers = (files.trailers || []).concat(
+    movies.map(m => m.file || m.url).filter(u => u && String(u).startsWith('uploads/'))
+  );
+  if (localTrailers.length) {
+    let hid = document.getElementById('sg-trailer-urls');
+    if (!hid) {
+      hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.id = 'sg-trailer-urls';
+      hid.name = 'trailer_urls';
+      const form = document.getElementById('submit-game-form') || document.getElementById('submit-form-modal');
+      if (form) form.appendChild(hid);
+    }
+    hid.value = [...new Set(localTrailers)].join('\n');
+  }
+
+  // CATioGridDB ассеты из ZIP — в кэш для модалки оформления
+  try {
+    const sg = (files && files.sgdb) || (data.manifest && data.manifest.files && data.manifest.files.sgdb) || {};
+    const packSgdb = { icons: [], logos: [], heroes: [], grids: [] };
+    const mapKey = { icons: 'icons', logos: 'logos', heroes: 'heroes', covers: 'grids', grids: 'grids' };
+    Object.keys(sg || {}).forEach(k => {
+      const dst = mapKey[k] || k;
+      const arr = sg[k] || [];
+      if (!Array.isArray(arr)) return;
+      arr.forEach(item => {
+        const url = (item && (item.url || item.thumb || item.file)) || (typeof item === 'string' ? item : '');
+        if (!url) return;
+        packSgdb[dst] = packSgdb[dst] || [];
+        packSgdb[dst].push({ url, thumb: (item && item.thumb) || url, width: item && item.width, height: item && item.height });
+      });
+    });
+    window.__packSgdbAssets = packSgdb;
+    window.__packSgdbTitle = game.title || '';
+    console.log('[import] sgdb from pack', Object.keys(packSgdb).map(k => k + ':' + (packSgdb[k]||[]).length));
+  } catch (e) { console.warn(e); }
+
+  const nShots = shotUrls ? shotUrls.length : 0;
+  const nLang = Array.isArray(game.languages) ? game.languages.length : 0;
+  const nTr = (typeof collectTrailerInputs === 'function' ? collectTrailerInputs() : []).length;
+  toast('Импорт: скринов ' + nShots + ', трейлеров ' + nTr + ', языков ' + nLang);
+}
+
+function ensureImportPackInput() {
+  let input = document.getElementById('sg-import-pack');
+  if (input) return input;
+  input = document.createElement('input');
+  input.type = 'file';
+  input.id = 'sg-import-pack';
+  input.accept = '.zip,application/zip';
+  input.hidden = true;
+  document.body.appendChild(input);
+  return input;
+}
+
+async function handleImportPackFile(file, btn) {
+  if (!file) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Импорт…'; }
+  try {
+    toast('Импорт пакета…');
+    const data = await importGamePackFile(file);
+    applyGamePackToSubmitForm(data);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'Ошибка импорта');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Импорт'; }
+  }
+}
+
+function bindSubmitPackImport() {
+  if (window.__importPackDelegated) return;
+  window.__importPackDelegated = true;
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('#sg-import-pack-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const input = ensureImportPackInput();
+    // защита от ghost-click на backdrop модалки
+    window.__pubFileDialogOpen = true;
+    window.__pubFileDialogTs = Date.now();
+    setTimeout(() => { window.__pubFileDialogOpen = false; }, 1200);
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      await handleImportPackFile(file, btn);
+    };
+    input.click();
+  }, true);
+}
+
+try {
+  if (typeof initSubmitGame === 'function') window.initSubmitGame = initSubmitGame;
+  if (typeof loadAdminPending === 'function') {
+    window.__loadAdminPendingReal = loadAdminPending;
+    window.loadAdminPending = loadAdminPending;
+  }
+  if (typeof bindSubmitPackImport === 'function') bindSubmitPackImport();
+  document.addEventListener('DOMContentLoaded', function () {
+    try { if (typeof initSubmitGame === 'function') initSubmitGame(); } catch (e) { console.warn(e); }
+  });
+} catch (e) { console.warn('[admin-import] init', e); }

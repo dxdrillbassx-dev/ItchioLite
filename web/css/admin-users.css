@@ -1,0 +1,71 @@
+/* Пользователи = те же карточки, что модерация */
+.admin-users-toolbar {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin-bottom: 12px !important;
+}
+.admin-users-toolbar #admin-users-search {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+.admin-users-toolbar #admin-users-filter {
+  flex: 0 0 auto !important;
+  max-width: 180px !important;
+  width: 160px !important;
+}
+
+.admin-users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* баннер на фоне строки (как опция) */
+.admin-user-row.has-banner {
+  background-image: var(--user-banner);
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+.admin-user-row.has-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(12,11,10,.9) 0%, rgba(12,11,10,.55) 50%, rgba(12,11,10,.8) 100%);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+}
+.admin-user-row.has-banner > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* тип-бейдж роли */
+.admin-pending-type.is-admin { color: #ffb08a; }
+.admin-pending-type.is-dev { color: #8ecbff; }
+.admin-pending-type.is-newbie { color: #9dffa8; }
+.admin-pending-type.is-banned { color: #ffb4aa; }
+.admin-pending-type.is-user { color: var(--text-muted, #9a9590); }
+
+/* аватар в сайдбаре — всегда квадрат */
+#side-avatar.side-avatar,
+.side-avatar,
+#avatar-btn.side-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  flex-shrink: 0 !important;
+  aspect-ratio: 1 / 1 !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  overflow: hidden !important;
+}

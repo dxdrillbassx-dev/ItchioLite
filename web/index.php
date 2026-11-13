@@ -151,6 +151,7 @@ if ($isAuthorized) {
 
 
 
+  <link rel="stylesheet" href="css/admin-users.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
 </head>
 <body class="<?php echo ($isClient ? 'client' : 'web') . ($isAuthorized ? '' : ' guest'); ?>">
   <div id="app">
@@ -1226,7 +1227,7 @@ if ($isAuthorized) {
           <div class="settings-main">
             <div class="settings-pane" id="admin-pane-moderation">
               <h2 class="settings-title">Модерация</h2>
-              <p class="settings-sub">Всё на проверке: игры, моды, ассеты, медиа и версии. Тип указан на карточке — нажмите, чтобы открыть модалку.</p>
+              <p class="settings-sub">Тип указан на карточке — нажмите, чтобы открыть модалку.</p>
               <div class="filter-block settings-filter-block settings-rows-block admin-mod-list-wrap">
                 <div class="filter-block-body filter-block-body--open" style="padding:8px !important">
                   <div id="admin-pending-list" class="admin-pending-list">
@@ -1295,9 +1296,9 @@ if ($isAuthorized) {
               <p class="settings-sub">Список аккаунтов, роли и баны. Можно открыть профиль или редактировать.</p>
               <div class="filter-block settings-filter-block settings-rows-block admin-mod-list-wrap">
                 <div class="filter-block-body filter-block-body--open" style="padding:12px 14px !important">
-                  <div class="admin-users-toolbar" style="margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap">
-                    <input type="search" class="auth-input" id="admin-users-search" placeholder="Поиск по нику или почте…" style="flex:1;min-width:180px" />
-                    <select id="admin-users-filter" class="settings-select sort-select" style="max-width:180px">
+                  <div class="admin-users-toolbar">
+                    <input type="search" class="auth-input" id="admin-users-search" placeholder="Поиск по нику или почте…"  />
+                    <select id="admin-users-filter" class="settings-select sort-select" >
                       <option value="all">Все</option>
                       <option value="admin">Админы</option>
                       <option value="developer">Разработчики</option>
