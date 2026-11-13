@@ -213,7 +213,8 @@ function initNotificationsUI() {
   if (isAuthorized()) {
     refreshBadge();
     if (badgeTimer) clearInterval(badgeTimer);
-    badgeTimer = setInterval(refreshBadge, 3000);
+    badgeTimer = setInterval(refreshBadge, 1500);
+    // 1.5s: уведомление о новой заявке появляется быстрее (раньше 3s)
   }
   // мгновенно обновлять при возврате во вкладку (только если уже вошли)
   document.addEventListener('visibilitychange', () => {

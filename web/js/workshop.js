@@ -68,27 +68,94 @@ function bindWsSideToggles(root) {
   });
 }
 
-async function loadWorkshopStats() {
+/**
+ * Hero мастерской: старый баннер СРАЗУ убираем (не opacity — иначе всё равно мерцает),
+ * новый ставим только после preload. Токен отменяет устаревшие onload.
+ */
+window.__wsHeroLoadToken = window.__wsHeroLoadToken || 0;
+window.__wsHeroCurrentUrl = window.__wsHeroCurrentUrl || '';
+
+function resetWorkshopHeroBanner() {
+  const bg = document.getElementById('ws-hero-bg');
+  window.__wsHeroLoadToken = (window.__wsHeroLoadToken || 0) + 1;
+  window.__wsHeroCurrentUrl = '';
+  if (!bg) return window.__wsHeroLoadToken;
+  bg.style.backgroundImage = 'none';
+  bg.style.background = '';
+  bg.classList.remove('has-image', 'is-swapping');
+  bg.classList.add('is-waiting');
+  return window.__wsHeroLoadToken;
+}
+
+function setWorkshopHeroBanner(url, token) {
+  const bg = document.getElementById('ws-hero-bg');
+  if (!bg) return;
+  const next = (url && String(url).trim()) || '';
+  if (!next) {
+    if (token == null || token === window.__wsHeroLoadToken) {
+      bg.style.backgroundImage = 'none';
+      bg.classList.remove('has-image', 'is-waiting');
+    }
+    return;
+  }
+  // Уже показываем этот URL
+  if (window.__wsHeroCurrentUrl === next && bg.classList.contains('has-image')) {
+    bg.classList.remove('is-waiting');
+    return;
+  }
+  const safe = String(next).replace(/'/g, '%27');
+  const myToken = token != null ? token : window.__wsHeroLoadToken;
+  const img = new Image();
+  img.onload = function () {
+    if (myToken !== window.__wsHeroLoadToken) return; // пришёл более новый заход
+    bg.style.backgroundImage = "url('" + safe + "')";
+    bg.style.backgroundSize = 'cover';
+    bg.style.backgroundPosition = 'center';
+    bg.classList.add('has-image');
+    bg.classList.remove('is-waiting', 'is-swapping');
+    window.__wsHeroCurrentUrl = next;
+  };
+  img.onerror = function () {
+    if (myToken !== window.__wsHeroLoadToken) return;
+    bg.classList.remove('is-waiting');
+  };
+  img.src = next;
+}
+
+async function loadWorkshopStats(opts) {
+  opts = opts || {};
+  const token = opts.token != null ? opts.token : window.__wsHeroLoadToken;
   try {
     const data = await fetchJSON(WS_API + '?action=stats');
-    if (!data || !data.ok) return;
+    if (!data || !data.ok) {
+      if (token === window.__wsHeroLoadToken) {
+        const bg = document.getElementById('ws-hero-bg');
+        if (bg) bg.classList.remove('is-waiting');
+      }
+      return;
+    }
     const s = data.stats || {};
     const el = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = wsFormatNum(v); };
     el('ws-stat-views', s.views != null ? s.views : s.downloads);
     el('ws-stat-mods', s.mods);
     el('ws-stat-users', s.users);
-    const bg = document.getElementById('ws-hero-bg');
-    if (bg && data.banner) {
+    if (data.banner) {
       const url = data.banner.banner_url || data.banner.cover_url || '';
-      if (url) {
-        bg.style.backgroundImage = "url('" + String(url).replace(/'/g, '%27') + "')";
-        bg.classList.add('has-image');
-      }
+      // Один баннер на вкладку браузера — без смены (и мерцания) при каждом заходе
+      if (url && !window.__wsHeroSessionUrl) window.__wsHeroSessionUrl = url;
+      setWorkshopHeroBanner(window.__wsHeroSessionUrl || url, token);
+    } else if (token === window.__wsHeroLoadToken) {
+      const bg = document.getElementById('ws-hero-bg');
+      if (bg) bg.classList.remove('is-waiting');
     }
     window.__wsStats = s;
     updateWorkshopSub();
   } catch (e) {
     console.warn('[workshop] stats', e);
+    if (token === window.__wsHeroLoadToken) {
+      const bg = document.getElementById('ws-hero-bg');
+      if (bg) bg.classList.remove('is-waiting');
+    }
   }
 }
 
@@ -588,6 +655,15 @@ async function loadWorkshopList(opts) {
 
 async function openWorkshop() {
   window.__wsgId = 0;
+  let heroToken = window.__wsHeroLoadToken || 0;
+  if (window.__wsHeroSessionUrl) {
+    // Уже есть баннер сессии — сразу ставим, без clear/мигания
+    heroToken = window.__wsHeroLoadToken || 0;
+    setWorkshopHeroBanner(window.__wsHeroSessionUrl, heroToken);
+  } else {
+    // Первый заход: убираем любой остаток, ждём stats
+    heroToken = resetWorkshopHeroBanner();
+  }
   $$('.view').forEach(v => v.classList.remove('active'));
   const view = document.getElementById('view-workshop');
   if (view) view.classList.add('active');
@@ -609,7 +685,7 @@ async function openWorkshop() {
   // layout body
   const body = document.querySelector('#view-workshop .ws-body');
   if (body) body.classList.add('ws-body--full');
-  await loadWorkshopStats();
+  await loadWorkshopStats({ token: heroToken });
   renderWorkshopSide(window.__wsTab);
   await loadWorkshopList();
 }

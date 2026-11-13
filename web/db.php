@@ -35,6 +35,25 @@ function getDB() {
         $pdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
         $pdo->exec("USE `" . DB_NAME . "`");
 
+        // Версия схемы: при совпадении пропускаем десятки ensureColumn / INFORMATION_SCHEMA
+        // (на каждый новый PHP-воркер это экономит сотни мс). Бамп при новых миграциях.
+        if (!defined('CATIO_SCHEMA_VERSION')) {
+            define('CATIO_SCHEMA_VERSION', 5);
+        }
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS catio_meta (
+                k VARCHAR(64) NOT NULL PRIMARY KEY,
+                v VARCHAR(255) NOT NULL DEFAULT '',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $curVer = $pdo->query("SELECT v FROM catio_meta WHERE k = 'schema_version' LIMIT 1")->fetchColumn();
+            if ($curVer !== false && (int)$curVer >= (int)CATIO_SCHEMA_VERSION) {
+                return $pdo;
+            }
+        } catch (Throwable $e) {
+            // таблица meta ещё не доступна — идём полным путём миграций
+        }
+
         // === АВТОСОЗДАНИЕ ТАБЛИЦ ===
 
         // Пользователи
@@ -226,6 +245,14 @@ function getDB() {
             INDEX idx_game (game_id),
             FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Колонки сборок, которые раньше дописывал api/submit.php
+        ensureColumn($pdo, 'game_builds', 'status', "VARCHAR(16) NOT NULL DEFAULT 'published'");
+        ensureColumn($pdo, 'game_builds', 'submitted_by', "INT UNSIGNED NULL DEFAULT NULL");
+        ensureColumn($pdo, 'game_builds', 'changelog', "TEXT NULL");
+        ensureColumn($pdo, 'game_builds', 'file_name', "VARCHAR(255) NOT NULL DEFAULT ''");
+        // version в старых схемах мог быть короче — расширяем мягко через ensure не всегда возможно для MODIFY;
+        // status/file_name достаточно для publish pipeline.
 
         // Скриншоты к страницам игр (как на itch.io)
         $pdo->exec("CREATE TABLE IF NOT EXISTS game_screenshots (
@@ -560,6 +587,12 @@ function getDB() {
             ['ratings', 'idx_ratings_game', 'game_id'],
             ['sessions', 'idx_sessions_user', 'user_id'],
             ['sessions', 'idx_sessions_expires', 'expires_at'],
+            // Очередь модерации / каталог
+            ['games', 'idx_games_status', 'status'],
+            ['games', 'idx_games_status_created', 'status, created_at'],
+            ['game_builds', 'idx_builds_status', 'status'],
+            ['game_builds', 'idx_builds_status_game', 'status, game_id'],
+            ['game_media', 'idx_media_game', 'game_id'],
         ];
         foreach ($indexes as [$table, $name, $cols]) {
             try {
@@ -570,6 +603,14 @@ function getDB() {
                 }
             } catch (Throwable $e) { /* table may not exist yet */ }
         }
+
+        try {
+            if (!defined('CATIO_SCHEMA_VERSION')) {
+                define('CATIO_SCHEMA_VERSION', 5);
+            }
+            $pdo->prepare("INSERT INTO catio_meta (k, v) VALUES ('schema_version', ?)
+                ON DUPLICATE KEY UPDATE v = VALUES(v)")->execute([(string)(int)CATIO_SCHEMA_VERSION]);
+        } catch (Throwable $e) { /* ignore */ }
 
         return $pdo;
     } catch (PDOException $e) {

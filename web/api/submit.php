@@ -1,32 +1,17 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 // CATio — загрузка игр пользователями + модерация админом
+/** Схема game_builds — db.php. No-op + soft ensureColumn. */
 function ensure_game_builds_table(PDO $pdo): void {
     static $done = false;
     if ($done) return;
     $done = true;
-    try {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS game_builds (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            game_id INT UNSIGNED NOT NULL,
-            platform VARCHAR(32) NOT NULL DEFAULT 'windows',
-            version VARCHAR(64) NOT NULL DEFAULT '1.0',
-            changelog TEXT NULL,
-            file_url VARCHAR(512) NOT NULL DEFAULT '',
-            file_name VARCHAR(255) NOT NULL DEFAULT '',
-            file_size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            status VARCHAR(16) NOT NULL DEFAULT 'published',
-            submitted_by INT UNSIGNED NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_game (game_id),
-            INDEX idx_status (status)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    } catch (Throwable $e) {}
-    // migrate older tables
-    try { $pdo->exec("ALTER TABLE game_builds ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'published'"); } catch (Throwable $e) {}
-    try { $pdo->exec("ALTER TABLE game_builds ADD COLUMN submitted_by INT UNSIGNED NULL"); } catch (Throwable $e) {}
-    try { $pdo->exec("ALTER TABLE game_builds ADD COLUMN changelog TEXT NULL"); } catch (Throwable $e) {}
-    try { $pdo->exec("ALTER TABLE game_builds ADD COLUMN file_name VARCHAR(255) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+    if (function_exists('ensureColumn')) {
+        ensureColumn($pdo, 'game_builds', 'status', "VARCHAR(16) NOT NULL DEFAULT 'published'");
+        ensureColumn($pdo, 'game_builds', 'submitted_by', "INT UNSIGNED NULL DEFAULT NULL");
+        ensureColumn($pdo, 'game_builds', 'changelog', "TEXT NULL");
+        ensureColumn($pdo, 'game_builds', 'file_name', "VARCHAR(255) NOT NULL DEFAULT ''");
+    }
 }
 
 function save_builds_from_request(PDO $pdo, int $gameId): void {
@@ -535,17 +520,23 @@ try {
                 }
             }
 
-            // notify admins
+            // notify admins (один multi-INSERT вместо N запросов)
             try {
-                $admins = $pdo->query("SELECT id FROM users WHERE role = 'admin'")->fetchAll();
-                foreach ($admins as $a) {
-                    $pdo->prepare("INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES (?,?,?,?,?)")
-                        ->execute([
-                            (int)$a['id'], 'game_review',
-                            'Новая игра на модерации',
-                            $user['username'] . ' отправил «' . $title . '»',
-                            json_encode(['game_id' => $gameId], JSON_UNESCAPED_UNICODE),
-                        ]);
+                $admins = $pdo->query("SELECT id FROM users WHERE role = 'admin'")->fetchAll(PDO::FETCH_COLUMN);
+                if ($admins) {
+                    $titleN = 'Новая игра на модерации';
+                    $bodyN = $user['username'] . ' отправил «' . $title . '»';
+                    $metaN = json_encode(['game_id' => $gameId], JSON_UNESCAPED_UNICODE);
+                    $placeholders = [];
+                    $params = [];
+                    foreach ($admins as $aid) {
+                        $placeholders[] = '(?,?,?,?,?)';
+                        array_push($params, (int)$aid, 'game_review', $titleN, $bodyN, $metaN);
+                    }
+                    $pdo->prepare(
+                        'INSERT INTO notifications (user_id, type, title, body, meta_json) VALUES '
+                        . implode(',', $placeholders)
+                    )->execute($params);
                 }
             } catch (Throwable $e) {}
 
@@ -636,19 +627,20 @@ try {
         // ===== СПИСОК НА МОДЕРАЦИИ (admin) =====
         case 'pending':
             $user = requireAdminS();
+            // Список модерации: только поля карточки (media тянем в action=get при открытии).
             $st = $pdo->query("
-                SELECT g.*, u.username AS submitter
+                SELECT g.id, g.title, g.genre, g.cover_url, g.banner_url, g.icon_url,
+                       g.price, g.status, g.created_at, g.submitted_by,
+                       u.username AS submitter
                 FROM games g
                 LEFT JOIN users u ON u.id = g.submitted_by
                 WHERE g.status = 'pending'
                 ORDER BY g.created_at ASC
+                LIMIT 200
             ");
-            $rows = $st->fetchAll();
+            $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
             foreach ($rows as &$r) {
                 $r['id'] = (int)$r['id'];
-                $media = $pdo->prepare("SELECT id, kind, url, sort_order FROM game_media WHERE game_id = ? ORDER BY sort_order");
-                $media->execute([$r['id']]);
-                $r['media'] = $media->fetchAll();
             }
             unset($r);
             echo json_encode(['ok' => true, 'games' => $rows], JSON_UNESCAPED_UNICODE);

@@ -38,12 +38,33 @@ function syncUrl(view, gameId) {
   history.replaceState(null, '', '?' + params.toString());
 }
 
+/** Текущий активный экран (не URL) — чтобы не перезагружать данные при спаме навбара */
+window.__catioActiveView = window.__catioActiveView || null;
+window.__catioActiveGameId = window.__catioActiveGameId || null;
+
 function showView(name, gameId, opts) {
+  opts = opts || {};
   document.body.classList.toggle('auth-open', name === 'auth');
   document.body.classList.toggle('guest', name === 'auth' && !(window.AUTH_STATE && window.AUTH_STATE.authorized));
 
   // Библиотека живёт только в десктоп-клиенте
   if (name === 'library' && !window.IS_CLIENT) name = 'home';
+  // community = alias мастерской
+  if (name === 'community') name = 'workshop';
+
+  const gid = (name === 'game')
+    ? (gameId || window.__lastGameForCart?.id || window.GAME_ID_FROM_URL || 0)
+    : null;
+
+  // Уже на этом экране — не дёргаем loadLibrary/loadStore/… повторно
+  // opts.force = true принудительно перезагрузить (после покупки, модерации и т.п.)
+  if (!opts.force
+      && window.__catioActiveView === name
+      && (name !== 'game' || String(window.__catioActiveGameId || '') === String(gid || ''))) {
+    return;
+  }
+  window.__catioActiveView = name;
+  window.__catioActiveGameId = name === 'game' ? gid : null;
 
   const prev = getViewFromUrl();
   if (prev !== name) prevView = prev;
@@ -321,3 +342,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 /* publish modal helpers provided by publishers.js */
+
+
+/** Принудительно переоткрыть текущий/указанный view (данные заново) */
+window.forceShowView = function forceShowView(name, gameId) {
+  if (!name) name = window.__catioActiveView || getViewFromUrl() || 'home';
+  window.__catioActiveView = null;
+  showView(name, gameId, { force: true });
+};

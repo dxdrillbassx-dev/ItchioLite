@@ -547,7 +547,10 @@ async function openPublishFormForGame(g, opts) {
 
   try { initPubFormTabs(); initPubMediaTabs(); initBuildsUi(); bindPublishValidationWatchers(); updatePublishSectionStatus(); } catch (e) {}
   if (g && g.id) {
-    try { await loadGameBuildsIntoForm(g.id); } catch (e) {}
+    // builds уже могут быть в объекте g (action=get) — лишний list_builds не долбим
+    if (!(Array.isArray(g.builds) && g.builds.length)) {
+      try { await loadGameBuildsIntoForm(g.id); } catch (e) {}
+    }
   } else {
     window.__pendingBuilds = [];
     try { renderPendingBuilds(); } catch (e) {}

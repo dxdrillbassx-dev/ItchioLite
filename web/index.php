@@ -38,23 +38,13 @@ $csrfToken = $auth['csrf_token'];
 $banInfo = null;
 if ($isAuthorized && !empty($user['id'])) {
     try {
-        $pdoBan = getDB();
-        foreach ([
-            "ALTER TABLE users ADD COLUMN is_banned TINYINT(1) NOT NULL DEFAULT 0",
-            "ALTER TABLE users ADD COLUMN ban_reason VARCHAR(512) NOT NULL DEFAULT ''",
-            "ALTER TABLE users ADD COLUMN banned_at TIMESTAMP NULL DEFAULT NULL",
-            "ALTER TABLE users ADD COLUMN banned_until TIMESTAMP NULL DEFAULT NULL",
-            "ALTER TABLE users ADD COLUMN banned_by INT UNSIGNED NULL DEFAULT NULL",
-        ] as $sqlTry) {
-            try { $pdoBan->exec($sqlTry); } catch (Throwable $e) {}
-        }
+        $pdoBan = getDB(); // миграции ban-полей — в db.php
         $stBan = $pdoBan->prepare("SELECT COALESCE(is_banned,0) AS is_banned, ban_reason, banned_at, banned_until, banned_by FROM users WHERE id = ?");
         $stBan->execute([(int)$user['id']]);
         $br = $stBan->fetch() ?: [];
         if ((int)($br['is_banned'] ?? 0) === 1) {
             if (!empty($br['banned_until']) && strtotime($br['banned_until']) < time()) {
-                try { $pdoBan->exec("ALTER TABLE users ADD COLUMN show_unban_notice TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
-                $pdoBan->prepare("UPDATE users SET is_banned = 0, ban_reason = '', banned_at = NULL, banned_until = NULL, banned_by = NULL, show_unban_notice = 1 WHERE id = ?")
+                        $pdoBan->prepare("UPDATE users SET is_banned = 0, ban_reason = '', banned_at = NULL, banned_until = NULL, banned_by = NULL, show_unban_notice = 1 WHERE id = ?")
                     ->execute([(int)$user['id']]);
             } else {
                 $byName = '';
@@ -80,7 +70,6 @@ $unbanNotice = false;
 if ($isAuthorized && empty($banInfo) && !empty($user['id'])) {
     try {
         $pdoU = getDB();
-        try { $pdoU->exec("ALTER TABLE users ADD COLUMN show_unban_notice TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
         $stU = $pdoU->prepare("SELECT COALESCE(show_unban_notice,0) FROM users WHERE id = ?");
         $stU->execute([(int)$user['id']]);
         $unbanNotice = ((int)$stU->fetchColumn() === 1);
@@ -144,7 +133,7 @@ if ($isAuthorized) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CATio</title>
   <link rel="icon" type="image/x-icon" href="logo.ico" />
-  <?php $assetVer = (string)max(@filemtime(__DIR__ . '/css/base.css') ?: 0, @filemtime(__DIR__ . '/css/game-library.css') ?: 0, @filemtime(__DIR__ . '/css/shell.css') ?: 0, @filemtime(__DIR__ . '/css/social.css') ?: 0, @filemtime(__DIR__ . '/css/game-extra.css') ?: 0, @filemtime(__DIR__ . '/css/cart-publish.css') ?: 0, @filemtime(__DIR__ . '/css/workshop-admin.css') ?: 0, @filemtime(__DIR__ . '/js/app.js') ?: 0, @filemtime(__DIR__ . '/js/game-actions.js') ?: 0, @filemtime(__DIR__ . '/js/game-comments.js') ?: 0, @filemtime(__DIR__ . '/js/workshop-assets.js') ?: 0, @filemtime(__DIR__ . '/js/admin-import.js') ?: 0, @filemtime(__DIR__ . '/js/gallery.js') ?: 0, @filemtime(__DIR__ . '/js/settings-ui.js') ?: 0, @filemtime(__DIR__ . '/js/publishers.js') ?: 0, @filemtime(__DIR__ . '/js/icons.js') ?: 0); ?>
+  <?php $assetVer = (string)max(@filemtime(__DIR__ . '/css/base.css') ?: 0, @filemtime(__DIR__ . '/css/game-library.css') ?: 0, @filemtime(__DIR__ . '/css/shell.css') ?: 0, @filemtime(__DIR__ . '/css/social.css') ?: 0, @filemtime(__DIR__ . '/css/game-extra.css') ?: 0, @filemtime(__DIR__ . '/css/cart-publish.css') ?: 0, @filemtime(__DIR__ . '/css/workshop-admin.css') ?: 0, @filemtime(__DIR__ . '/css/catio-fixes.css') ?: 0, @filemtime(__DIR__ . '/js/app.js') ?: 0, @filemtime(__DIR__ . '/js/game-actions.js') ?: 0, @filemtime(__DIR__ . '/js/game-comments.js') ?: 0, @filemtime(__DIR__ . '/js/admin-import.js') ?: 0, @filemtime(__DIR__ . '/js/gallery.js') ?: 0, @filemtime(__DIR__ . '/js/settings-ui.js') ?: 0, @filemtime(__DIR__ . '/js/publishers.js') ?: 0, @filemtime(__DIR__ . '/js/icons.js') ?: 0, @filemtime(__DIR__ . '/js/game-format.js') ?: 0, @filemtime(__DIR__ . '/js/user-ui.js') ?: 0, @filemtime(__DIR__ . '/js/catio-lazy.js') ?: 0); ?>
   <link rel="stylesheet" href="css/base.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
   <link rel="stylesheet" href="css/game-library.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
   <link rel="stylesheet" href="css/shell.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
@@ -152,6 +141,7 @@ if ($isAuthorized) {
   <link rel="stylesheet" href="css/game-extra.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
   <link rel="stylesheet" href="css/cart-publish.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
   <link rel="stylesheet" href="css/workshop-admin.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
+  <link rel="stylesheet" href="css/catio-fixes.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1598,8 +1588,12 @@ function socialAuth(provider) {
   setTimeout(push, 2000);
 })();
 </script>
+  <script>window.__assetVer = <?php echo json_encode(isset($assetVer) ? (string)$assetVer : (string)time()); ?>;</script>
+  <script src="js/catio-lazy.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
   <script src="js/icons.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/utils.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/game-format.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/user-ui.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/cart.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/cart-page.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/home.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
@@ -1615,13 +1609,12 @@ function socialAuth(provider) {
 <script src="js/game.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/game-actions.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/game-comments.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
-<script src="js/workshop-assets.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/workshop.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/admin-import.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
-<script src="js/admin.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<!-- admin.js: lazy via loadAdminBundle() -->
 <script src="js/publishers.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 <script src="js/app.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
-  <script src="js/catio_fixes.js"></script>
+  <script src="js/catio_fixes.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 
 <?php require __DIR__ . '/partials/modals.php'; ?>
 </body>

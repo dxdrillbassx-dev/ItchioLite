@@ -1557,6 +1557,9 @@ async function refreshAdminPendingBadge() {
 }
 
 async function loadAdminPending() {
+  window.__loadAdminPendingReal = loadAdminPending;
+  /* real impl */
+
   if (window.__adminPendingLoading) return;
   window.__adminPendingLoading = true;
   try { initAdminUI(); } catch (e) {}
@@ -1583,23 +1586,24 @@ async function loadAdminPending() {
   const editPanel = document.getElementById('admin-edit-panel');
   if (editPanel) { editPanel.style.display = 'none'; editPanel.classList.add('hidden'); }
   try {
-    const data = await fetchJSON(`${SUBMIT_API}?action=pending`);
-    if (!data.ok) throw new Error(data.error || 'Ошибка');
-    const games = data.games || [];
+    // Три независимых запроса параллельно (раньше шли строго друг за другом).
+    const wsApi = (typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php');
+    const [pendRes, wsRes, bdRes] = await Promise.all([
+      fetchJSON(`${SUBMIT_API}?action=pending`).catch(e => ({ ok: false, error: e.message || String(e) })),
+      fetchJSON(wsApi + '?action=admin_pending').catch(() => ({ ok: false })),
+      fetchJSON(`${SUBMIT_API}?action=pending_builds`).catch(() => ({ ok: false })),
+    ]);
+    if (!pendRes || !pendRes.ok) throw new Error((pendRes && pendRes.error) || 'Ошибка очереди игр');
+    const games = pendRes.games || [];
 
     let mods = [], media = [], assets = [], builds = [];
-    try {
-      const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending');
-      if (ws && ws.ok) {
-        mods = ws.mods || [];
-        media = ws.media || [];
-        assets = ws.assets || [];
-      }
-    } catch (e) {}
-    try {
-      const bd = await fetchJSON(`${SUBMIT_API}?action=pending_builds`);
-      if (bd && bd.ok) builds = bd.builds || [];
-    } catch (e) {}
+    if (wsRes && wsRes.ok) {
+      mods = wsRes.mods || [];
+      media = wsRes.media || [];
+      assets = wsRes.assets || [];
+      window.__adminWsPending = { mods, media, assets, ts: Date.now() };
+    }
+    if (bdRes && bdRes.ok) builds = bdRes.builds || [];
 
     const total = games.length + mods.length + media.length + assets.length + builds.length;
     updateAdminPendingBadge(total);
@@ -1800,12 +1804,20 @@ async function openAdminWorkshopItem(type, id) {
   existing.classList.remove('hidden');
 
   try {
-    // подтягиваем данные из списка pending (уже есть на экране) или повторный запрос
-    const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending');
+    // Сначала кэш с loadAdminPending — без повторного admin_pending.
     let item = null;
-    if (ws && ws.ok) {
-      const arr = type === 'mod' ? (ws.mods || []) : (type === 'asset' ? (ws.assets || []) : (ws.media || []));
+    const cache = window.__adminWsPending;
+    if (cache) {
+      const arr = type === 'mod' ? (cache.mods || []) : (type === 'asset' ? (cache.assets || []) : (cache.media || []));
       item = arr.find(x => +x.id === +id) || null;
+    }
+    if (!item) {
+      const ws = await fetchJSON((typeof WS_API !== 'undefined' ? WS_API : 'api/workshop.php') + '?action=admin_pending');
+      if (ws && ws.ok) {
+        window.__adminWsPending = { mods: ws.mods || [], media: ws.media || [], assets: ws.assets || [], ts: Date.now() };
+        const arr = type === 'mod' ? (ws.mods || []) : (type === 'asset' ? (ws.assets || []) : (ws.media || []));
+        item = arr.find(x => +x.id === +id) || null;
+      }
     }
     if (body) {
       if (!item) {
@@ -1857,10 +1869,12 @@ async function openAdminGame(id) {
     const data = await fetchJSON(`${SUBMIT_API}?action=get&id=${id}`);
     if (!data.ok) throw new Error(data.error || 'Ошибка');
     const g = data.game;
-    // основная форма = публикация
+    // основная форма = публикация (модалку открываем сразу)
     await openPublishFormForGame(g, { moderate: true });
-    try { await loadGameBuildsIntoForm(g.id); } catch (e) {}
-    // если в ответе get уже есть builds — заполним сразу
+    // builds уже в get — не ходим в list_builds второй раз
+    if (!Array.isArray(g.builds) || !g.builds.length) {
+      try { await loadGameBuildsIntoForm(g.id); } catch (e) {}
+    }
     if (Array.isArray(g.builds) && g.builds.length) {
       const b = g.builds[0];
       const ver = document.getElementById('sg-build-version');
@@ -2298,3 +2312,11 @@ function initAdminPanel() {
   });
 }
 
+
+
+// Phase3: явная регистрация для catio-lazy stub
+try {
+  window.__loadAdminPendingReal = loadAdminPending;
+  window.loadAdminPending = loadAdminPending;
+  if (typeof openAdminGame === 'function') window.openAdminGame = openAdminGame;
+} catch (e) {}

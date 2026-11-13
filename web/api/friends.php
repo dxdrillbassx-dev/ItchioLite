@@ -6,9 +6,6 @@ $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
-function jsonBodyF(): array { return jsonBody(); }
-function requireUserF(): array { return requireUser(); }
-function checkCsrfF(array $body): void { checkCsrf($body); }
 function userPublicRow(array $u): array {
     return [
         'id' => (int)$u['id'],
@@ -137,7 +134,7 @@ try {
         }
 
         case 'list': {
-            $me = requireUserF();
+            $me = requireUser();
             $uid = (int)$me['id'];
             $meRow = userPublicRow($me);
 
@@ -198,7 +195,7 @@ try {
         }
 
         case 'owns_games': {
-            $me = requireUserF();
+            $me = requireUser();
             $raw = $_GET['game_ids'] ?? '';
             if (is_array($raw)) $ids = array_map('intval', $raw);
             else $ids = array_filter(array_map('intval', preg_split('/[,\s]+/', (string)$raw)));
@@ -227,7 +224,7 @@ try {
         }
 
         case 'search': {
-            $me = requireUserF();
+            $me = requireUser();
             $q = trim($_GET['q'] ?? '');
             if (mb_strlen($q) < 1) {
                 echo json_encode(['ok' => true, 'users' => []], JSON_UNESCAPED_UNICODE);
@@ -248,9 +245,9 @@ try {
 
         case 'request': {
             if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false,'error'=>'POST']); break; }
-            $me = requireUserF();
-            $body = jsonBodyF();
-            checkCsrfF($body);
+            $me = requireUser();
+            $body = jsonBody();
+            checkCsrf($body);
             $to = (int)($body['user_id'] ?? 0);
             if ($to <= 0 || $to === (int)$me['id']) {
                 echo json_encode(['ok' => false, 'error' => 'Некорректный пользователь'], JSON_UNESCAPED_UNICODE);
@@ -287,9 +284,9 @@ try {
 
         case 'respond': {
             if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false,'error'=>'POST']); break; }
-            $me = requireUserF();
-            $body = jsonBodyF();
-            checkCsrfF($body);
+            $me = requireUser();
+            $body = jsonBody();
+            checkCsrf($body);
             $from = (int)($body['user_id'] ?? 0);
             $accept = !empty($body['accept']);
             if ($from <= 0) {
@@ -314,9 +311,9 @@ try {
 
         case 'remove': {
             if ($method !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false,'error'=>'POST']); break; }
-            $me = requireUserF();
-            $body = jsonBodyF();
-            checkCsrfF($body);
+            $me = requireUser();
+            $body = jsonBody();
+            checkCsrf($body);
             $other = (int)($body['user_id'] ?? 0);
             $pdo->prepare("DELETE FROM friendships WHERE
                 (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)")

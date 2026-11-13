@@ -344,12 +344,16 @@ function renderGamePage(wrap, data) {
             </div>
           </div>
 
-          <div class="gp-side-card">
+          ${(() => {
+            const ctrlHtml = renderControllerSupport(g.controllers);
+            if (!ctrlHtml) return '';
+            return `<div class="gp-side-card" id="gp-ctrl-card">
             <button type="button" class="gp-side-head">Поддержка контроллера <span class="hp-side-arrow" aria-hidden="true">${icon('chevron-down', 16)}</span></button>
             <div class="gp-side-body gp-ctrl-body">
-              ${renderControllerSupport(g.controllers)}
+              ${ctrlHtml}
             </div>
-          </div>
+          </div>`;
+          })()}
 
           ${typeof renderSysReqBlock === 'function' ? renderSysReqBlock(g.sys_req_min, g.sys_req_rec) : ''}
           ${typeof renderLangBlock === 'function' ? renderLangBlock(g.languages) : ''}
@@ -615,14 +619,18 @@ function brandLogoHtml(kind, title, svgFallback) {
 }
 
 function renderControllerSupport(raw) {
-  const s = String(raw || '').toLowerCase();
+  const s = String(raw || '').trim().toLowerCase();
+  // пусто / none / 0 / «нет» — блок на странице не показываем
+  if (!s || s === 'none' || s === '0' || s === 'нет' || s === 'no' || s === 'false' || s === '-') {
+    return '';
+  }
   const hasX = /xbox|xinput/.test(s);
   const hasP = /playstation|dualshock|dualsense|ps4|ps5|\bps\b/.test(s);
   const hasSw = /switch|nintendo/.test(s);
   const hasKb = /keyboard|клавиатур|mouse|мышь/.test(s);
-  const hasAny = hasX || hasP || hasSw || hasKb || (s && s !== 'none' && s !== '0');
-  if (!hasAny && !s) {
-    return `<div class="gp-ctrl-none">Нет данных о поддержке контроллера</div>`;
+  const hasAny = hasX || hasP || hasSw || hasKb || !!s;
+  if (!hasAny) {
+    return '';
   }
   const full = /full|полная|complete/.test(s) || (hasX && hasP);
   const icoXboxSvg = `${icon('brand-1', 28, 'gp-brand-logo')}`;

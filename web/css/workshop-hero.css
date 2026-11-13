@@ -1,0 +1,13 @@
+/* Workshop hero: без мерцания старого баннера */
+#ws-hero-bg {
+  background-color: transparent;
+  transition: none; /* transition на background-image даёт «мигание» */
+}
+#ws-hero-bg.is-waiting {
+  background-image: none !important;
+  /* нейтральный тёмный слой, пока грузится новый */
+  background: linear-gradient(135deg, #1a1d24 0%, #12141a 50%, #1c2028 100%) !important;
+}
+#ws-hero-bg.has-image {
+  /* картинка через inline style */
+}
