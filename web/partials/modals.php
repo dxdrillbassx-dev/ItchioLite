@@ -1223,38 +1223,55 @@
   <!-- ===== АДМИН: РЕДАКТИРОВАНИЕ ПОЛЬЗОВАТЕЛЯ ===== -->
   <div class="submit-modal hidden" id="admin-user-modal">
     <div class="submit-modal-backdrop" data-close-admin-user></div>
-    <div class="submit-modal-box submit-modal-wide" role="dialog" aria-modal="true">
-      <div class="submit-modal-head">
-        <h2>Редактирование пользователя</h2>
-        <button type="button" class="friends-modal-close" id="admin-user-close" aria-label="Закрыть">×</button>
+    <div class="submit-modal-box submit-modal-wide pub-modal-box admin-user-edit-box" role="dialog" aria-modal="true" aria-labelledby="admin-user-title">
+      <div class="submit-modal-head pub-modal-head">
+        <div>
+          <h2 id="admin-user-title">Редактирование пользователя</h2>
+          <p class="pub-modal-sub">Настройки профиля, оформление и управление доступом</p>
+        </div>
+        <button type="button" class="pub-modal-close" id="admin-user-close" data-close-admin-user aria-label="Закрыть">
+          <?= icon('x', 18) ?>
+        </button>
       </div>
-      <div class="submit-modal-body" id="admin-user-body">
+      <div class="submit-modal-body pub-modal-body admin-user-edit-body" id="admin-user-body">
         <input type="hidden" id="admin-user-id" value="" />
-        <label class="settings-label"><span>Ник</span><input type="text" id="admin-user-name" maxlength="32" /></label>
-        <label class="settings-label"><span>Роль</span>
-          <select id="admin-user-role">
-            <option value="user">user</option>
-            <option value="developer">developer</option>
-            <option value="admin">admin</option>
-          </select>
-        </label>
-        <label class="settings-label"><span>Баланс</span><input type="number" id="admin-user-balance" min="0" step="1" /></label>
-        <label class="settings-label"><span>Карма</span><input type="number" id="admin-user-karma" step="1" /></label>
-        <label class="settings-label"><span>Цвет аватара</span><input type="color" id="admin-user-color" value="#ef5b2c" /></label>
-        <div class="admin-user-media-row">
-          <label class="settings-label"><span>Новый аватар</span><input type="file" id="admin-user-avatar" accept="image/*" /></label>
-          <label class="settings-label"><span>Новая шапка</span><input type="file" id="admin-user-banner" accept="image/*" /></label>
-        </div>
-        <hr class="admin-user-hr" />
-        <h3 class="admin-user-ban-title">Бан</h3>
-        <label class="settings-label"><span>Причина бана</span><input type="text" id="admin-user-ban-reason" placeholder="Нарушение правил…" /></label>
-        <label class="settings-label"><span>Срок (дней, 0 = навсегда)</span><input type="number" id="admin-user-ban-days" min="0" value="0" /></label>
-        <div class="admin-user-actions">
-          <button type="button" class="auth-submit" id="admin-user-save">Сохранить</button>
-          <button type="button" class="btn-danger" id="admin-user-ban">Забанить</button>
-          <button type="button" class="hp-btn-edit" id="admin-user-unban">Разбанить</button>
-        </div>
-        <p class="comment-hint" id="admin-user-status"></p>
+
+        <section class="pub-section">
+          <div class="pub-section-head"><span class="pub-section-ico"><?= icon('user', 16) ?></span><h3>Основное</h3></div>
+          <div class="submit-grid">
+            <label class="settings-label"><span>Никнейм</span><input class="auth-input" type="text" id="admin-user-name" maxlength="32" /></label>
+            <label class="settings-label"><span>Роль</span>
+              <select class="auth-input" id="admin-user-role">
+                <option value="user">Игрок</option><option value="developer">Разработчик</option><option value="admin">Администратор</option>
+              </select>
+            </label>
+            <label class="settings-label"><span>Баланс (₽)</span><input class="auth-input" type="number" id="admin-user-balance" min="0" step="1" /></label>
+            <label class="settings-label"><span>Карма</span><input class="auth-input" type="number" id="admin-user-karma" step="1" /></label>
+            <label class="settings-label"><span>Цвет аватара</span><input class="auth-input admin-user-color-input" type="color" id="admin-user-color" value="#ef5b2c" /></label>
+          </div>
+        </section>
+
+        <section class="pub-section">
+          <div class="pub-section-head"><span class="pub-section-ico"><?= icon('image', 16) ?></span><h3>Оформление профиля</h3></div>
+          <div class="submit-grid">
+            <label class="settings-label"><span>Новый аватар</span><input class="auth-input" type="file" id="admin-user-avatar" accept="image/*" /></label>
+            <label class="settings-label"><span>Новая шапка профиля</span><input class="auth-input" type="file" id="admin-user-banner" accept="image/*" /></label>
+          </div>
+        </section>
+
+        <section class="pub-section admin-user-ban-section">
+          <div class="pub-section-head"><span class="pub-section-ico"><?= icon('shield', 16) ?></span><h3>Управление баном</h3></div>
+          <div class="submit-grid">
+            <label class="settings-label"><span>Причина бана</span><input class="auth-input" type="text" id="admin-user-ban-reason" placeholder="Нарушение правил…" /></label>
+            <label class="settings-label"><span>Срок (дней, 0 — навсегда)</span><input class="auth-input" type="number" id="admin-user-ban-days" min="0" value="0" /></label>
+          </div>
+          <p class="comment-hint" id="admin-user-status" aria-live="polite"></p>
+          <div class="admin-user-actions">
+            <button type="button" class="hp-btn-save" id="admin-user-save">Сохранить изменения</button>
+            <button type="button" class="btn-danger" id="admin-user-ban">Забанить</button>
+            <button type="button" class="hp-btn-edit" id="admin-user-unban">Снять бан</button>
+          </div>
+        </section>
       </div>
     </div>
   </div>

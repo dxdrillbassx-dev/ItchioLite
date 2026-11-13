@@ -642,6 +642,12 @@ async function uploadProfileImage(kind, file) {
   if (kind === 'avatar') {
     const applyAva = (el) => {
       if (!el) return;
+      // В клиентском сайдбаре avatar-btn — это кнопка-контейнер.
+      // Меняем фон только внутреннего .side-avatar, иначе textContent очищает ник и стрелку.
+      if (el.id === 'avatar-btn' && el.classList.contains('side-user-btn')) {
+        el = el.querySelector('.side-avatar') || document.getElementById('side-avatar');
+        if (!el) return;
+      }
       el.style.backgroundImage = "url('" + url.replace(/'/g, "%27") + "')";
       el.style.backgroundSize = 'cover';
       el.style.backgroundPosition = 'center';
@@ -665,7 +671,9 @@ async function uploadProfileImage(kind, file) {
     applyAva($('#hp-avatar'));
     applyAva($('#hp-edit-avatar'));
     applyAva($('#side-avatar'));
-    applyAva($('#avatar-btn'));
+    // В браузерной шапке avatar-btn сам является аватаром; в клиенте это кнопка с дочерними элементами.
+    const avatarButton = $('#avatar-btn');
+    if (avatarButton && !avatarButton.classList.contains('side-user-btn')) applyAva(avatarButton);
     applyAva($('#settings-avatar-preview'));
     if (window.AUTH_STATE && window.AUTH_STATE.user) {
       window.AUTH_STATE.user.avatar_url = data.url;

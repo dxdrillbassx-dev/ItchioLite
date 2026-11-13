@@ -597,8 +597,23 @@ function openAdminGameEditModal(g) {
 
 function bindAdminGameEdit(g, viewer) {
   const btn = document.getElementById('gp-admin-edit');
-  if (btn && viewer?.is_admin) {
-    btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openAdminGameEditModal(g); };
+  if (btn && viewer && (viewer.is_admin || viewer.role === 'admin')) {
+    // Привязываем обработчик после каждого рендера страницы игры.
+    // Используем сохранённый объект страницы, чтобы клик по SVG-иконке
+    // и повторное создание actionbar не теряли ссылку на игру.
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const game = window.__currentGamePage || g;
+      if (typeof openPublishFormForGame === 'function') {
+        openPublishFormForGame(game, { adminEdit: true }).catch(err => {
+          console.error('[CATio] Не удалось открыть редактор игры:', err);
+          toast(err.message || 'Не удалось открыть редактор игры');
+        });
+      } else {
+        toast('Редактор игры ещё не загружен');
+      }
+    };
   }
   const upd = document.getElementById('gp-game-update');
   if (upd) {

@@ -38,6 +38,12 @@
     bundlePromise = (async function () {
       await window.__catioLoadScript('js/admin.js?v=' + v);
       window.__adminBundleLoaded = true;
+      // app.js мог выполнить стартовую инициализацию до загрузки lazy-бандла.
+      // Поэтому инициализируем обработчики админской модалки сразу после загрузки admin.js.
+      if (typeof window.initAdminUserModal === 'function' && !window.__adminUserModalInitialized) {
+        window.initAdminUserModal();
+        window.__adminUserModalInitialized = true;
+      }
       document.dispatchEvent(new CustomEvent('catio:admin-bundle'));
     })();
     return bundlePromise;
