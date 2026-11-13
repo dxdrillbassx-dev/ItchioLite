@@ -8,14 +8,18 @@ $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 // Любая ошибка (БД, PHP) возвращается JSON'ом — клиент покажет её текстом,
 // а не будет молча крутить форму
-set_exception_handler(function ($e) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Ошибка сервера: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
-});
-
 // ===== ДИАГНОСТИКА (открой в браузере: api/auth.php?action=diag) =====
 if ($action === 'diag') {
+    // Закрыто по умолчанию: для отладки задай CATIO_ALLOW_DIAG=1 в окружении
+    // или зайди админом. Иначе 404.
+    $allow = (getenv('CATIO_ALLOW_DIAG') === '1')
+        || (defined('CATIO_ALLOW_DIAG') && CATIO_ALLOW_DIAG)
+        || (function_exists('isAdmin') && isAdmin());
+    if (!$allow) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'error' => 'Not found'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     $out = ['php' => PHP_VERSION];
     try {
         $db = getDB();

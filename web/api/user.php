@@ -1,33 +1,14 @@
 <?php
-// CATio — API профиля: статистика, активность, настройки, баланс
-require_once __DIR__ . '/../auth.php';
-
-header('Content-Type: application/json; charset=utf-8');
-
-set_exception_handler(function ($e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Ошибка сервера: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
-});
+// CATio — API профиля
+require_once __DIR__ . '/bootstrap.php';
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
-function jsonBodyUser(): array {
-    $body = json_decode(file_get_contents('php://input'), true);
-    return is_array($body) ? $body : $_POST;
-}
+function jsonBodyUser(): array { return jsonBody(); }
 
-function requireAuthUser(): array {
-    $user = getCurrentUser();
-    if (!$user) {
-        http_response_code(401);
-        echo json_encode(['ok' => false, 'error' => 'Нужно войти в аккаунт'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    return $user;
-}
+function requireAuthUser(): array { return requireUser(); }
 
 try {
     switch ($action) {
@@ -66,11 +47,11 @@ try {
             $user = requireAuthUser();
             $uid = (int)$user['id'];
 
-            $games = (int)$pdo->query("SELECT COUNT(*) FROM library WHERE user_id = $uid")->fetchColumn();
-            $comments = (int)$pdo->query("SELECT COUNT(*) FROM comments WHERE user_id = $uid")->fetchColumn();
-            $ratings = (int)$pdo->query("SELECT COUNT(*) FROM ratings WHERE user_id = $uid")->fetchColumn();
-            $spent = (float)$pdo->query("SELECT COALESCE(SUM(price_paid),0) FROM purchases WHERE user_id = $uid")->fetchColumn();
-            $playtime = (int)$pdo->query("SELECT COALESCE(SUM(playtime_minutes),0) FROM library WHERE user_id = $uid")->fetchColumn();
+            $st = $pdo->prepare("SELECT COUNT(*) FROM library WHERE user_id = ?"); $st->execute([$uid]); $games = (int)$st->fetchColumn();
+            $st = $pdo->prepare("SELECT COUNT(*) FROM comments WHERE user_id = ?"); $st->execute([$uid]); $comments = (int)$st->fetchColumn();
+            $st = $pdo->prepare("SELECT COUNT(*) FROM ratings WHERE user_id = ?"); $st->execute([$uid]); $ratings = (int)$st->fetchColumn();
+            $st = $pdo->prepare("SELECT COALESCE(SUM(price_paid),0) FROM purchases WHERE user_id = ?"); $st->execute([$uid]); $spent = (float)$st->fetchColumn();
+            $st = $pdo->prepare("SELECT COALESCE(SUM(playtime_minutes),0) FROM library WHERE user_id = ?"); $st->execute([$uid]); $playtime = (int)$st->fetchColumn();
             $karma = (int)($user['karma'] ?? 0);
 
             // «Уровень» CATio: складывается из реальных действий

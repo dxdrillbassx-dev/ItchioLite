@@ -1,15 +1,6 @@
 <?php
+require_once __DIR__ . '/bootstrap.php';
 // CATio — загрузка игр пользователями + модерация админом
-require_once __DIR__ . '/../auth.php';
-header('Content-Type: application/json; charset=utf-8');
-
-set_exception_handler(function ($e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
-});
-
-
 function ensure_game_builds_table(PDO $pdo): void {
     static $done = false;
     if ($done) return;
@@ -218,10 +209,7 @@ function insert_trailer_media(PDO $pdo, int $gameId, string $videoField): void {
 }
 
 
-function jsonBodyS(): array {
-    $b = json_decode(file_get_contents('php://input'), true);
-    return is_array($b) ? $b : $_POST;
-}
+function jsonBodyS(): array { return jsonBody(); }
 function requireUserS(): array {
     $u = getCurrentUser();
     if (!$u) {
@@ -248,6 +236,11 @@ function slugify(string $s): string {
 }
 function saveUpload(string $field, string $dir, array $allowed, int $maxMb = 8): ?string {
     if (empty($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
+    if (function_exists('catio_save_upload')) {
+        $exts = array_values(array_unique(array_values($allowed)));
+        $name = catio_save_upload($_FILES[$field], $dir, $allowed, $maxMb, $exts);
+        return 'uploads/games/' . basename($dir) . '/' . $name;
+    }
     $f = $_FILES[$field];
     if ($f['size'] > $maxMb * 1024 * 1024) throw new RuntimeException("Файл $field больше {$maxMb} МБ");
     $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -276,6 +269,7 @@ try {
             $title = trim($_POST['title'] ?? '');
             $desc = trim($_POST['description'] ?? '');
             $short = trim($_POST['short_description'] ?? '');
+            if (function_exists('catio_sanitize_html')) { $desc = catio_sanitize_html($desc); $short = catio_sanitize_html($short, 2000); }
             $genre = trim($_POST['genre'] ?? '');
             $tags = trim($_POST['tags'] ?? '');
             if (mb_strlen($genre) > 255) $genre = mb_substr($genre, 0, 255);
@@ -758,8 +752,8 @@ try {
 
             $fields = [
                 'title' => trim($_POST['title'] ?? ''),
-                'short_description' => trim($_POST['short_description'] ?? ''),
-                'description' => trim($_POST['description'] ?? ''),
+                'short_description' => (function_exists('catio_sanitize_html') ? catio_sanitize_html(trim($_POST['short_description'] ?? ''), 2000) : trim($_POST['short_description'] ?? '')),
+                'description' => (function_exists('catio_sanitize_html') ? catio_sanitize_html(trim($_POST['description'] ?? '')) : trim($_POST['description'] ?? '')),
                 'genre' => trim($_POST['genre'] ?? ''),
                 'video_url' => normalize_video_urls_field(trim((string)($_POST['video_url'] ?? ''))),
                 'sys_req_min' => trim($_POST['sys_req_min'] ?? ''),

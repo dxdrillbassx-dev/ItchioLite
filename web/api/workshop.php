@@ -1,27 +1,28 @@
 <?php
 /**
- * CATio Workshop API — мастерская (Nexus-like)
- * actions: stats, games, mods, media, genres, tags
+ * CATio Workshop API
  */
-while (ob_get_level() > 0) { @ob_end_clean(); }
-ob_start();
+require_once __DIR__ . '/bootstrap.php';
 
-foreach ([__DIR__ . '/../config.php', __DIR__ . '/config.php'] as $_cfg) {
-    if (is_file($_cfg)) { require_once $_cfg; break; }
-}
-require_once __DIR__ . '/../db.php';
-if (is_file(__DIR__ . '/../auth.php')) require_once __DIR__ . '/../auth.php';
+function ws_json($data, int $code = 200): void { jsonOut($data, $code); }
 
-function ws_json($data, int $code = 200): void {
-    while (ob_get_level() > 0) { @ob_end_clean(); }
-    if (!headers_sent()) {
-        http_response_code($code);
-        header('Content-Type: application/json; charset=utf-8');
-        header('X-Content-Type-Options: nosniff');
+/** CSRF: токен из JSON-тела, POST или заголовка */
+function ws_require_csrf(?array $body = null): void {
+    $token = '';
+    if (is_array($body)) {
+        $token = (string)($body['csrf_token'] ?? $body['csrf'] ?? '');
     }
-    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-    exit;
+    if ($token === '') {
+        $token = (string)($_POST['csrf_token'] ?? $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    }
+    if (!function_exists('verifyCsrfToken') || !verifyCsrfToken($token)) {
+        ws_json(['ok' => false, 'error' => 'Неверный CSRF-токен. Обнови страницу.'], 403);
+    }
 }
+
+
+
+
 
 function ws_str(array $a, string $k, string $d = ''): string {
     return array_key_exists($k, $a) ? trim((string)$a[$k]) : $d;
@@ -452,9 +453,11 @@ try {
 
         case 'admin_set_status': {
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') ws_json(['ok' => false, 'error' => 'POST only'], 405);
+            $raw = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
+            if (!is_array($raw)) $raw = [];
+            ws_require_csrf($raw);
             $u = function_exists('getCurrentUser') ? getCurrentUser() : null;
             if (!$u || ($u['role'] ?? '') !== 'admin') ws_json(['ok' => false, 'error' => 'Только для админов'], 403);
-            $raw = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
             $type = in_array(($raw['type'] ?? ''), ['mod', 'media', 'asset'], true) ? $raw['type'] : '';
             $id = (int)($raw['id'] ?? 0);
             $status = in_array(($raw['status'] ?? ''), ['published', 'rejected', 'pending'], true) ? $raw['status'] : '';
@@ -471,6 +474,8 @@ try {
             if (!$u) ws_json(['ok' => false, 'error' => 'Нужно войти'], 401);
             $uid = (int)$u['id'];
             $raw = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
+            if (!is_array($raw)) $raw = [];
+            ws_require_csrf($raw);
             $type = in_array(($raw['type'] ?? ''), ['mod','media','asset'], true) ? $raw['type'] : '';
             $tid = (int)($raw['id'] ?? 0);
             if (!$type || $tid <= 0) ws_json(['ok' => false, 'error' => 'type/id required'], 400);
@@ -496,6 +501,7 @@ try {
 
         case 'submit_media': {
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') ws_json(['ok' => false, 'error' => 'POST only'], 405);
+            ws_require_csrf();
             $u = function_exists('getCurrentUser') ? getCurrentUser() : null;
             if (!$u) ws_json(['ok' => false, 'error' => 'Нужно войти'], 401);
             $uid = (int)$u['id'];
@@ -544,6 +550,7 @@ try {
 
         case 'submit_mod': {
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') ws_json(['ok' => false, 'error' => 'POST only'], 405);
+            ws_require_csrf();
             $u = function_exists('getCurrentUser') ? getCurrentUser() : null;
             if (!$u) ws_json(['ok' => false, 'error' => 'Нужно войти'], 401);
             $uid = (int)$u['id'];
@@ -723,6 +730,7 @@ try {
 
         case 'submit_asset': {
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') ws_json(['ok' => false, 'error' => 'POST only'], 405);
+            ws_require_csrf();
             $u = function_exists('getCurrentUser') ? getCurrentUser() : null;
             if (!$u) ws_json(['ok' => false, 'error' => 'Нужно войти'], 401);
             $uid = (int)$u['id'];

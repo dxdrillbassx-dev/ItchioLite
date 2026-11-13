@@ -1,30 +1,13 @@
 <?php
-require_once __DIR__ . '/../auth.php';
-header('Content-Type: application/json; charset=utf-8');
-
-set_exception_handler(function ($e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
-});
+// CATio — уведомления
+require_once __DIR__ . '/bootstrap.php';
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
-function jsonBodyN(): array {
-    $b = json_decode(file_get_contents('php://input'), true);
-    return is_array($b) ? $b : $_POST;
-}
-function requireAuthN(): array {
-    $u = getCurrentUser();
-    if (!$u) {
-        http_response_code(401);
-        echo json_encode(['ok' => false, 'error' => 'Нужно войти'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    return $u;
-}
+function jsonBodyN(): array { return jsonBody(); }
+function requireAuthN(): array { return requireUser(); }
 
 /** Создать уведомление (вызывается из других API через require) */
 function createNotification(PDO $pdo, int $userId, string $type, string $title, string $body = '', array $meta = []): void {
@@ -65,14 +48,14 @@ try {
             $msgs = 0;
             $req = 0;
             try {
-                $notif = (int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id = $uid AND is_read = 0")->fetchColumn();
+                $st = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0"); $st->execute([$uid]); $notif = (int)$st->fetchColumn();
             } catch (Throwable $e) {}
             try {
-                $msgs = (int)$pdo->query("SELECT COUNT(*) FROM messages WHERE receiver_id = $uid AND is_read = 0")->fetchColumn();
+                $st = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE receiver_id = ? AND is_read = 0"); $st->execute([$uid]); $msgs = (int)$st->fetchColumn();
             } catch (Throwable $e) {}
             // входящие заявки без requested_by (колонки может не быть)
             try {
-                $req = (int)$pdo->query("SELECT COUNT(*) FROM friendships WHERE friend_id = $uid AND status = 'pending'")->fetchColumn();
+                $st = $pdo->prepare("SELECT COUNT(*) FROM friendships WHERE friend_id = ? AND status = 'pending'"); $st->execute([$uid]); $req = (int)$st->fetchColumn();
             } catch (Throwable $e) {}
             echo json_encode([
                 'ok' => true,

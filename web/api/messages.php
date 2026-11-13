@@ -1,33 +1,14 @@
 <?php
-// CATio — личные сообщения (только между друзьями)
-require_once __DIR__ . '/../auth.php';
-
-header('Content-Type: application/json; charset=utf-8');
-
-set_exception_handler(function ($e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Ошибка сервера: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
-});
+// CATio — личные сообщения
+require_once __DIR__ . '/bootstrap.php';
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
-function jsonBodyMsg(): array {
-    $body = json_decode(file_get_contents('php://input'), true);
-    return is_array($body) ? $body : $_POST;
-}
+function jsonBodyMsg(): array { return jsonBody(); }
 
-function requireAuthMsg(): array {
-    $user = getCurrentUser();
-    if (!$user) {
-        http_response_code(401);
-        echo json_encode(['ok' => false, 'error' => 'Нужно войти'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    return $user;
-}
+function requireAuthMsg(): array { return requireUser(); }
 
 function areFriends(PDO $pdo, int $a, int $b): bool {
     $st = $pdo->prepare("
@@ -182,7 +163,7 @@ try {
         case 'unread':
             $user = requireAuthMsg();
             $uid = (int)$user['id'];
-            $cnt = (int)$pdo->query("SELECT COUNT(*) FROM messages WHERE receiver_id = $uid AND is_read = 0")->fetchColumn();
+            $st = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE receiver_id = ? AND is_read = 0"); $st->execute([$uid]); $cnt = (int)$st->fetchColumn();
             echo json_encode(['ok' => true, 'unread' => $cnt], JSON_UNESCAPED_UNICODE);
             break;
 

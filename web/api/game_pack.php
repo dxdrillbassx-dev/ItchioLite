@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/bootstrap.php';
 /**
  * Экспорт / импорт полной карточки игры (ZIP-пакет).
  * Нужен, чтобы переносить Steam-игры в «офлайн»-пакет без привязки к Steam.
@@ -8,18 +9,6 @@
  *   import_pack   POST multipart pack=file — любой авторизованный, распаковывает во временную папку
  *   sgdb_by_name  GET  ?q=       — поиск игры в SteamGridDB по названию + топ-ассеты
  */
-declare(strict_types=1);
-
-require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/../db.php';
-require_once __DIR__ . '/../auth.php';
-
-set_exception_handler(function ($e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
-});
-
 $action = trim((string)($_GET['action'] ?? $_POST['action'] ?? ''));
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
@@ -81,23 +70,14 @@ function gp_download(string $url, string $dest): bool {
 }
 
 function gp_sgdbKey(): string {
-    if (defined('STEAMGRIDDB_API_KEY') && STEAMGRIDDB_API_KEY) return (string)STEAMGRIDDB_API_KEY;
-    if (function_exists('getConfig')) {
-        $c = getConfig('STEAMGRIDDB_API_KEY');
-        if ($c) return (string)$c;
-    }
-    return (string)(getenv('STEAMGRIDDB_API_KEY') ?: '');
+    return '';
 }
 
+
 function gp_sgdbRequest(string $path): ?array {
-    $key = gp_sgdbKey();
-    if ($key === '') return null;
-    $url = 'https://www.steamgriddb.com/api/v2/' . ltrim($path, '/');
-    $raw = gp_httpGet($url, ['Authorization: Bearer ' . $key, 'Accept: application/json']);
-    if ($raw === null) return null;
-    $j = json_decode($raw, true);
-    return is_array($j) ? $j : null;
+    return null; // diploma: no external SGDB
 }
+
 
 function gp_resolveLocalPath(string $urlOrPath): ?string {
     $u = trim($urlOrPath);
@@ -311,45 +291,14 @@ function gp_normalizeControllers($v): string {
 
 
 function gp_steamMovieUrl(array $m): string {
-    // Старый формат
-    if (is_array($m['mp4'] ?? null)) {
-        $u = (string)($m['mp4']['max'] ?? $m['mp4']['480'] ?? '');
-        if ($u !== '') return (stripos($u, 'http://') === 0) ? ('https://' . substr($u, 7)) : $u;
-    }
-    if (is_array($m['webm'] ?? null)) {
-        $u = (string)($m['webm']['max'] ?? $m['webm']['480'] ?? '');
-        if ($u !== '') return (stripos($u, 'http://') === 0) ? ('https://' . substr($u, 7)) : $u;
-    }
-    // Новый формат Steam (2024+): только HLS/DASH
-    foreach (['hls_h264', 'dash_h264', 'dash_av1', 'hls', 'dash'] as $k) {
-        $u = $m[$k] ?? null;
-        if (is_array($u)) {
-            // иногда { "src": "..." } или список
-            $u = $u['src'] ?? $u['url'] ?? reset($u);
-        }
-        $u = trim((string)$u);
-        if ($u !== '') {
-            if (stripos($u, 'http://') === 0) $u = 'https://' . substr($u, 7);
-            return $u;
-        }
-    }
-    // fallback: thumbnail не видео, не берём
     return '';
 }
 
+
 function gp_fetchSteamEnrich(int $appId): ?array {
-    if ($appId <= 0) return null;
-    $url = 'https://store.steampowered.com/api/appdetails?appids=' . $appId . '&l=russian';
-    $raw = gp_httpGet($url, [], 25);
-    if (!$raw) {
-        $url = 'https://store.steampowered.com/api/appdetails?appids=' . $appId . '&l=english';
-        $raw = gp_httpGet($url, [], 25);
-    }
-    if (!$raw) return null;
-    $j = json_decode($raw, true);
-    $d = $j[(string)$appId]['data'] ?? null;
-    return is_array($d) ? $d : null;
+    return null; // diploma: no Steam Store API
 }
+
 
 
 function gp_jsonField($v) {
@@ -374,8 +323,7 @@ if ($action === 'export') {
         @ini_set('output_buffering', 'off');
         @ini_set('zlib.output_compression', '0');
     } else {
-        header('Content-Type: application/json; charset=utf-8');
-    }
+        }
 
     gp_requireAdmin();
     if (!class_exists('ZipArchive')) {
@@ -777,7 +725,6 @@ $emit(['phase' => 'sgdb', 'pct' => 60, 'msg' => 'SteamGridDB…']);
     exit;
 }
 
-header('Content-Type: application/json; charset=utf-8');
 if ($action === 'import_pack') {
     if ($method !== 'POST') {
         http_response_code(405);
@@ -1007,55 +954,12 @@ if ($action === 'import_pack') {
 // ---------- SGDB BY NAME (non-steam) ----------
 header('Content-Type: application/json; charset=utf-8');
 if ($action === 'sgdb_by_name') {
-    gp_requireUser();
-    $q = trim((string)($_GET['q'] ?? ''));
-    if (mb_strlen($q) < 2) {
-        echo json_encode(['ok' => true, 'results' => []], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    if (gp_sgdbKey() === '') {
-        echo json_encode(['ok' => false, 'error' => 'Нет STEAMGRIDDB_API_KEY', 'need_key' => true], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    $search = gp_sgdbRequest('search/autocomplete/' . rawurlencode($q));
-    $data = $search['data'] ?? [];
-    $results = [];
-    if (is_array($data)) {
-        foreach (array_slice($data, 0, 12) as $row) {
-            $results[] = [
-                'id' => (int)($row['id'] ?? 0),
-                'name' => (string)($row['name'] ?? ''),
-                'types' => $row['types'] ?? [],
-                'verified' => !empty($row['verified']),
-            ];
-        }
-    }
-    $sgdbId = (int)($_GET['sgdb_id'] ?? 0);
-    $assets = null;
-    if ($sgdbId > 0) {
-        $assets = ['icons' => [], 'covers' => [], 'heroes' => [], 'logos' => []];
-        $map = ['icons' => 'icons', 'covers' => 'grids', 'heroes' => 'heroes', 'logos' => 'logos'];
-        foreach ($map as $key => $ep) {
-            $json = gp_sgdbRequest($ep . '/game/' . $sgdbId . '?types=static&nsfw=any');
-            $rows = $json['data'] ?? [];
-            if (!is_array($rows)) continue;
-            foreach (array_slice($rows, 0, 24) as $r) {
-                $url = (string)($r['url'] ?? '');
-                if ($url === '') continue;
-                $assets[$key][] = [
-                    'url' => $url,
-                    'thumb' => $r['thumb'] ?? $url,
-                    'width' => (int)($r['width'] ?? 0),
-                    'height' => (int)($r['height'] ?? 0),
-                    'style' => (string)($r['style'] ?? ''),
-                    'score' => (int)($r['score'] ?? 0),
-                ];
-            }
-        }
-    }
-    echo json_encode(['ok' => true, 'results' => $results, 'assets' => $assets], JSON_UNESCAPED_UNICODE);
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'error' => 'Онлайн SteamGridDB отключён. Используйте ZIP-пакет.', 'assets' => [], 'results' => []], JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+
 
 
 if ($action === 'export_download') {

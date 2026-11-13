@@ -1,15 +1,14 @@
 <?php
+// CATio — издательства
+require_once __DIR__ . '/bootstrap.php';
+
 // CATio — Издательства
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../db.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-function jsonOut($data, $code = 200) {
-    http_response_code($code);
-    echo json_encode($data, JSON_UNESCAPED_UNICODE);
-    exit;
-}
+/* jsonOut — bootstrap */
 
 function requireUserP() {
     $u = getCurrentUser();

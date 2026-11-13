@@ -547,6 +547,30 @@ function getDB() {
             $pdo->exec("ALTER TABLE workshop_likes MODIFY COLUMN target_type ENUM('mod','media','asset') NOT NULL");
         } catch (Throwable $e) {}
 
+
+        // ----- Performance indexes (safe to re-run) -----
+        $indexes = [
+            ['library', 'idx_library_user', 'user_id'],
+            ['library', 'idx_library_user_game', 'user_id, game_id'],
+            ['messages', 'idx_messages_receiver_read', 'receiver_id, is_read'],
+            ['messages', 'idx_messages_pair', 'sender_id, receiver_id'],
+            ['notifications', 'idx_notif_user_read', 'user_id, is_read'],
+            ['purchases', 'idx_purchases_user', 'user_id'],
+            ['comments', 'idx_comments_game', 'game_id'],
+            ['ratings', 'idx_ratings_game', 'game_id'],
+            ['sessions', 'idx_sessions_user', 'user_id'],
+            ['sessions', 'idx_sessions_expires', 'expires_at'],
+        ];
+        foreach ($indexes as [$table, $name, $cols]) {
+            try {
+                $chk = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?");
+                $chk->execute([DB_NAME, $table, $name]);
+                if ((int)$chk->fetchColumn() === 0) {
+                    $pdo->exec("CREATE INDEX `$name` ON `$table` ($cols)");
+                }
+            } catch (Throwable $e) { /* table may not exist yet */ }
+        }
+
         return $pdo;
     } catch (PDOException $e) {
         die(json_encode(['error' => 'DB connection failed: ' . $e->getMessage()]));

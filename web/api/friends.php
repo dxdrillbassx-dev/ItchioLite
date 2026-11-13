@@ -1,38 +1,14 @@
 <?php
-// CATio — друзья + публичный профиль (библиотека ТОЛЬКО владельца профиля)
-require_once __DIR__ . '/../auth.php';
-header('Content-Type: application/json; charset=utf-8');
-
-set_exception_handler(function ($e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Ошибка сервера: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
-});
+// CATio — друзья + публичный профиль
+require_once __DIR__ . '/bootstrap.php';
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
-function jsonBodyF(): array {
-    $b = json_decode(file_get_contents('php://input'), true);
-    return is_array($b) ? $b : $_POST;
-}
-function requireUserF(): array {
-    $u = getCurrentUser();
-    if (!$u) {
-        http_response_code(401);
-        echo json_encode(['ok' => false, 'error' => 'Нужно войти'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    return $u;
-}
-function checkCsrfF(array $body): void {
-    if (!verifyCsrfToken($body['csrf_token'] ?? '')) {
-        http_response_code(403);
-        echo json_encode(['ok' => false, 'error' => 'Неверный CSRF-токен. Обнови страницу.'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-}
+function jsonBodyF(): array { return jsonBody(); }
+function requireUserF(): array { return requireUser(); }
+function checkCsrfF(array $body): void { checkCsrf($body); }
 function userPublicRow(array $u): array {
     return [
         'id' => (int)$u['id'],

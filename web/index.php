@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
+if (function_exists('catio_send_security_headers')) { catio_send_security_headers(false); }
+require_once __DIR__ . '/assets/icons/icon.php';
 getDB();
 
 $isClient = isset($_GET['client']) && $_GET['client'] == '1';
@@ -142,8 +144,14 @@ if ($isAuthorized) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CATio</title>
   <link rel="icon" type="image/x-icon" href="logo.ico" />
-  <?php $assetVer = (string)max(@filemtime(__DIR__ . '/css/style.css') ?: 0, @filemtime(__DIR__ . '/js/app.js') ?: 0); ?>
-  <link rel="stylesheet" href="css/style.css?v=<?php echo $assetVer; ?>" />
+  <?php $assetVer = (string)max(@filemtime(__DIR__ . '/css/base.css') ?: 0, @filemtime(__DIR__ . '/css/game-library.css') ?: 0, @filemtime(__DIR__ . '/css/shell.css') ?: 0, @filemtime(__DIR__ . '/css/social.css') ?: 0, @filemtime(__DIR__ . '/css/game-extra.css') ?: 0, @filemtime(__DIR__ . '/css/cart-publish.css') ?: 0, @filemtime(__DIR__ . '/css/workshop-admin.css') ?: 0, @filemtime(__DIR__ . '/js/app.js') ?: 0, @filemtime(__DIR__ . '/js/game-actions.js') ?: 0, @filemtime(__DIR__ . '/js/game-comments.js') ?: 0, @filemtime(__DIR__ . '/js/workshop-assets.js') ?: 0, @filemtime(__DIR__ . '/js/admin-import.js') ?: 0, @filemtime(__DIR__ . '/js/gallery.js') ?: 0, @filemtime(__DIR__ . '/js/settings-ui.js') ?: 0, @filemtime(__DIR__ . '/js/publishers.js') ?: 0, @filemtime(__DIR__ . '/js/icons.js') ?: 0); ?>
+  <link rel="stylesheet" href="css/base.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
+  <link rel="stylesheet" href="css/game-library.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
+  <link rel="stylesheet" href="css/shell.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
+  <link rel="stylesheet" href="css/social.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
+  <link rel="stylesheet" href="css/game-extra.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
+  <link rel="stylesheet" href="css/cart-publish.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
+  <link rel="stylesheet" href="css/workshop-admin.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -167,7 +175,7 @@ if ($isAuthorized) {
           </span>
           <span class="side-user-name"><?php echo htmlspecialchars($user['username']); ?></span>
           <span class="side-user-arrow" aria-hidden="true">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+            <?= icon('chevron-down', 16) ?>
           </span>
         </button>
         <div class="user-menu hidden" id="user-menu" role="menu">
@@ -180,37 +188,37 @@ if ($isAuthorized) {
             <b id="user-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
           </div>
           
-          <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
-          <button type="button" class="user-menu-item" id="menu-notifications"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Уведомления <span class="menu-badge notif-menu-badge hidden">0</span></button>
-          <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
-          <button type="button" class="user-menu-item" id="menu-settings"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Настройки</button>
+          <button type="button" class="user-menu-item" id="menu-profile"><?= icon('user', 16, 'menu-ico') ?> Профиль</button>
+          <button type="button" class="user-menu-item" id="menu-notifications"><?= icon('bell', 16, 'menu-ico') ?> Уведомления <span class="menu-badge notif-menu-badge hidden">0</span></button>
+          <button type="button" class="user-menu-item menu-friends-btn"><?= icon('friends', 16, 'menu-ico') ?> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
+          <button type="button" class="user-menu-item" id="menu-settings"><?= icon('settings', 16, 'menu-ico') ?> Настройки</button>
           <div class="user-menu-sep" role="separator"></div>
-          <button type="button" class="user-menu-item danger" id="menu-logout"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
+          <button type="button" class="user-menu-item danger" id="menu-logout"><?= icon('logout', 16, 'menu-ico') ?> Выйти</button>
         </div>
       </div>
 
       <nav class="side-nav">
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'home' ? 'active' : ''; ?>" data-view="home"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>Главная</button>
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'store' ? 'active' : ''; ?>" data-view="store"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>Каталог</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'home' ? 'active' : ''; ?>" data-view="home"><span class="side-ico"><?= icon('home', 18) ?></span>Главная</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'store' ? 'active' : ''; ?>" data-view="store"><span class="side-ico"><?= icon('store', 18) ?></span>Каталог</button>
         <?php if ($isClient): ?>
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'library' ? 'active' : ''; ?>" data-view="library"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>Библиотека</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'library' ? 'active' : ''; ?>" data-view="library"><span class="side-ico"><?= icon('library', 18) ?></span>Библиотека</button>
         <?php endif; ?>
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'workshop' ? 'active' : ''; ?>" data-view="workshop"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>Мастерская</button>
-        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'downloads' ? 'active' : ''; ?>" data-view="downloads"><span class="side-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>Загрузки<span class="nav-badge hidden" id="downloads-badge">0</span></button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'workshop' ? 'active' : ''; ?>" data-view="workshop"><span class="side-ico"><?= icon('workshop', 18) ?></span>Мастерская</button>
+        <button type="button" class="nav-btn side-btn <?php echo $currentView === 'downloads' ? 'active' : ''; ?>" data-view="downloads"><span class="side-ico"><?= icon('downloads', 18) ?></span>Загрузки<span class="nav-badge hidden" id="downloads-badge">0</span></button>
       </nav>
 
       <div class="side-lib">
         <div class="side-lib-title">МОЯ БИБЛИОТЕКА</div>
         <div class="side-lib-controls">
           <div class="search-field">
-            <svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <?= icon('search', 14, 'search-field-icon') ?>
             <input type="text" id="side-lib-search" class="side-lib-search" placeholder="Поиск" aria-label="Поиск в библиотеке" />
           </div>
           <button type="button" class="side-lib-tool" id="side-lib-installed" title="Только установленные">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <?= icon('check', 15) ?>
           </button>
           <button type="button" class="side-lib-tool" id="side-lib-filters" title="Фильтры">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+            <?= icon('filter', 15) ?>
           </button>
         </div>
         <div class="side-lib-modal hidden" id="side-lib-modal">
@@ -258,12 +266,12 @@ if ($isAuthorized) {
               <span>Баланс</span>
               <b id="user-balance"><?php echo number_format($user['balance'], 0, ',', ' '); ?> ₽</b>
             </div>
-            <button type="button" class="user-menu-item" id="menu-profile"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Профиль</button>
-            <button type="button" class="user-menu-item menu-notifications-btn" id="menu-notifications"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Уведомления <span class="menu-badge notif-menu-badge hidden">0</span></button>
-            <button type="button" class="user-menu-item menu-friends-btn"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
-            <button type="button" class="user-menu-item" id="menu-settings"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Настройки</button>
+            <button type="button" class="user-menu-item" id="menu-profile"><?= icon('user', 16, 'menu-ico') ?> Профиль</button>
+            <button type="button" class="user-menu-item menu-notifications-btn" id="menu-notifications"><?= icon('bell', 16, 'menu-ico') ?> Уведомления <span class="menu-badge notif-menu-badge hidden">0</span></button>
+            <button type="button" class="user-menu-item menu-friends-btn"><?= icon('friends', 16, 'menu-ico') ?> Друзья <span class="menu-badge friends-menu-badge hidden">0</span></button>
+            <button type="button" class="user-menu-item" id="menu-settings"><?= icon('settings', 16, 'menu-ico') ?> Настройки</button>
             <div class="user-menu-sep" role="separator"></div>
-            <button type="button" class="user-menu-item danger" id="menu-logout"><svg class="menu-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Выйти</button>
+            <button type="button" class="user-menu-item danger" id="menu-logout"><?= icon('logout', 16, 'menu-ico') ?> Выйти</button>
           </div>
         </div>
         <?php else: ?>
@@ -279,26 +287,26 @@ if ($isAuthorized) {
       <header class="content-head">
         <div class="content-head-inner">
 <button type="button" class="head-back" id="head-back" title="Назад" aria-label="Назад">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          <?= icon('chevron-left', 18) ?>
         </button>
         <h1 class="head-title" id="head-title">Главная</h1>
         <div class="head-search" id="head-search">
-          <svg class="head-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <?= icon('search', 16, 'head-search-icon') ?>
           <input type="text" id="head-search-input" placeholder="Поиск" aria-label="Поиск игр" autocomplete="off" />
           <div class="head-search-drop" id="head-search-drop" hidden></div>
         </div>
         <?php if ($isAuthorized && ($user['role'] ?? '') === 'admin'): ?>
         <button type="button" class="head-admin" id="btn-admin" data-view="admin" title="Админка" aria-label="Админка">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <?= icon('shield', 18) ?>
           <span class="admin-badge hidden" id="admin-badge">0</span>
         </button>
         <?php endif; ?>
         <button type="button" class="head-cart" id="btn-cart" title="Корзина" aria-label="Корзина">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          <?= icon('cart', 18) ?>
           <span class="cart-badge hidden" id="cart-badge">0</span>
         </button>
         <button type="button" class="head-add-game" id="btn-add-game" title="Создать" onclick="if(window.openCreateMenu){openCreateMenu();}else if(window.openSubmitRules){openSubmitRules();}">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <?= icon('plus', 18) ?>
         </button>
         </div>
       </header>
@@ -319,25 +327,25 @@ if ($isAuthorized) {
 
         <div class="home-pills" id="home-pills">
           <button type="button" class="home-pill active" data-hsort="popular">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.2 6.6H21l-5.4 4 2.1 6.6L12 15.8 6.3 19.2l2.1-6.6L3 8.6h6.8L12 2z"/></svg>
+            <?= icon('star', 14) ?>
             Сейчас популярно
           </button>
           <button type="button" class="home-pill" data-hsort="week">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h7v7"/></svg>
+            <?= icon('trending-up', 14) ?>
             Лучшие игры недели
           </button>
           <button type="button" class="home-pill" data-hsort="new">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+            <?= icon('clock', 14) ?>
             Новинки
           </button>
           <button type="button" class="home-pill surprise" id="home-surprise">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h.01M15 9h.01M9 15c1.5 1.5 4.5 1.5 6 0"/></svg>
+            <?= icon('smile', 14) ?>
             Удиви меня
           </button>
         </div>
 
         <h2 class="home-section-title" id="home-section-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.2 6.6H21l-5.4 4 2.1 6.6L12 15.8 6.3 19.2l2.1-6.6L3 8.6h6.8L12 2z"/></svg>
+          <?= icon('star', 16) ?>
           Сейчас популярно
         </h2>
         <div class="home-grid" id="home-grid"><div class="loading">Загрузка...</div></div>
@@ -378,11 +386,11 @@ if ($isAuthorized) {
               <div class="filter-block-body filter-block-body--open">
                 <div class="catalogue-mode-toggle" role="group" aria-label="Тип каталога">
                   <button type="button" class="store-era-btn active" data-era="modern" aria-pressed="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    <?= icon('monitor', 14) ?>
                     Современные
                   </button>
                   <button type="button" class="store-era-btn" data-era="classics" aria-pressed="false">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M10 8h4M10 12h4M10 16h2"/></svg>
+                    <?= icon('file-text', 14) ?>
                     Классика
                   </button>
                 </div>
@@ -394,7 +402,7 @@ if ($isAuthorized) {
               <button type="button" class="filter-block-head" aria-expanded="true">
                 <span class="filter-dot" style="background:#ef5b2c"></span>
                 <span>Цена</span>
-                <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>
+                <span class="hp-side-arrow" aria-hidden="true"><?= icon('chevron-down', 16) ?></span>
               </button>
               <div class="filter-block-body">
                 <div class="filter-price-pills" id="price-pills">
@@ -411,11 +419,11 @@ if ($isAuthorized) {
                 <span class="filter-dot" style="background:#a78bfa"></span>
                 <span>Жанры</span>
                 <span class="filter-count" id="genre-count"></span>
-                <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>
+                <span class="hp-side-arrow" aria-hidden="true"><?= icon('chevron-down', 16) ?></span>
               </button>
               <div class="filter-block-body">
                 <div class="search-field">
-                  <svg class="search-field-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                  <?= icon('search', 13, 'search-field-icon') ?>
                   <input type="text" class="filter-search" id="genre-filter-search" placeholder="Фильтр..." />
                 </div>
                 <div class="filter-opts" id="genre-opts"></div>
@@ -428,11 +436,11 @@ if ($isAuthorized) {
                 <span class="filter-dot" style="background:#f472b6"></span>
                 <span>Разработчики</span>
                 <span class="filter-count" id="dev-count"></span>
-                <span class="hp-side-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg></span>
+                <span class="hp-side-arrow" aria-hidden="true"><?= icon('chevron-down', 16) ?></span>
               </button>
               <div class="filter-block-body">
                 <div class="search-field">
-                  <svg class="search-field-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                  <?= icon('search', 13, 'search-field-icon') ?>
                   <input type="text" class="filter-search" id="dev-filter-search" placeholder="Фильтр..." />
                 </div>
                 <div class="filter-opts" id="dev-opts"></div>
@@ -448,33 +456,27 @@ if ($isAuthorized) {
       <section id="view-game" class="view <?php echo $currentView === 'game' ? 'active' : ''; ?>">
         <div id="game-page"><div class="loading">Загрузка страницы игры...</div></div>
       </section>
-
-      <!-- ===== ДОСТИЖЕНИЯ ИГРЫ ===== -->
-      <section id="view-achievements" class="view">
-        <div id="achievements-page"><div class="loading">Загрузка достижений...</div></div>
-      </section>
-
-      <!-- ===== БИБЛИОТЕКА (сетка карточек, как в Hydra) ===== -->
+<!-- ===== БИБЛИОТЕКА (сетка карточек, как в Hydra) ===== -->
                   <section id="view-library" class="view <?php echo $currentView === 'library' ? 'active' : ''; ?>">
         <div class="library-page">
           <div class="library-toolbar">
             <div class="library-toolbar-left">
               <div class="library-era" id="library-filters" role="group" aria-label="Фильтр библиотеки">
                 <button type="button" class="library-era-btn active" data-filter="all">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                  <?= icon('menu-lines', 14) ?>
                   Все
                 </button>
                 <button type="button" class="library-era-btn" data-filter="modern">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                  <?= icon('monitor', 14) ?>
                   Современные
                 </button>
                 <button type="button" class="library-era-btn" data-filter="classics">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M10 8h4M10 12h4M10 16h2"/></svg>
+                  <?= icon('file-text', 14) ?>
                   Классика
                 </button>
               </div>
               <button type="button" class="library-installed-btn" id="library-installed-only" aria-pressed="false" title="Только установленные">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                <?= icon('check-bold', 16) ?>
               </button>
             </div>
             <div class="library-toolbar-right">
@@ -491,13 +493,13 @@ if ($isAuthorized) {
               </label>
               <div class="library-view-toggle" id="library-view-toggle" role="group" aria-label="Вид">
                 <button type="button" class="library-view-btn" data-view="compact" title="Компактный" aria-label="Компактный">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="4" height="4" rx="0.8"/><rect x="10" y="3" width="4" height="4" rx="0.8"/><rect x="17" y="3" width="4" height="4" rx="0.8"/><rect x="3" y="10" width="4" height="4" rx="0.8"/><rect x="10" y="10" width="4" height="4" rx="0.8"/><rect x="17" y="10" width="4" height="4" rx="0.8"/><rect x="3" y="17" width="4" height="4" rx="0.8"/><rect x="10" y="17" width="4" height="4" rx="0.8"/><rect x="17" y="17" width="4" height="4" rx="0.8"/></svg>
+                  <?= icon('grid', 15) ?>
                 </button>
                 <button type="button" class="library-view-btn active" data-view="grid" title="Сетка" aria-label="Сетка">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                  <?= icon('grid-2x2', 15) ?>
                 </button>
                 <button type="button" class="library-view-btn" data-view="large" title="Большой" aria-label="Большой">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="14" rx="1.5"/></svg>
+                  <?= icon('list-view', 15) ?>
                 </button>
               </div>
             </div>
@@ -540,25 +542,25 @@ if ($isAuthorized) {
             <div class="hp-toolbar" id="ws-toolbar">
               <div class="hp-tabs ws-tabs" id="ws-tabs">
                 <button type="button" class="hp-btn-edit ws-tab-btn active" data-ws-tab="games">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></svg>
+                  <?= icon('gamepad', 15) ?>
                   Игры
                 </button>
                 <button type="button" class="hp-btn-edit ws-tab-btn" data-ws-tab="mods">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                  <?= icon('workshop', 15) ?>
                   Моды
                 </button>
                 <button type="button" class="hp-btn-edit ws-tab-btn" data-ws-tab="media">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                  <?= icon('image', 15) ?>
                   Медиа
                 </button>
                 <button type="button" class="hp-btn-edit ws-tab-btn" data-ws-tab="assets">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                  <?= icon('package', 15) ?>
                   Ассеты
                 </button>
               </div>
               <div class="hp-toolbar-spacer"></div>
               <button type="button" class="hp-btn-logout" id="ws-filters-btn" title="Фильтры">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                <?= icon('filter', 15) ?>
                 Фильтры
               </button>
             </div>
@@ -593,21 +595,21 @@ if ($isAuthorized) {
             <div class="hp-toolbar" id="wsg-toolbar">
               <div class="hp-tabs ws-tabs" id="wsg-tabs">
                 <button type="button" class="hp-btn-edit ws-tab-btn active" data-wsg-tab="mods">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                  <?= icon('workshop', 15) ?>
                   Моды
                 </button>
                 <button type="button" class="hp-btn-edit ws-tab-btn" data-wsg-tab="media">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                  <?= icon('image', 15) ?>
                   Медиа
                 </button>
                 <button type="button" class="hp-btn-edit ws-tab-btn" data-wsg-tab="assets">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                  <?= icon('package', 15) ?>
                   Ассеты
                 </button>
               </div>
               <div class="hp-toolbar-spacer"></div>
               <button type="button" class="hp-btn-logout" id="wsg-filters-btn" title="Фильтры">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                <?= icon('filter', 15) ?>
                 Фильтры
               </button>
             </div>
@@ -630,7 +632,7 @@ if ($isAuthorized) {
           <div class="submit-modal-head">
             <h2>Фильтры</h2>
             <button type="button" class="pub-modal-close" data-close-ws-filters aria-label="Закрыть">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              <?= icon('x', 18) ?>
             </button>
           </div>
           <div class="submit-modal-body">
@@ -648,11 +650,7 @@ if ($isAuthorized) {
           <div class="downloads-active" id="downloads-active">
             <div class="downloads-empty" id="downloads-empty">
               <div class="downloads-empty-icon" aria-hidden="true">
-                <svg width="88" height="88" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 3v12"/>
-                  <path d="M7 11l5 5 5-5"/>
-                  <path d="M5 19h14"/>
-                </svg>
+                <?= icon('download-lg', 88) ?>
               </div>
               <p class="downloads-empty-title">Здесь так пусто...</p>
               <p class="downloads-empty-sub">Вы ещё ничего не скачали через CATio, но никогда не поздно начать.</p>
@@ -666,11 +664,7 @@ if ($isAuthorized) {
         <div class="cart-page" id="cart-page">
           <div class="cart-empty" id="cart-empty">
             <div class="cart-empty-icon" aria-hidden="true">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-                <line x1="3" y1="6" x2="21" y2="6"/>
-                <path d="M16 10a4 4 0 0 1-8 0"/>
-              </svg>
+              <?= icon('cart', 48) ?>
             </div>
             <p class="cart-empty-title">Корзина пуста</p>
             <p class="cart-empty-sub">Загляни в каталог и добавь игры — они появятся здесь перед покупкой.</p>
@@ -685,7 +679,7 @@ if ($isAuthorized) {
               </div>
               <div class="gp-action-btns cart-bottom-actions">
                 <button type="button" class="gp-bar-btn icon cart-clear-icon" id="cart-clear" title="Очистить корзину" aria-label="Очистить корзину">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  <?= icon('trash', 16) ?>
                 </button>
                 <button type="button" class="gp-bar-btn primary cart-checkout-btn" id="cart-checkout">Оформить покупку</button>
               </div>
@@ -710,12 +704,7 @@ if ($isAuthorized) {
           <div class="notif-list" id="notif-list">
             <div class="notif-page-empty" id="notif-empty">
               <div class="notif-page-empty-icon" aria-hidden="true">
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
-                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
-                  <path d="M4 2L2 4"/>
-                  <path d="M20 2l2 2"/>
-                </svg>
+                <?= icon('bell-off', 44) ?>
               </div>
               <div class="notif-page-empty-title">Нет уведомлений</div>
               <div class="notif-page-empty-sub">Вы в курсе всех событий! Загляните позже за новыми обновлениями.</div>
@@ -723,17 +712,7 @@ if ($isAuthorized) {
           </div>
         </div>
       </section>
-
-      <!-- ===== МАСТЕРСКАЯ (ассеты, инструменты, документация) ===== -->
-      <section id="view-community" class="view <?php echo $currentView === 'community' ? 'active' : ''; ?>">
-        <div class="catalog-header">
-          <h1 class="catalog-title">Мастерская</h1>
-          <p class="catalog-desc">Ассет-паки, звуки, UI-киты и инструменты для твоих игр. Загрузка своих работ — скоро.</p>
-        </div>
-        <div id="workshop-grid" class="games-grid"><div class="loading">Загрузка мастерской...</div></div>
-      </section>
-
-      <?php if ($isAuthorized): ?>
+<?php if ($isAuthorized): ?>
       <!-- ===== ПРОФИЛЬ (как в Hydra) ===== -->
             <section id="view-profile" class="view <?php echo $currentView === 'profile' ? 'active' : ''; ?>">
         <div class="profile-page hydra-profile">
@@ -748,7 +727,7 @@ if ($isAuthorized) {
 
             <div class="hp-banner" id="hp-banner">
               <button type="button" class="hp-banner-upload" id="hp-banner-upload" title="Загрузить баннер">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <?= icon('upload', 15) ?>
                 Загрузить баннер
               </button>
               <input type="file" id="hp-banner-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
@@ -820,10 +799,10 @@ if ($isAuthorized) {
             <div class="hp-toolbar">
               <div class="hp-toolbar-spacer"></div>
               <button type="button" class="hp-btn-edit hp-btn-icon" id="btn-edit-profile" title="Редактировать профиль" aria-label="Редактировать профиль">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                <?= icon('edit', 16) ?>
               </button>
               <button type="button" class="hp-btn-logout" onclick="logout()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <?= icon('logout', 14) ?>
                 Выйти
               </button>
             </div>
@@ -880,7 +859,7 @@ if ($isAuthorized) {
               <div class="hp-tab-pane hidden" id="hp-pane-reviews">
                 <div class="hp-empty hp-empty-centered">
                   <div class="hp-empty-logo" aria-hidden="true">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    <?= icon('layers', 40) ?>
                   </div>
                   <div class="hp-empty-text">Пока нет отзывов</div>
                 </div>
@@ -888,7 +867,7 @@ if ($isAuthorized) {
               <div class="hp-tab-pane hidden" id="hp-pane-screenshots">
                 <div class="hp-empty hp-empty-centered" id="hp-screenshots-empty">
                   <div class="hp-empty-logo" aria-hidden="true">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                    <?= icon('image', 40) ?>
                   </div>
                   <div class="hp-empty-text">Скриншотов пока нет</div>
                 </div>
@@ -902,24 +881,16 @@ if ($isAuthorized) {
                   <span>Статистика</span>
                   <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
                     <span class="hp-side-arrow" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+                      <?= icon('chevron-down', 16) ?>
                     </span>
                   </button>
                 </div>
                 <div class="hp-side-body">
                   <div class="hp-stat">
-                    <div class="hp-stat-label">Достижения разблокированы</div>
-                    <div class="hp-stat-value muted hp-stat-yellow" id="hp-stat-achievements">Покажите свои достижения в профиле</div>
-                  </div>
-                  <div class="hp-stat">
-                    <div class="hp-stat-label">Заработано очков</div>
-                    <div class="hp-stat-value muted hp-stat-yellow" id="hp-stat-points">Показывать заработанные очки</div>
-                  </div>
-                  <div class="hp-stat">
                     <div class="hp-stat-label">Всего сыграно</div>
                     <div class="hp-stat-row">
                       <span class="hp-stat-value" id="hp-stat-playtime">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <?= icon('clock-alt', 14) ?>
                         0 часов
                       </span>
                       <span class="hp-stat-badge" id="hp-stat-top">—</span>
@@ -933,7 +904,7 @@ if ($isAuthorized) {
                   <span>Недавняя активность</span>
                   <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
                     <span class="hp-side-arrow" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+                      <?= icon('chevron-down', 16) ?>
                     </span>
                   </button>
                 </div>
@@ -947,7 +918,7 @@ if ($isAuthorized) {
                   <span>Друзья <span class="hp-count" id="hp-friends-count">0</span></span>
                   <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
                     <span class="hp-side-arrow" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+                      <?= icon('chevron-down', 16) ?>
                     </span>
                   </button>
                 </div>
@@ -980,7 +951,7 @@ if ($isAuthorized) {
                   }
                 ?>"><?php echo empty($user['avatar_url']) ? htmlspecialchars($avatarText) : ''; ?></div>
                 <button type="button" class="hp-edit-avatar-btn" id="hp-avatar-upload" title="Сменить аватар">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  <?= icon('camera', 16) ?>
                 </button>
                 <input type="file" id="hp-avatar-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
               </div>
@@ -1032,19 +1003,19 @@ if ($isAuthorized) {
         <div class="settings-layout">
           <aside class="settings-nav" id="settings-nav">
             <button type="button" class="settings-nav-btn active" data-stab="general">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+              <?= icon('settings', 16) ?>
               Основные
             </button>
             <button type="button" class="settings-nav-btn" data-stab="notifications">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <?= icon('bell', 16) ?>
               Уведомления
             </button>
             <button type="button" class="settings-nav-btn" data-stab="privacy">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <?= icon('lock', 16) ?>
               Аккаунт и конфиденциальность
             </button>
             <button type="button" class="settings-nav-btn" data-stab="balance">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              <?= icon('credit-card', 16) ?>
               Баланс
             </button>
           </aside>
@@ -1210,7 +1181,7 @@ if ($isAuthorized) {
             <div class="hp-toolbar" id="pub-page-toolbar">
               <div class="hp-toolbar-left" id="pub-page-stats">
                 <span class="pub-stat-chip" id="pub-players-count" title="Игроки, добавившие или играющие в игры издательства">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  <?= icon('friends', 14) ?>
                   <span id="pub-players-num">0</span> игроков
                 </span>
               </div>
@@ -1235,7 +1206,7 @@ if ($isAuthorized) {
                   <span>Участники <span class="hp-count" id="pub-members-count">0</span></span>
                   <button type="button" class="hp-side-toggle" aria-label="Свернуть" aria-expanded="true">
                     <span class="hp-side-arrow" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>
+                      <?= icon('chevron-down', 16) ?>
                     </span>
                   </button>
                 </div>
@@ -1252,11 +1223,11 @@ if ($isAuthorized) {
         <div class="settings-layout admin-settings-layout">
           <aside class="settings-nav" id="admin-nav">
             <button type="button" class="settings-nav-btn active" data-atab="moderation">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <?= icon('shield', 16) ?>
               Модерация <span class="admin-mod-count hidden" id="admin-mod-count"></span>
             </button>
             <button type="button" class="settings-nav-btn" data-atab="users">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <?= icon('friends', 16) ?>
               Пользователи
             </button>
             <!-- steam import tab removed -->
@@ -1627,1588 +1598,31 @@ function socialAuth(provider) {
   setTimeout(push, 2000);
 })();
 </script>
-  <script src="js/app.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+  <script src="js/icons.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/utils.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/cart.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/cart-page.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/home.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/store.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/library.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/downloads.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/profile.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/settings-ui.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/friends.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/messages.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/notifications.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/gallery.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/game.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/game-actions.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/game-comments.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/workshop-assets.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/workshop.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/admin-import.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/admin.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/publishers.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
+<script src="js/app.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
   <script src="js/catio_fixes.js"></script>
 
-  <!-- ===== МОДАЛКА ДРУЗЕЙ ===== -->
-  <div class="friends-modal hidden" id="friends-modal">
-    <div class="friends-modal-backdrop" id="friends-backdrop"></div>
-    <div class="friends-modal-box">
-      <div class="friends-modal-head">
-        <h2 class="friends-modal-title">Друзья</h2>
-        <button type="button" class="friends-modal-close" id="friends-close" aria-label="Закрыть">×</button>
-      </div>
-      <div class="friends-modal-body">
-        <div class="friends-pane" id="friends-pane-friends">
-        <div class="friends-me" id="friends-me"></div>
-
-        <div class="friends-search-row">
-          <div class="friends-search-wrap search-field">
-            <svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-            <input type="text" id="friends-search" class="friends-search" placeholder="Поиск друзей" autocomplete="off" />
-          </div>
-          <button type="button" class="friends-add-btn" id="friends-add-btn" title="Добавить друга">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-          </button>
-        </div>
-
-        <div class="friends-search-results hidden" id="friends-search-results"></div>
-
-        <div class="friends-code-panel hidden" id="friends-code-panel">
-          <div class="friends-code-found hidden" id="friends-code-found"></div>
-          <div class="friends-code-actions">
-            <button type="button" class="fc-btn primary" id="friends-code-request" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-              Отправить заявку
-            </button>
-            <button type="button" class="fc-btn" id="friends-code-profile" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              Профиль
-            </button>
-          </div>
-        </div>
-
-        <div class="friends-section" id="friends-incoming-section" style="display:none">
-          <button type="button" class="friends-section-toggle open" data-sec="incoming">
-            <span class="friends-chevron">▾</span> ЗАЯВКИ <span class="friends-sec-count" id="friends-incoming-count">0</span>
-          </button>
-          <div class="friends-section-list" id="friends-incoming"></div>
-        </div>
-
-        <div class="friends-section">
-          <button type="button" class="friends-section-toggle open" data-sec="online">
-            <span class="friends-chevron">▾</span> В СЕТИ <span class="friends-sec-count online" id="friends-online-count">0</span>
-          </button>
-          <div class="friends-section-list" id="friends-online"></div>
-        </div>
-
-        <div class="friends-section">
-          <button type="button" class="friends-section-toggle open" data-sec="offline">
-            <span class="friends-chevron">▾</span> НЕ В СЕТИ <span class="friends-sec-count" id="friends-offline-count">0</span>
-          </button>
-          <div class="friends-section-list" id="friends-offline"></div>
-        </div>
-        </div><!-- /friends-pane-friends -->
-
-        <div class="friends-pane hidden" id="friends-pane-notifications">
-          <div class="notif-toolbar">
-            <div class="notif-filters">
-              <button type="button" class="notif-filter active" data-nfilter="all">Все</button>
-              <button type="button" class="notif-filter" data-nfilter="unread">Непрочитанные</button>
-            </div>
-            <div class="notif-actions">
-              <button type="button" class="notif-btn" id="notif-read-all">Отметить все</button>
-              <button type="button" class="notif-btn danger" id="notif-clear-all">Очистить</button>
-            </div>
-          </div>
-          <div class="notif-list" id="notif-list">
-            <div class="friends-empty">Загрузка...</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- ===== МОДАЛКА ПЕРЕПИСКИ ===== -->
-  <div class="chat-modal hidden" id="chat-modal">
-    <div class="chat-modal-backdrop" id="chat-backdrop"></div>
-    <div class="chat-modal-box">
-      <div class="chat-modal-head">
-        <div class="chat-peer" id="chat-peer">
-          <div class="chat-peer-avatar" id="chat-peer-avatar"></div>
-          <div class="chat-peer-info">
-            <div class="chat-peer-name" id="chat-peer-name"></div>
-            <div class="chat-peer-status" id="chat-peer-status"></div>
-          </div>
-        </div>
-        <button type="button" class="chat-modal-close" id="chat-close" aria-label="Закрыть">×</button>
-      </div>
-      <div class="chat-messages" id="chat-messages">
-        <div class="chat-empty" id="chat-empty">
-          <div class="chat-empty-icon">💬</div>
-          <div class="chat-empty-title">Пока нет сообщений</div>
-          <div class="chat-empty-sub">Напишите первыми</div>
-        </div>
-      </div>
-      <div class="chat-compose">
-        <div class="chat-tools">
-          <button type="button" class="chat-tool-btn" id="chat-plus" title="Вложение">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-          <button type="button" class="chat-tool-btn" id="chat-emoji" title="Смайлики">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-          </button>
-        </div>
-        <input type="text" id="chat-input" class="chat-input" placeholder="Написать сообщение..." maxlength="2000" autocomplete="off" />
-        <button type="button" class="chat-send" id="chat-send" title="Отправить">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-        </button>
-      </div>
-      <div class="chat-emoji-panel hidden" id="chat-emoji-panel"></div>
-      <div class="chat-plus-menu hidden" id="chat-plus-menu">
-        <button type="button" data-plus="image">📷 Фото / GIF</button>
-        <button type="button" data-plus="draw">✏️ Рисунок</button>
-        <button type="button" data-plus="game">🎮 Поделиться игрой</button>
-      </div>
-      <input type="file" id="chat-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
-
-      <!-- Draw modal -->
-      <div class="chat-draw-overlay hidden" id="chat-draw-overlay">
-        <div class="chat-draw-box">
-          <div class="chat-draw-head">
-            <span>Рисунок</span>
-            <button type="button" id="chat-draw-close">×</button>
-          </div>
-          <canvas id="chat-draw-canvas" width="360" height="240"></canvas>
-          <div class="chat-draw-tools">
-            <input type="color" id="chat-draw-color" value="#ef5b2c" />
-            <button type="button" id="chat-draw-clear">Очистить</button>
-            <button type="button" id="chat-draw-send">Отправить</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Share game picker -->
-      <div class="chat-game-picker hidden" id="chat-game-picker">
-        <div class="chat-game-picker-head">Выберите игру</div>
-        <div class="chat-game-picker-list" id="chat-game-picker-list"></div>
-      </div>
-      <div class="chat-offline-hint hidden" id="chat-offline-hint">Пользователь не в сети — увидит сообщения позже</div>
-    </div>
-  </div>
-
-
-
-
-  <!-- ===== ВЫБОР ДРУГА ДЛЯ ПОДАРКА ===== -->
-  <div class="cart-modal-overlay hidden" id="gift-friend-modal" aria-hidden="true">
-    <div class="cart-modal gift-friend-modal">
-      <div class="cart-modal-head">
-        <h3>Подарок другу</h3>
-        <button type="button" class="pub-modal-close" id="gift-friend-close" aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="cart-modal-body">
-        <div class="gift-friend-search-wrap friends-search-wrap">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="gift-friend-search" class="friends-search" placeholder="Поиск по имени" autocomplete="off" />
-        </div>
-        <div class="gift-friend-list" id="gift-friend-list"><div class="loading">Загрузка...</div></div>
-      </div>
-      <div class="cart-modal-foot">
-        <button type="button" class="cart-modal-btn" id="gift-friend-cancel">Отмена</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== МОДАЛКА ПОДТВЕРЖДЕНИЯ ПОКУПКИ ===== -->
-  <div class="cart-modal-overlay hidden" id="checkout-modal" aria-hidden="true">
-    <div class="cart-modal checkout-modal">
-      <div class="cart-modal-head">
-        <h3>Подтверждение покупки</h3>
-        <button type="button" class="pub-modal-close" id="checkout-modal-close" aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="cart-modal-body">
-        <div class="checkout-alert hidden" id="checkout-alert" role="alert"></div>
-        <div class="cart-modal-list" id="checkout-modal-list"></div>
-        <div class="checkout-total-row">
-          <span>К оплате</span>
-          <strong id="checkout-modal-total">0 ₽</strong>
-        </div>
-        <label class="checkout-agree">
-          <input type="checkbox" id="checkout-agree-cb" />
-          <span>Я согласен(на) с <button type="button" class="auth-consent-link" id="refund-policy-open">условиями покупки и возврата</button></span>
-        </label>
-      </div>
-      <div class="cart-modal-foot">
-        <button type="button" class="cart-modal-btn" id="checkout-cancel">Отменить</button>
-        <button type="button" class="cart-modal-btn primary" id="checkout-confirm" disabled>Приобрести</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== УСЛОВИЯ ПОКУПКИ / ВОЗВРАТА ===== -->
-  <div class="submit-modal hidden" id="refund-policy-modal">
-    <div class="submit-modal-backdrop" data-close-refund></div>
-    <div class="submit-modal-box privacy-modal-box">
-      <div class="submit-modal-head">
-        <h2>Условия покупки и возврата</h2>
-        <button type="button" class="pub-modal-close" data-close-refund aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body privacy-modal-body">
-        <div class="privacy-hero">
-          <div class="privacy-hero-ico">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <div>
-            <div class="privacy-hero-title">CATio — покупки в каталоге</div>
-            <div class="privacy-hero-sub">Как работает оплата, доступ к играм и возврат средств</div>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#ef5b2c">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-          </div>
-          <div>
-            <h4>Оплата</h4>
-            <p>Средства списываются с баланса аккаунта CATio. После успешной оплаты игра появляется в вашей библиотеке.</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#f0c14b">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-          </div>
-          <div>
-            <h4>Без автоматического возврата</h4>
-            <p>По умолчанию деньги за покупку <strong>не возвращаются</strong>. Покупка считается окончательной после подтверждения.</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#6ea8fe">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          </div>
-          <div>
-            <h4>Исключение: меньше 3 часов</h4>
-            <p>Возврат возможен, если наиграно <strong>меньше 3 часов</strong> и есть веская причина (техническая проблема, несоответствие описанию, случайная покупка и т.п.). Решение принимает поддержка.</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#6fdf8b">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          </div>
-          <div>
-            <h4>Как запросить возврат</h4>
-            <p>Напишите в поддержку через профиль, укажите игру и причину. Мы рассмотрим обращение в разумные сроки.</p>
-          </div>
-        </div>
-      </div>
-      <div class="submit-modal-foot">
-        <button type="button" class="hp-btn-edit" data-close-refund>Закрыть</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== МОДАЛКА ПРАВИЛ ПУБЛИКАЦИИ ===== -->
-  <!-- Нет издательства — нельзя публиковать -->
-  <div class="submit-modal hidden" id="no-pub-modal">
-    <div class="submit-modal-backdrop" data-close-no-pub></div>
-    <div class="submit-modal-box" style="max-width:420px">
-      <div class="submit-modal-head">
-        <h2>Нужно издательство</h2>
-        <button type="button" class="pub-modal-close" data-close-no-pub aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body">
-        <p class="no-pub-text">Вы не состоите ни в одном издательстве. Чтобы отправить игру на модерацию, сначала создайте издательство или вступите в существующее.</p>
-      </div>
-      <div class="submit-modal-foot">
-        <button type="button" class="hp-btn-edit" data-close-no-pub>Отмена</button>
-        <button type="button" class="hp-btn-edit" id="no-pub-create">Создать издательство</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Меню создания ===== -->
-  <div class="submit-modal hidden" id="create-menu-modal">
-    <div class="submit-modal-backdrop" data-close-create-menu></div>
-    <div class="submit-modal-box" style="max-width:420px">
-      <div class="submit-modal-head">
-        <h2>Создать</h2>
-        <button type="button" class="pub-modal-close" data-close-create-menu aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body create-menu-body">
-        <button type="button" class="create-menu-item" id="create-menu-game">
-          <span class="create-menu-ico" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></svg>
-          </span>
-          <span class="create-menu-txt"><strong>Добавить игру</strong><em>Карточка на модерацию</em></span>
-        </button>
-        <button type="button" class="create-menu-item" id="create-menu-workshop">
-          <span class="create-menu-ico" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-          </span>
-          <span class="create-menu-txt"><strong>Мастерская</strong><em>Мод или медиа на модерацию</em></span>
-        </button>
-        <button type="button" class="create-menu-item" id="create-menu-pubs">
-          <span class="create-menu-ico" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
-          </span>
-          <span class="create-menu-txt"><strong>Мои издательства</strong><em>Студии и бренды</em></span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Мастерская: выбор типа ===== -->
-  <div class="submit-modal hidden" id="ws-type-modal">
-    <div class="submit-modal-backdrop" data-close-ws-type></div>
-    <div class="submit-modal-box" style="max-width:420px">
-      <div class="submit-modal-head">
-        <h2>Мастерская</h2>
-        <button type="button" class="pub-modal-close" data-close-ws-type aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body create-menu-body">
-        <button type="button" class="create-menu-item" id="ws-type-mod">
-          <span class="create-menu-ico" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
-          </span>
-          <span class="create-menu-txt"><strong>Загрузить мод</strong><em>Файлы, описание, скриншоты</em></span>
-        </button>
-        <button type="button" class="create-menu-item" id="ws-type-media">
-          <span class="create-menu-ico" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-          </span>
-          <span class="create-menu-txt"><strong>Загрузить медиа</strong><em>Скриншоты для игры</em></span>
-        </button>
-        <button type="button" class="create-menu-item" id="ws-type-asset">
-          <span class="create-menu-ico" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-          </span>
-          <span class="create-menu-txt"><strong>Загрузить ассет</strong><em>Документы, механики, паки — игра необязательна</em></span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Мастерская: форма медиа ===== -->
-  <div class="submit-modal hidden" id="ws-media-form-modal">
-    <div class="submit-modal-backdrop" data-close-ws-media-form></div>
-    <div class="submit-modal-box" style="max-width:520px">
-      <div class="submit-modal-head">
-        <h2>Загрузка медиа</h2>
-        <button type="button" class="pub-modal-close" data-close-ws-media-form aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body">
-        <form id="ws-media-form" class="ws-pub-form">
-          <label class="ws-field"><span>Название *</span>
-            <input type="text" name="title" class="auth-input" required maxlength="80" minlength="2" placeholder="Название набора скриншотов" />
-            <span class="field-counter" data-for="title" data-max="80">0 / 80</span>
-          </label>
-          <label class="ws-field"><span>Игра *</span>
-            <select name="game_id" id="ws-media-game" class="settings-select" required>
-              <option value="">Выберите игру</option>
-            </select>
-          </label>
-          <label class="ws-field"><span>Описание</span>
-            <textarea name="description" class="auth-input settings-textarea" rows="3" maxlength="400" placeholder="Кратко о скриншотах"></textarea>
-            <span class="field-counter" data-for="description" data-max="400">0 / 400</span>
-          </label>
-          <div class="ws-field">
-            <span>Изображения *</span>
-            <div class="pub-file-card ws-file-card">
-              <div class="pub-file-preview pub-file-preview--wide" id="ws-media-files-preview">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-              </div>
-              <label class="pub-file-btn" for="ws-media-files">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Выбрать файлы
-              </label>
-              <input type="file" name="images[]" id="ws-media-files" class="pub-file-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple required />
-              <div class="ws-file-hint" id="ws-media-files-hint">До 12 изображений, PNG/JPG/WebP, до 5 МБ каждое</div>
-            </div>
-          </div>
-        </form>
-      </div>
-      <div class="submit-modal-foot">
-        <button type="button" class="hp-btn-edit" data-close-ws-media-form>Отмена</button>
-        <button type="button" class="hp-btn-save" id="ws-media-submit">Отправить на модерацию</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Мастерская: форма ассета ===== -->
-  <div class="submit-modal hidden" id="ws-asset-form-modal">
-    <div class="submit-modal-backdrop" data-close-ws-asset-form></div>
-    <div class="submit-modal-box" style="max-width:560px">
-      <div class="submit-modal-head">
-        <h2>Загрузка ассета</h2>
-        <button type="button" class="pub-modal-close" data-close-ws-asset-form aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body">
-        <form id="ws-asset-form" class="ws-pub-form">
-          <label class="ws-field"><span>Название *</span>
-            <input type="text" name="title" class="auth-input" required maxlength="80" minlength="2" placeholder="Название ассета / документа / механики" />
-            <span class="field-counter" data-for="title" data-max="80">0 / 80</span>
-          </label>
-          <label class="ws-field"><span>Игра (необязательно)</span>
-            <select name="game_id" id="ws-asset-game" class="settings-select">
-              <option value="">Без привязки к игре</option>
-            </select>
-            <span class="settings-hint">Можно опубликовать гайд, реализацию механики или пак без указания игры</span>
-          </label>
-          <label class="ws-field"><span>Краткое описание</span>
-            <input type="text" name="short_description" class="auth-input" maxlength="160" placeholder="Одна строка для карточки" />
-            <span class="field-counter" data-for="short_description" data-max="160">0 / 160</span>
-          </label>
-          <div class="ws-field"><span>Описание *</span>
-            <div class="pub-rte" id="ws-asset-rte">
-              <div class="pub-rte-toolbar" role="toolbar" aria-label="Форматирование">
-                <button type="button" class="pub-rte-btn" data-cmd="bold" title="Жирный"><b>B</b></button>
-                <button type="button" class="pub-rte-btn" data-cmd="italic" title="Курсив"><i>I</i></button>
-                <button type="button" class="pub-rte-btn" data-cmd="underline" title="Подчёркнутый"><u>U</u></button>
-                <span class="pub-rte-sep"></span>
-                <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="h2" title="Заголовок">H2</button>
-                <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="h3" title="Подзаголовок">H3</button>
-                <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="p" title="Абзац">¶</button>
-                <span class="pub-rte-sep"></span>
-                <button type="button" class="pub-rte-btn" data-cmd="insertUnorderedList" title="Список">• List</button>
-                <button type="button" class="pub-rte-btn" data-cmd="insertOrderedList" title="Нумерация">1. List</button>
-                <button type="button" class="pub-rte-btn" data-cmd="createLink" title="Ссылка">🔗</button>
-                <button type="button" class="pub-rte-btn" data-cmd="removeFormat" title="Сбросить стиль">✕</button>
-              </div>
-              <div class="pub-rte-editor auth-input" id="ws-asset-desc-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Подробно: что это, зачем, как пользоваться…"></div>
-              <textarea class="hidden" name="description" id="ws-asset-desc" required></textarea>
-            </div>
-          </div>
-          <label class="ws-field"><span>Теги</span>
-            <input type="text" name="tags" class="auth-input" maxlength="200" placeholder="через запятую: механика, ui, tutorial" />
-          </label>
-          <div class="ws-field-row">
-            <div class="ws-field"><span>Обложка</span>
-              <div class="pub-file-card ws-file-card">
-                <label class="pub-file-btn" for="ws-asset-cover">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  Выбрать
-                </label>
-                <input type="file" name="cover" id="ws-asset-cover" class="pub-file-input" accept="image/png,image/jpeg,image/webp" />
-                <div class="ws-file-hint" id="ws-asset-cover-hint">до 5 МБ</div>
-              </div>
-            </div>
-            <div class="ws-field"><span>Баннер</span>
-              <div class="pub-file-card ws-file-card">
-                <label class="pub-file-btn" for="ws-asset-banner">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  Выбрать
-                </label>
-                <input type="file" name="banner" id="ws-asset-banner" class="pub-file-input" accept="image/png,image/jpeg,image/webp" />
-                <div class="ws-file-hint" id="ws-asset-banner-hint">до 5 МБ</div>
-              </div>
-            </div>
-          </div>
-          <div class="ws-field"><span>Скриншоты / превью</span>
-            <div class="pub-file-card ws-file-card">
-              <label class="pub-file-btn" for="ws-asset-shots">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Выбрать файлы
-              </label>
-              <input type="file" name="screenshots[]" id="ws-asset-shots" class="pub-file-input" accept="image/png,image/jpeg,image/webp" multiple />
-              <div class="ws-file-hint" id="ws-asset-shots-hint">До 10 шт., до 5 МБ</div>
-            </div>
-          </div>
-          <div class="ws-field"><span>Файл (архив, документ…)</span>
-            <div class="pub-file-card ws-file-card">
-              <label class="pub-file-btn" for="ws-asset-file">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Выбрать файл
-              </label>
-              <input type="file" name="asset_file" id="ws-asset-file" class="pub-file-input" accept=".zip,.rar,.7z,.pdf,.txt,.md,.doc,.docx,.json,.unitypackage,.fbx,.blend,.psd" />
-              <div class="ws-file-hint" id="ws-asset-file-hint">ZIP / PDF / документ, до 500 МБ</div>
-            </div>
-          </div>
-        </form>
-      </div>
-      <div class="submit-modal-foot">
-        <button type="button" class="hp-btn-edit" data-close-ws-asset-form>Отмена</button>
-        <button type="button" class="hp-btn-save" id="ws-asset-submit">Отправить на модерацию</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Мастерская: форма мода ===== -->
-  <div class="submit-modal hidden" id="ws-mod-form-modal">
-    <div class="submit-modal-backdrop" data-close-ws-mod-form></div>
-    <div class="submit-modal-box">
-      <div class="submit-modal-head">
-        <h2>Загрузка мода</h2>
-        <button type="button" class="pub-modal-close" data-close-ws-mod-form aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body">
-        <form id="ws-mod-form" class="ws-pub-form">
-          <label class="ws-field"><span>Название *</span>
-            <input type="text" name="title" class="auth-input" required maxlength="80" minlength="2" placeholder="Название мода" />
-            <span class="field-counter" data-for="title" data-max="80">0 / 80</span>
-          </label>
-          <label class="ws-field"><span>Игра *</span>
-            <select name="game_id" id="ws-mod-game" class="settings-select" required>
-              <option value="">Выберите игру</option>
-            </select>
-          </label>
-          <label class="ws-field"><span>Краткое описание</span>
-            <input type="text" name="short_description" class="auth-input" maxlength="120" placeholder="Одна строка для карточки" />
-            <span class="field-counter" data-for="short_description" data-max="120">0 / 120</span>
-          </label>
-          <label class="ws-field"><span>Об этом моде</span>
-            <textarea name="about" class="auth-input settings-textarea" rows="3" maxlength="600"></textarea>
-            <span class="field-counter" data-for="about" data-max="600">0 / 600</span>
-          </label>
-          <label class="ws-field"><span>Описание</span>
-            <textarea name="description" class="auth-input settings-textarea" rows="4" maxlength="2000"></textarea>
-            <span class="field-counter" data-for="description" data-max="2000">0 / 2000</span>
-          </label>
-          <label class="ws-field"><span>Инструкция по установке</span>
-            <textarea name="install_instructions" class="auth-input settings-textarea" rows="3" maxlength="1000"></textarea>
-            <span class="field-counter" data-for="install_instructions" data-max="1000">0 / 1000</span>
-          </label>
-          <label class="ws-field"><span>Основные характеристики</span>
-            <textarea name="features" class="auth-input settings-textarea" rows="2" maxlength="500" placeholder="По одному пункту на строку"></textarea>
-            <span class="field-counter" data-for="features" data-max="500">0 / 500</span>
-          </label>
-          <label class="ws-field"><span>Зависимости</span>
-            <textarea name="dependencies" class="auth-input settings-textarea" rows="2" maxlength="400"></textarea>
-            <span class="field-counter" data-for="dependencies" data-max="400">0 / 400</span>
-          </label>
-          <label class="ws-field"><span>Путь установки файлов</span>
-            <input type="text" name="install_path" class="auth-input" maxlength="200" placeholder="например Data/Meshes/..." />
-          </label>
-          <label class="ws-field"><span>Теги</span>
-            <input type="text" name="tags" class="auth-input" maxlength="120" placeholder="через запятую, до 8 тегов" />
-          </label>
-          <div class="ws-field-row">
-            <div class="ws-field"><span>Обложка</span>
-              <div class="pub-file-card ws-file-card">
-                <label class="pub-file-btn" for="ws-mod-cover">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  Выбрать
-                </label>
-                <input type="file" name="cover" id="ws-mod-cover" class="pub-file-input" accept="image/png,image/jpeg,image/webp" />
-                <div class="ws-file-hint" id="ws-mod-cover-hint">до 5 МБ</div>
-              </div>
-            </div>
-            <div class="ws-field"><span>Баннер</span>
-              <div class="pub-file-card ws-file-card">
-                <label class="pub-file-btn" for="ws-mod-banner">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  Выбрать
-                </label>
-                <input type="file" name="banner" id="ws-mod-banner" class="pub-file-input" accept="image/png,image/jpeg,image/webp" />
-                <div class="ws-file-hint" id="ws-mod-banner-hint">до 5 МБ</div>
-              </div>
-            </div>
-          </div>
-          <div class="ws-field"><span>Скриншоты</span>
-            <div class="pub-file-card ws-file-card">
-              <label class="pub-file-btn" for="ws-mod-shots">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Выбрать файлы
-              </label>
-              <input type="file" name="screenshots[]" id="ws-mod-shots" class="pub-file-input" accept="image/png,image/jpeg,image/webp" multiple />
-              <div class="ws-file-hint" id="ws-mod-shots-hint">До 10 шт., до 5 МБ</div>
-            </div>
-          </div>
-          <div class="ws-field"><span>Файл мода *</span>
-            <div class="pub-file-card ws-file-card">
-              <label class="pub-file-btn" for="ws-mod-file">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Выбрать архив
-              </label>
-              <input type="file" name="mod_file" id="ws-mod-file" class="pub-file-input" accept=".zip,.rar,.7z,.pak,.mod,application/zip" required />
-              <div class="ws-file-hint" id="ws-mod-file-hint">ZIP / RAR / 7Z, до 500 МБ</div>
-            </div>
-          </div>
-        </form>
-      </div>
-      <div class="submit-modal-foot">
-        <button type="button" class="hp-btn-edit" data-close-ws-mod-form>Отмена</button>
-        <button type="button" class="hp-btn-save" id="ws-mod-submit">Отправить на модерацию</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Просмотр медиа ===== -->
-  <div class="submit-modal hidden" id="ws-media-view-modal">
-    <div class="submit-modal-backdrop" data-close-ws-media-view></div>
-    <div class="submit-modal-box ws-view-box ws-media-view-box">
-      <div class="submit-modal-head">
-        <h2 id="ws-mv-title">Медиа</h2>
-        <button type="button" class="pub-modal-close" data-close-ws-media-view aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body">
-        <div class="ws-gallery" id="ws-mv-gallery">
-          <div class="ws-gallery-main" id="ws-mv-main">
-            <img id="ws-mv-img" alt="" />
-          </div>
-          <div class="ws-gallery-thumbs" id="ws-mv-thumbs"></div>
-        </div>
-        <div class="ws-modv-section">
-          <h3>Описание</h3>
-          <div class="ws-modv-text" id="ws-mv-desc"></div>
-        </div>
-        <div class="ws-modv-meta-row ws-mv-meta">
-          <span id="ws-mv-date"></span>
-          <span id="ws-mv-author"></span>
-          <span id="ws-mv-views"></span>
-          <button type="button" class="ws-like-btn" id="ws-mv-like">♥ <span>0</span></button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Просмотр мода ===== -->
-  <div class="submit-modal hidden" id="ws-mod-view-modal">
-    <div class="submit-modal-backdrop" data-close-ws-mod-view></div>
-    <div class="submit-modal-box ws-view-box ws-mod-view-box">
-      <div class="ws-modv-page">
-        <div class="hp-hero ws-modv-hero" id="ws-modv-hero">
-          <div class="hp-hero-bg" id="ws-modv-bg"></div>
-          <div class="hp-banner">
-            <div class="ws-modv-banner-inner">
-              <h1 class="ws-modv-title" id="ws-modv-title">Мод</h1>
-            </div>
-            <button type="button" class="pub-modal-close ws-modv-close" data-close-ws-mod-view aria-label="Закрыть">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>
-          <div class="hp-toolbar ws-modv-toolbar">
-            <div class="ws-modv-stats" id="ws-modv-stats">
-              <span class="ws-modv-stat" id="ws-modv-views"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> <b>0</b></span>
-              <span class="ws-modv-stat" id="ws-modv-dls"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <b>0</b></span>
-              <span class="ws-modv-stat" id="ws-modv-likes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg> <b>0</b></span>
-            </div>
-            <div class="ws-modv-toolbar-right" id="ws-modv-actions">
-              <button type="button" class="hp-btn-save ws-modv-install" id="ws-modv-install">Установить</button>
-            </div>
-          </div>
-        </div>
-        <div class="ws-modv-body">
-          <div class="ws-gallery ws-gallery--thumbs-only" id="ws-modv-gallery">
-            <div class="ws-gallery-main" id="ws-modv-main" hidden></div>
-            <div class="ws-gallery-thumbs" id="ws-modv-thumbs"></div>
-          </div>
-          <div class="ws-modv-section">
-            <h3>Описание</h3>
-            <div class="ws-modv-text" id="ws-modv-desc"></div>
-          </div>
-          <div class="ws-modv-section" id="ws-modv-about-wrap">
-            <h3>Об этом моде</h3>
-            <div class="ws-modv-text" id="ws-modv-about"></div>
-          </div>
-          <div class="ws-modv-section" id="ws-modv-install-wrap">
-            <h3>Инструкция по установке</h3>
-            <div class="ws-modv-text" id="ws-modv-install-txt"></div>
-          </div>
-          <div class="ws-modv-section" id="ws-modv-feat-wrap">
-            <h3>Основные характеристики</h3>
-            <div class="ws-modv-text" id="ws-modv-feat"></div>
-          </div>
-          <div class="ws-modv-section" id="ws-modv-deps-wrap">
-            <h3>Зависимости</h3>
-            <div class="ws-modv-text" id="ws-modv-deps"></div>
-          </div>
-          <div class="ws-modv-meta-row">
-            <span id="ws-modv-author"></span>
-            <span id="ws-modv-game"></span>
-            <button type="button" class="ws-like-btn" id="ws-modv-like">♥ <span>0</span></button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Просмотр ассета ===== -->
-  <div class="submit-modal hidden" id="ws-asset-view-modal">
-    <div class="submit-modal-backdrop" data-close-ws-asset-view></div>
-    <div class="submit-modal-box ws-view-box ws-asset-view-box">
-      <div class="submit-modal-head ws-assetv-head">
-        <h2 class="ws-assetv-title" id="ws-assetv-title">Ассет</h2>
-        <button type="button" class="pub-modal-close" data-close-ws-asset-view aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="ws-assetv-split">
-        <div class="ws-assetv-left">
-          <div class="gp-gallery" id="ws-assetv-gallery">
-            <div class="gp-gallery-viewport">
-              <div class="gp-gallery-main" id="ws-assetv-main">
-                <img id="ws-assetv-main-img" alt="" />
-              </div>
-            </div>
-            <div class="gp-gallery-thumbs" id="ws-assetv-thumbs"></div>
-          </div>
-          <div class="gp-section gp-section-builds" id="ws-assetv-files-wrap">
-            <h2 class="gp-block-title">Сборки и файлы</h2>
-            <div id="ws-assetv-files" class="ws-asset-files modal-builds"></div>
-            <div class="ws-assetv-meta">
-              <span id="ws-assetv-author"></span>
-              <span id="ws-assetv-game"></span>
-              <span class="ws-assetv-statline" id="ws-assetv-stats-line"></span>
-              <button type="button" class="ws-like-btn" id="ws-assetv-like">♥ <span>0</span></button>
-            </div>
-          </div>
-        </div>
-        <div class="ws-assetv-right">
-          <h2 class="gp-block-title">Об ассете</h2>
-          <div class="gp-description" id="ws-assetv-desc"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Нет игры для мода -->
-  <div class="submit-modal hidden" id="ws-mod-no-game-modal">
-    <div class="submit-modal-backdrop" data-close-ws-mod-nogame></div>
-    <div class="submit-modal-box app-confirm-box" style="max-width:440px">
-      <div class="submit-modal-body app-confirm-body" style="text-align:left">
-        <h2 class="app-confirm-title" style="text-align:left">Игра не найдена</h2>
-        <p class="app-confirm-sub" style="text-align:left;margin-bottom:16px" id="ws-mod-nogame-text">У вас нет игры для этой модификации. Автоматическая установка невозможна, но можно скачать файл и установить вручную.</p>
-        <div class="app-confirm-actions" style="justify-content:flex-end;flex-wrap:wrap">
-          <button type="button" class="hp-btn-edit" data-close-ws-mod-nogame>Отмена</button>
-          <button type="button" class="hp-btn-edit" id="ws-mod-nogame-buy">Купить</button>
-          <button type="button" class="hp-btn-save" id="ws-mod-nogame-manual">Ручная установка</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Список издательств ===== -->
-  <div class="submit-modal hidden" id="pubs-list-modal">
-    <div class="submit-modal-backdrop" data-close-pubs-list></div>
-    <div class="submit-modal-box" style="max-width:480px">
-      <div class="submit-modal-head">
-        <h2>Мои издательства</h2>
-        <button type="button" class="pub-modal-close" data-close-pubs-list aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body">
-        <div id="pubs-list" class="pubs-list"><div class="loading">Загрузка...</div></div>
-      </div>
-      <div class="submit-modal-foot">
-        <button type="button" class="hp-btn-edit" data-close-pubs-list>Закрыть</button>
-        <button type="button" class="hp-btn-edit" id="pubs-create-open">Создать издательство</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Создание издательства ===== -->
-  <div class="submit-modal hidden" id="pubs-create-modal">
-    <div class="submit-modal-backdrop" data-close-pubs-create></div>
-    <div class="submit-modal-box pubs-create-box">
-      <div class="submit-modal-head pub-modal-head">
-        <div>
-          <h2>Новое издательство</h2>
-          <p class="pub-modal-sub">Аватар, баннер, описание и участники</p>
-        </div>
-        <button type="button" class="pub-modal-close" data-close-pubs-create aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body pub-modal-body">
-        <div class="submit-grid pubs-create-grid">
-          <label class="settings-label full">
-            <span>Название *</span>
-            <input class="auth-input" id="pub-name" maxlength="60" minlength="2" placeholder="Например: Neon Fox Games" autocomplete="off" />
-            <span class="field-counter" id="pub-name-count">0 / 60</span>
-          </label>
-          <label class="settings-label full">
-            <span>Описание</span>
-            <textarea class="auth-input settings-textarea" id="pub-desc" rows="3" maxlength="300" placeholder="Коротко о студии"></textarea>
-            <span class="field-counter" id="pub-desc-count">0 / 300</span>
-          </label>
-          <div class="settings-label">
-            <span>Аватар</span>
-            <div class="pub-file-card" style="margin-top:6px">
-              <div class="pub-file-preview pub-file-preview--icon" id="pub-avatar-preview">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M6.5 18.5c1.4-2.2 3.3-3.3 5.5-3.3s4.1 1.1 5.5 3.3"/></svg>
-              </div>
-              <label class="pub-file-btn" for="pub-avatar">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Выбрать
-              </label>
-              <input type="file" id="pub-avatar" class="pub-file-input" accept="image/*" />
-            </div>
-          </div>
-          <div class="settings-label">
-            <span>Обложка / баннер</span>
-            <div class="pub-file-card" style="margin-top:6px">
-              <div class="pub-file-preview pub-file-preview--wide" id="pub-banner-preview">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-4.5-4.5L9 18"/></svg>
-              </div>
-              <label class="pub-file-btn" for="pub-banner">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Выбрать
-              </label>
-              <input type="file" id="pub-banner" class="pub-file-input" accept="image/*" />
-            </div>
-          </div>
-          <div class="settings-label full">
-            <span>Участники</span>
-            <div class="search-field" style="margin-top:6px">
-              <svg class="search-field-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-              <input class="auth-input" id="pub-member-search" placeholder="Поиск пользователя…" autocomplete="off" />
-            </div>
-            <div id="pub-member-suggest" class="pub-member-suggest hidden"></div>
-            <div id="pub-member-chips" class="pub-member-chips"></div>
-          </div>
-        </div>
-      </div>
-      <div class="submit-modal-foot pubs-create-foot">
-        <button type="button" class="hp-btn-edit" data-close-pubs-create>Отмена</button>
-        <button type="button" class="hp-btn-save" id="pub-create-save">Создать</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="submit-modal hidden" id="submit-rules-modal">
-    <div class="submit-modal-backdrop" data-close="rules"></div>
-    <div class="submit-modal-box privacy-modal-box">
-      <div class="submit-modal-head">
-        <h2>Правила публикации</h2>
-        <button type="button" class="pub-modal-close" data-close="rules" aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body privacy-modal-body">
-        <div class="privacy-hero">
-          <div class="privacy-hero-ico">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
-          </div>
-          <div>
-            <div class="privacy-hero-title">CATio — правила каталога</div>
-            <div class="privacy-hero-sub">Коротко о том, что можно публиковать и как проходит модерация</div>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#ef5b2c">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <div>
-            <h4>Права на контент</h4>
-            <p>Загружайте только игры, на которые у вас есть права. Запрещены кражи чужого контента и вредоносные файлы.</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#6ea8fe">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-          </div>
-          <div>
-            <h4>Обложка и описание</h4>
-            <p>Обложка, скриншоты и текст должны соответствовать игре. NSFW — только с явной пометкой 18+.</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#6fdf8b">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-          </div>
-          <div>
-            <h4>Модерация</h4>
-            <p>После отправки игра проходит проверку. Админ может поправить материалы перед публикацией или отклонить заявку.</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#f0c14b">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-          </div>
-          <div>
-            <h4>Ответственность</h4>
-            <p>Нарушение правил может привести к отклонению заявки и ограничению публикации для аккаунта.</p>
-          </div>
-        </div>
-        <label class="settings-check" style="margin-top:14px">
-          <input type="checkbox" id="submit-agree" />
-          Я согласен(на) с правилами публикации
-        </label>
-      </div>
-      <div class="submit-modal-foot">
-        <button type="button" class="hp-btn-edit" data-close="rules">Отмена</button>
-        <button type="button" class="hp-btn-edit" id="submit-rules-next" disabled>Дальше</button>
-      </div>
-    </div>
-  </div>
-
-    <!-- ===== МОДАЛКА АНКЕТЫ ИГРЫ (restored simple) ===== -->
-<!-- ===== МОДАЛКА АНКЕТЫ ИГРЫ ===== -->
-    <div class="submit-modal hidden" id="submit-form-modal">
-    <div class="submit-modal-backdrop" data-close="form"></div>
-    <div class="submit-modal-box submit-modal-wide pub-modal-box">
-      <div class="submit-modal-head pub-modal-head">
-        <div>
-          <h2>Публикация игры</h2>
-          <p class="pub-modal-sub">Заполните карточку игры — жанры, медиа, требования и описание</p>
-        </div>
-        <button type="button" class="pub-modal-close" data-close="form" aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body pub-modal-body">
-        <form id="submit-game-form" class="submit-form pub-form">
-
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
-              <h3>Основное</h3>
-            </div>
-            <div class="submit-grid">
-              <label class="settings-label"><span>Название *</span><input class="auth-input" name="title" id="sg-title" required maxlength="120" /></label>
-              <label class="settings-label"><span>Цена (₽)</span><input class="auth-input" name="price" id="sg-price" type="text" inputmode="numeric" pattern="[0-9]*" value="0" maxlength="7" autocomplete="off" /></label>
-              <label class="settings-label"><span>Разработчик</span><input class="auth-input" name="developer" id="sg-developer" maxlength="120" placeholder="Студия или автор" /></label>
-              <label class="settings-label sg-pub-field">
-                <div class="sg-pub-label-row">
-                  <span class="sg-pub-label-title">Издательство</span>
-                  <span class="sg-pub-admin-hint" hidden></span>
-                </div>
-                <select class="settings-select" id="sg-publisher-id" name="publisher_id">
-                  <option value="">— без издательства —</option>
-                </select>
-              </label>
-              <input type="hidden" name="publisher" id="sg-publisher" value="" />
-              <label class="settings-label"><span>Дата релиза</span><input class="auth-input" name="release_date" id="sg-release" type="date" /></label>
-              <label class="settings-label"><span>Сайт / страница</span><input class="auth-input" name="website" id="sg-website" type="url" placeholder="https://" maxlength="255" /></label>
-              <label class="settings-label full"><span>Краткое описание</span><input class="auth-input" name="short_description" id="sg-short" maxlength="200" placeholder="Одна строка для карточки в каталоге" /></label>
-              <div class="settings-label full">
-                <span>Жанры * <em class="pub-field-hint">можно несколько</em></span>
-                <div class="pub-genre-grid" id="sg-genre-grid">
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Экшен" /><span>Экшен</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Приключения" /><span>Приключения</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="RPG" /><span>RPG</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Стратегия" /><span>Стратегия</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Симулятор" /><span>Симулятор</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Инди" /><span>Инди</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Хоррор" /><span>Хоррор</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Гонки" /><span>Гонки</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Спорт" /><span>Спорт</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Шутер" /><span>Шутер</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Платформер" /><span>Платформер</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Головоломка" /><span>Головоломка</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Выживание" /><span>Выживание</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Открытый мир" /><span>Открытый мир</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Мультиплеер" /><span>Мультиплеер</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Казуальная" /><span>Казуальная</span></label>
-                  <label class="pub-genre-chip"><input type="checkbox" class="sg-genre" value="Другое" /><span>Другое</span></label>
-                </div>
-                <input type="hidden" name="genre" id="sg-genre" value="" />
-              </div>
-              <label class="settings-label full"><span>Теги</span><input class="auth-input" name="tags" id="sg-tags" maxlength="200" placeholder="через запятую: pixel-art, co-op, roguelike…" /></label>
-              <div class="settings-label full">
-                <span>Платформы</span>
-                <div class="submit-checks pub-platform-checks">
-                  <label class="settings-check"><input type="checkbox" class="sg-platform" value="windows" checked /> Windows</label>
-                  <label class="settings-check"><input type="checkbox" class="sg-platform" value="linux" /> Linux</label>
-                  <label class="settings-check"><input type="checkbox" class="sg-platform" value="mac" /> macOS</label>
-                </div>
-              </div>
-              <div class="settings-label full">
-                <span>Описание * <em class="pub-field-hint">форматирование как в Steam</em></span>
-                <div class="pub-rte" id="sg-rte">
-                  <div class="pub-rte-toolbar" role="toolbar" aria-label="Форматирование">
-                    <button type="button" class="pub-rte-btn" data-cmd="bold" title="Жирный"><b>B</b></button>
-                    <button type="button" class="pub-rte-btn" data-cmd="italic" title="Курсив"><i>I</i></button>
-                    <button type="button" class="pub-rte-btn" data-cmd="underline" title="Подчёркнутый"><u>U</u></button>
-                    <span class="pub-rte-sep"></span>
-                    <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="h2" title="Заголовок">H2</button>
-                    <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="h3" title="Подзаголовок">H3</button>
-                    <button type="button" class="pub-rte-btn" data-cmd="formatBlock" data-val="p" title="Абзац">¶</button>
-                    <span class="pub-rte-sep"></span>
-                    <button type="button" class="pub-rte-btn" data-cmd="insertUnorderedList" title="Список">• List</button>
-                    <button type="button" class="pub-rte-btn" data-cmd="insertOrderedList" title="Нумерация">1. List</button>
-                    <button type="button" class="pub-rte-btn" data-cmd="indent" title="Отступ →">→</button>
-                    <button type="button" class="pub-rte-btn" data-cmd="outdent" title="Отступ ←">←</button>
-                    <span class="pub-rte-sep"></span>
-                    <button type="button" class="pub-rte-btn" data-cmd="createLink" title="Ссылка">🔗</button>
-                    <button type="button" class="pub-rte-btn" data-cmd="insertHorizontalRule" title="Линия">―</button>
-                    <button type="button" class="pub-rte-btn" data-cmd="removeFormat" title="Сбросить стиль">✕</button>
-                    <span class="pub-rte-sep"></span>
-                    <button type="button" class="pub-rte-btn" data-cmd="insertShot" title="Вставить скриншот">🖼 Скрин</button>
-                  </div>
-                  <div class="pub-rte-editor auth-input" id="sg-desc-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Подробное описание игры…"></div>
-                  <textarea class="hidden" name="description" id="sg-desc" required></textarea>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
-              <h3>Медиа</h3>
-            </div>
-            <div class="pub-media-grid">
-              <div class="pub-file-card" data-for="sg-cover">
-                <div class="pub-file-preview" id="sg-cover-preview"><span>Обложка *</span></div>
-                <label class="pub-file-btn" for="sg-cover">Выбрать файл</label>
-                <input type="file" name="cover" id="sg-cover" class="pub-file-input" accept="image/*" />
-                <div class="pub-file-name" id="sg-cover-name">PNG / JPG, 600×900</div>
-              </div>
-              <div class="pub-file-card" data-for="sg-banner">
-                <div class="pub-file-preview pub-file-preview--wide" id="sg-banner-preview"><span>Баннер / шапка</span></div>
-                <label class="pub-file-btn" for="sg-banner">Выбрать файл</label>
-                <input type="file" name="banner" id="sg-banner" class="pub-file-input" accept="image/*" />
-                <div class="pub-file-name" id="sg-banner-name">Широкий баннер</div>
-              </div>
-              <div class="pub-file-card" data-for="sg-logo">
-                <div class="pub-file-preview pub-file-preview--logo" id="sg-logo-preview"><span>Логотип</span></div>
-                <label class="pub-file-btn" for="sg-logo">Выбрать файл</label>
-                <input type="file" name="logo" id="sg-logo" class="pub-file-input" accept="image/*" />
-                <div class="pub-file-name" id="sg-logo-name">Прозрачный PNG</div>
-              </div>
-              <div class="pub-file-card" data-for="sg-icon">
-                <div class="pub-file-preview pub-file-preview--icon" id="sg-icon-preview"><span>Иконка</span></div>
-                <label class="pub-file-btn" for="sg-icon">Выбрать файл</label>
-                <input type="file" name="icon" id="sg-icon" class="pub-file-input" accept="image/*" />
-                <div class="pub-file-name" id="sg-icon-name">Квадрат 256×256</div>
-              </div>
-            </div>
-            <div class="settings-label full" style="margin-top:12px">
-              <span>Скриншоты</span>
-              <div class="pub-shots-row">
-                <label class="pub-file-btn" for="sg-shots">Выбрать скриншоты</label>
-                <input type="file" name="screenshots[]" id="sg-shots" class="pub-file-input" accept="image/*" multiple />
-                <div class="pub-shots-preview" id="sg-shots-preview"></div>
-              </div>
-            </div>
-            <div class="settings-label full" id="sg-trailers-wrap" style="margin-top:10px"></div>
-            <input type="hidden" name="cover_url" id="sg-cover-url" />
-              <input type="hidden" name="screenshot_urls" id="sg-screenshots-urls" />
-              <input type="hidden" name="icon_url" id="sg-icon-url" />
-              <input type="hidden" name="logo_url" id="sg-logo-url" />
-            <input type="hidden" name="banner_url" id="sg-banner-url" />
-          </section>
-
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
-              <h3>Системные требования</h3>
-            </div>
-            <div class="settings-label full">
-              <span>Минимальные</span>
-              <div class="sysreq-fields" id="sg-sys-min-fields">
-                <input class="auth-input" data-k="os" placeholder="ОС" />
-                <input class="auth-input" data-k="processor" placeholder="Процессор" />
-                <input class="auth-input" data-k="memory" placeholder="Оперативная память" />
-                <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
-                <input class="auth-input" data-k="directx" placeholder="DirectX" />
-                <input class="auth-input" data-k="storage" placeholder="Место на диске" />
-                <input class="auth-input" data-k="sound" placeholder="Звуковая карта" />
-                <input class="auth-input" data-k="other" placeholder="Дополнительно" />
-              </div>
-            </div>
-            <div class="settings-label full" style="margin-top:10px">
-              <span>Рекомендуемые</span>
-              <div class="sysreq-fields" id="sg-sys-rec-fields">
-                <input class="auth-input" data-k="os" placeholder="ОС" />
-                <input class="auth-input" data-k="processor" placeholder="Процессор" />
-                <input class="auth-input" data-k="memory" placeholder="Оперативная память" />
-                <input class="auth-input" data-k="gpu" placeholder="Видеокарта" />
-                <input class="auth-input" data-k="directx" placeholder="DirectX" />
-                <input class="auth-input" data-k="storage" placeholder="Место на диске" />
-                <input class="auth-input" data-k="sound" placeholder="Звуковая карта" />
-                <input class="auth-input" data-k="other" placeholder="Дополнительно" />
-              </div>
-            </div>
-          </section>
-
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
-              <h3>Языки и управление</h3>
-            </div>
-            <div class="settings-label full">
-              <span>Поддержка контроллеров</span>
-              <div class="submit-checks">
-                <label class="settings-check"><input type="checkbox" value="xbox" class="sg-ctrl" /> Xbox</label>
-                <label class="settings-check"><input type="checkbox" value="playstation" class="sg-ctrl" /> PlayStation</label>
-                <label class="settings-check"><input type="checkbox" value="switch" class="sg-ctrl" /> Switch</label>
-                <label class="settings-check"><input type="checkbox" value="keyboard" class="sg-ctrl" /> Клавиатура</label>
-              </div>
-            </div>
-            <div class="settings-label full">
-              <span>Языки</span>
-              <div class="lang-table" id="sg-lang-table">
-                <div class="lang-table-head"><span>Язык</span><span>Субтитры</span><span>Аудио</span></div>
-              </div>
-            </div>
-          </section>
-
-          <section class="pub-section" id="sg-builds-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
-              <h3>Сборка и файл</h3>
-            </div>
-            <p class="pub-hint">Укажите версию, кратко что нового и прикрепите файл (zip/exe). Без этого на модерацию не отправится.</p>
-            <div class="ws-ff" style="margin-bottom:10px">
-              <span>Версия *</span>
-              <input type="text" class="auth-input" id="sg-build-version" name="build_version" placeholder="1.0.0" maxlength="32" />
-            </div>
-            <div class="ws-ff" style="margin-bottom:10px">
-              <span>Что нового</span>
-              <input type="text" class="auth-input" id="sg-build-changelog" name="build_changelog" placeholder="Кратко об изменениях…" maxlength="500" />
-            </div>
-            <div class="ws-ff" style="margin-bottom:10px">
-              <span>Файл *</span>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <label class="pub-file-btn" for="sg-build-file">Выбрать файл</label>
-                <input type="file" id="sg-build-file" class="pub-file-input" name="build_file" accept=".exe,.zip,.7z,.rar,.msi,.dmg,.appimage,.tar,.gz" hidden />
-                <span class="settings-hint" id="sg-build-file-name">ZIP / EXE / 7z…</span>
-              </div>
-              <div id="sg-build-existing" class="settings-hint" style="display:none;margin-top:8px"></div>
-            </div>
-          </section>
-
-          <section class="pub-section">
-            <div class="pub-section-head">
-              <span class="pub-section-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-              <h3>Специфический контент</h3>
-            </div>
-            <p class="pub-hint">Отметьте, если в игре есть возрастной или чувствительный материал</p>
-            <div class="pub-content-flags">
-              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="adult" id="sg-adult" /><span>18+ / для взрослых</span></label>
-              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="violence" /><span>Насилие</span></label>
-              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="gore" /><span>Жестокость / кровь</span></label>
-              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="drugs" /><span>Наркотики / алкоголь</span></label>
-              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="language" /><span>Ненормативная лексика</span></label>
-              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="horror" /><span>Хоррор / пугающий контент</span></label>
-              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="gambling" /><span>Азартные механики</span></label>
-              <label class="pub-flag"><input type="checkbox" class="sg-content-flag" value="prohibited" /><span>Запрещённые темы</span></label>
-            </div>
-          </section>
-
-        </form>
-      </div>
-      <div class="submit-modal-foot">
-        <div class="submit-foot-left">
-          <input type="file" id="sg-import-pack" accept=".zip,application/zip" hidden />
-          <button type="button" class="hp-btn-edit" id="sg-import-pack-btn" title="Импорт ZIP-пакета игры">Импорт</button>
-        </div>
-        <div class="submit-foot-right">
-          <button type="button" class="hp-btn-edit" data-close="form">Отмена</button>
-          <button type="button" class="hp-btn-save" id="submit-game-send">Отправить на модерацию</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-<div class="submit-modal hidden" id="submit-done-modal">
-    <div class="submit-modal-backdrop" data-close="done"></div>
-    <div class="submit-modal-box submit-done-box">
-      <div class="submit-modal-body submit-done-body">
-        <div class="submit-done-icon" aria-hidden="true">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 2L11 13"/>
-            <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
-          </svg>
-        </div>
-        <h2 class="submit-done-title">Игра отправлена на рассмотрение</h2>
-        <p class="submit-done-sub">Спасибо! Администраторы проверят материалы и опубликуют игру или свяжутся с вами.</p>
-        <button type="button" class="hp-btn-save submit-done-btn" data-close="done">Отлично</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Универсальная confirm-модалка -->
-  <div class="submit-modal hidden" id="app-confirm-modal">
-    <div class="submit-modal-backdrop" data-confirm-cancel></div>
-    <div class="submit-modal-box app-confirm-box">
-      <div class="submit-modal-body app-confirm-body">
-        <div class="app-confirm-icon" id="app-confirm-icon" aria-hidden="true">
-          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 6h18"/>
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-            <path d="M10 11v6"/>
-            <path d="M14 11v6"/>
-          </svg>
-        </div>
-        <h2 class="app-confirm-title" id="app-confirm-title">Подтверждение</h2>
-        <p class="app-confirm-sub" id="app-confirm-sub"></p>
-        <div class="app-confirm-pin hidden" id="app-confirm-pin" aria-label="Ввод кода друга">
-          <p class="app-confirm-pin-hint" id="app-confirm-pin-hint">Введите свой код друга</p>
-          <div class="app-confirm-pin-cells" id="app-confirm-pin-cells"></div>
-          <p class="app-confirm-pin-error hidden" id="app-confirm-pin-error">Неверный код</p>
-        </div>
-        <div class="app-confirm-actions">
-          <button type="button" class="hp-btn-edit" id="app-confirm-cancel" data-confirm-cancel>Отмена</button>
-          <button type="button" class="hp-btn-save app-confirm-ok" id="app-confirm-ok">OK</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- ===== 18+ GATE ===== -->
-  <div class="adult-gate hidden" id="adult-gate-modal">
-    <div class="adult-gate-backdrop"></div>
-    <div class="adult-gate-box" role="dialog" aria-modal="true">
-      <div class="adult-gate-head">
-        <h2>Эта игра содержит неприемлемый контент</h2>
-        <button type="button" class="friends-modal-close" id="adult-gate-x" aria-label="Закрыть">×</button>
-      </div>
-      <div class="adult-gate-body">
-        <p><strong id="adult-gate-title">Игра</strong> содержит контент, который может не подходить для всех возрастов. Вы уверены, что хотите продолжить?</p>
-      </div>
-      <div class="adult-gate-foot">
-        <button type="button" class="adult-gate-back" id="adult-gate-back">Назад</button>
-        <button type="button" class="adult-gate-continue" id="adult-gate-continue">Продолжить</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== АДМИН: РЕДАКТИРОВАНИЕ ПОЛЬЗОВАТЕЛЯ ===== -->
-  <div class="submit-modal hidden" id="admin-user-modal">
-    <div class="submit-modal-backdrop" data-close-admin-user></div>
-    <div class="submit-modal-box submit-modal-wide" role="dialog" aria-modal="true">
-      <div class="submit-modal-head">
-        <h2>Редактирование пользователя</h2>
-        <button type="button" class="friends-modal-close" id="admin-user-close" aria-label="Закрыть">×</button>
-      </div>
-      <div class="submit-modal-body" id="admin-user-body">
-        <input type="hidden" id="admin-user-id" value="" />
-        <label class="settings-label"><span>Ник</span><input type="text" id="admin-user-name" maxlength="32" /></label>
-        <label class="settings-label"><span>Роль</span>
-          <select id="admin-user-role">
-            <option value="user">user</option>
-            <option value="developer">developer</option>
-            <option value="admin">admin</option>
-          </select>
-        </label>
-        <label class="settings-label"><span>Баланс</span><input type="number" id="admin-user-balance" min="0" step="1" /></label>
-        <label class="settings-label"><span>Карма</span><input type="number" id="admin-user-karma" step="1" /></label>
-        <label class="settings-label"><span>Цвет аватара</span><input type="color" id="admin-user-color" value="#ef5b2c" /></label>
-        <div class="admin-user-media-row">
-          <label class="settings-label"><span>Новый аватар</span><input type="file" id="admin-user-avatar" accept="image/*" /></label>
-          <label class="settings-label"><span>Новая шапка</span><input type="file" id="admin-user-banner" accept="image/*" /></label>
-        </div>
-        <hr class="admin-user-hr" />
-        <h3 class="admin-user-ban-title">Бан</h3>
-        <label class="settings-label"><span>Причина бана</span><input type="text" id="admin-user-ban-reason" placeholder="Нарушение правил…" /></label>
-        <label class="settings-label"><span>Срок (дней, 0 = навсегда)</span><input type="number" id="admin-user-ban-days" min="0" value="0" /></label>
-        <div class="admin-user-actions">
-          <button type="button" class="auth-submit" id="admin-user-save">Сохранить</button>
-          <button type="button" class="btn-danger" id="admin-user-ban">Забанить</button>
-          <button type="button" class="hp-btn-edit" id="admin-user-unban">Разбанить</button>
-        </div>
-        <p class="comment-hint" id="admin-user-status"></p>
-      </div>
-    </div>
-  </div>
-
-  <?php if ($banInfo): ?>
-  <!-- ===== ЭКРАН БАНА ===== -->
-  <div class="ban-screen" id="ban-screen">
-    <div class="ban-screen-inner">
-      <div class="ban-logo">🐱</div>
-      <h1 class="ban-title">Котик в тебе разочарован</h1>
-      <p class="ban-sub">Твой доступ к CATio ограничен.</p>
-      <div class="ban-card">
-        <div class="ban-row"><span>Причина</span><b><?php echo htmlspecialchars($banInfo['reason'], ENT_QUOTES, 'UTF-8'); ?></b></div>
-        <div class="ban-row"><span>Кто забанил</span><b><?php echo htmlspecialchars($banInfo['banned_by_name'] ?: 'Администратор', ENT_QUOTES, 'UTF-8'); ?></b></div>
-        <div class="ban-row"><span>Срок</span><b><?php
-          if (!empty($banInfo['banned_until'])) {
-            echo 'до ' . htmlspecialchars(date('d.m.Y H:i', strtotime($banInfo['banned_until'])), ENT_QUOTES, 'UTF-8');
-          } else {
-            echo 'навсегда';
-          }
-        ?></b></div>
-      </div>
-      <a class="ban-back-btn" href="?view=auth&logout=1<?php echo $isClient ? '&amp;client=1' : ''; ?>" id="ban-back-auth">Вернуться к авторизации</a>
-    </div>
-  </div>
-  <style>
-    #app, .topbar, .sidebar { display: none !important; }
-  </style>
-  <?php endif; ?>
-
-
-  <?php if (!empty($unbanNotice)): ?>
-  <!-- ===== ЭКРАН РАЗБАНА ===== -->
-  <div class="ban-screen unban-screen" id="unban-screen">
-    <div class="ban-screen-inner">
-      <div class="ban-logo">😺</div>
-      <h1 class="ban-title">Котик милостливый пожалел тебя</h1>
-      <p class="ban-sub">Больше не ссы мимо лотка.<br>Вы были разблокированы.</p>
-      <button type="button" class="ban-back-btn" id="unban-continue-btn">Продолжить</button>
-    </div>
-  </div>
-  <style>
-    #app, .topbar, .sidebar { display: none !important; }
-  </style>
-  <script>
-  document.getElementById('unban-continue-btn')?.addEventListener('click', async () => {
-    try {
-      await fetch('api/admin.php?action=dismiss_unban', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ csrf_token: window.CSRF_TOKEN || '' })
-      });
-    } catch (e) {}
-    const client = <?php echo $isClient ? 'true' : 'false'; ?>;
-    window.location.href = client ? '?view=home&client=1' : '?view=home';
-  });
-  </script>
-  <?php endif; ?>
-
-
-  <div class="submit-modal hidden" id="privacy-modal">
-    <div class="submit-modal-backdrop" data-close-privacy></div>
-    <div class="submit-modal-box privacy-modal-box">
-      <div class="submit-modal-head">
-        <h2>Лицензионное соглашение</h2>
-        <button type="button" class="pub-modal-close" id="privacy-modal-close" aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body privacy-modal-body">
-        <div class="privacy-hero">
-          <div class="privacy-hero-ico">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <div>
-            <div class="privacy-hero-title">CATio — защита ваших данных</div>
-            <div class="privacy-hero-sub">Кратко о том, что мы собираем и зачем</div>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#ef5b2c">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          </div>
-          <div>
-            <h4>Какие данные</h4>
-            <p>Имя пользователя, e-mail, данные сессии, сведения о библиотеке и покупках — только то, что нужно для аккаунта.</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#6ea8fe">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
-          </div>
-          <div>
-            <h4>Зачем это нужно</h4>
-            <p>Вход в аккаунт, безопасность, библиотека игр, уведомления и работа сервиса. Без лишней аналитики «для рекламы».</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#6fdf8b">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          </div>
-          <div>
-            <h4>Кому передаём</h4>
-            <p>Третьим лицам — только по закону или с вашего согласия. Мы не продаём персональные данные.</p>
-          </div>
-        </div>
-        <div class="privacy-point">
-          <div class="privacy-point-ico" style="--c:#f0c14b">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-          </div>
-          <div>
-            <h4>Ваши права</h4>
-            <p>Можно запросить уточнение или удаление данных — напишите администрации CATio.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-<!-- Модалка оформления игры (как Hydra) -->
-<div id="steam-import-modal" class="sgdb-modal hidden" aria-hidden="true">
-  <div class="sgdb-modal-backdrop" data-close-steam-modal></div>
-  <div class="sgdb-modal-card" role="dialog" aria-modal="true">
-    <div class="sgdb-modal-head">
-      <h3 id="sgdb-modal-title">Игра</h3>
-      <button type="button" class="sgdb-modal-close" data-close-steam-modal aria-label="Закрыть">×</button>
-    </div>
-    <div class="sgdb-modal-body">
-      <aside class="sgdb-nav">
-        <button type="button" class="sgdb-nav-btn" data-sgdb-tab="main">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Основные
-        </button>
-        <button type="button" class="sgdb-nav-btn" data-sgdb-tab="path">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-          Расположение
-        </button>
-        <button type="button" class="sgdb-nav-btn active" data-sgdb-tab="assets">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-          Настройка
-        </button>
-        <button type="button" class="sgdb-nav-btn" data-sgdb-tab="downloads">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Загрузки
-        </button>
-        <button type="button" class="sgdb-nav-btn" data-sgdb-tab="mods">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          Модификации
-        </button>
-        <button type="button" class="sgdb-nav-btn sgdb-nav-danger" data-sgdb-tab="danger">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Опасная зона
-        </button>
-      </aside>
-      <div class="sgdb-content">
-        <div class="sgdb-pane" data-sgdb-pane="main">
-          <div class="sgdb-pane-title">Основные</div>
-          <div class="sgdb-info-grid">
-            <div class="sgdb-info-row"><span>Название</span><b id="sgdb-info-title">—</b></div>
-            <div class="sgdb-info-row"><span>ID в CATio</span><b id="sgdb-info-id">—</b></div>
-          </div>
-        </div>
-        <div class="sgdb-pane" data-sgdb-pane="path">
-          <div class="sgdb-pane-title">Файл</div>
-          <p class="settings-hint" style="margin:0 0 12px">Путь к файлу, который будет запущен при нажатии на «Играть»</p>
-          <div class="sgdb-path-row">
-            <div class="sgdb-path-field is-readonly" id="sgdb-exe-path" title="Путь к исполняемому файлу">Файл не выбран</div>
-            <button type="button" class="hp-btn-edit sgdb-path-pick" id="sgdb-pick-exe" disabled title="Выбор файла доступен в клиенте">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
-              Выбрать
-            </button>
-          </div>
-          <div class="sgdb-path-saves is-readonly" id="sgdb-saves-path">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            <span>Папка с сохранениями не найдена</span>
-          </div>
-          <div class="sgdb-pane-title" style="margin-top:20px">Установка</div>
-          <div class="sgdb-path-field is-readonly" id="sgdb-install-path" title="Куда установлена игра">—</div>
-        </div>
-        <div class="sgdb-pane active" data-sgdb-pane="assets">
-          <div class="sgdb-asset-tabs">
-            <button type="button" class="sgdb-asset-tab active" data-asset-type="icons">Иконка</button>
-            <button type="button" class="sgdb-asset-tab" data-asset-type="logos">Логотип</button>
-            <button type="button" class="sgdb-asset-tab" data-asset-type="heroes">Баннер</button>
-            <button type="button" class="sgdb-asset-tab" data-asset-type="grids">Обложка</button>
-          </div>
-          <div class="sgdb-asset-preview-wrap">
-            <div class="sgdb-asset-preview checker" id="sgdb-asset-preview">
-              <img id="sgdb-asset-preview-img" src="" alt="" />
-            </div>
-          </div>
-          <p class="sgdb-warn">⚠ Ваши пользовательские изображения не будут синхронизированы с вашей учётной записью.</p>
-          <div class="sgdb-source-label">CATioGridDB</div>
-          <div class="sgdb-asset-scroll">
-            <div id="sgdb-asset-grid" class="sgdb-asset-grid">
-              <div class="settings-hint">Загрузка…</div>
-            </div>
-          </div>
-          <input type="hidden" id="steam-sel-icon" />
-          <input type="hidden" id="steam-sel-logo" />
-          <input type="hidden" id="steam-sel-banner" />
-          <input type="hidden" id="steam-sel-cover" />
-          <div class="sgdb-asset-savebar">
-            <span class="sgdb-asset-save-hint" id="sgdb-asset-save-hint">Выбери ассеты и нажми сохранить</span>
-            <button type="button" class="auth-submit sgdb-asset-save-btn" id="sgdb-asset-save">Сохранить</button>
-          </div>
-        </div>
-        <div class="sgdb-pane" data-sgdb-pane="downloads">
-          <div class="sgdb-pane-title">Загрузки</div>
-          <p class="settings-hint" style="margin:0 0 14px">Выберите версию, которая будет запускаться, если скачано несколько сборок.</p>
-          <label class="ws-ff" style="margin-bottom:14px">
-            <span>Запускаемая версия</span>
-            <select class="settings-select" id="sgdb-launch-version" style="width:100%">
-              <option value="">Нет установленных версий</option>
-            </select>
-          </label>
-          <p class="settings-hint" id="sgdb-downloads-hint">Проверить наличие обновлений или других версий игры</p>
-          <button type="button" class="hp-btn-edit" id="sgdb-open-sources" style="margin-top:10px">Открыть источники</button>
-        </div>
-        <div class="sgdb-pane" data-sgdb-pane="mods">
-          <div class="sgdb-pane-title">Модификации</div>
-          <p class="settings-hint" style="margin:0 0 14px">Моды, установленные для этой игры. Включённые будут подхватываться при запуске.</p>
-          <div id="sgdb-mods-list" class="sgdb-mods-list"></div>
-        </div>
-        <div class="sgdb-pane" data-sgdb-pane="danger">
-          <div class="sgdb-pane-title">Опасная зона</div>
-          <p class="settings-hint" style="margin:0 0 14px">Вы можете удалить эту игру из библиотеки или локальные файлы на устройстве.</p>
-          <div class="sgdb-danger-actions" id="sgdb-danger-actions">
-            <button type="button" class="btn-danger" id="sgdb-remove-library">Удалить из библиотеки</button>
-            <button type="button" class="btn-danger" id="sgdb-refresh-playtime">Обновить время игры</button>
-            <button type="button" class="btn-danger" id="sgdb-reset-playtime">Сбросить время игры</button>
-            <button type="button" class="btn-danger" id="sgdb-delete-files">Удалить файлы</button>
-          </div>
-          <div class="sgdb-pane-title" style="margin-top:22px">Мои скриншоты</div>
-          <div class="sgdb-danger-actions" id="sgdb-shots-actions">
-            <button type="button" class="btn-danger" id="sgdb-del-all-shots" disabled title="Нет скриншотов">Удалить все скриншоты</button>
-            <button type="button" class="btn-danger" id="sgdb-del-pub-shots" disabled title="Нет опубликованных">Удалить все опубликованные скриншоты</button>
-            <button type="button" class="btn-danger" id="sgdb-del-local-shots" disabled title="Нет локальных">Удалить локальные скриншоты</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-  <!-- Модалка: обновить время игры -->
-  <div class="submit-modal hidden" id="playtime-edit-modal">
-    <div class="submit-modal-backdrop" data-close-playtime></div>
-    <div class="submit-modal-box app-confirm-box" style="max-width:440px">
-      <div class="submit-modal-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 0">
-        <div>
-          <h2 class="app-confirm-title" style="margin:0 0 4px;text-align:left" id="playtime-edit-title">Обновить время игры</h2>
-          <p class="app-confirm-sub" style="margin:0;text-align:left" id="playtime-edit-sub">Вручную обновите время игры</p>
-        </div>
-        <button type="button" class="pub-modal-close" data-close-playtime aria-label="Закрыть">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="submit-modal-body" style="padding:16px 20px 20px">
-        <div class="playtime-warn">
-          <span aria-hidden="true">⚠</span>
-          <span>Ваши часы будут отмечены как обновлённые вручную. Убрать эту отметку можно только сбросив время игры.</span>
-        </div>
-        <div class="playtime-fields">
-          <label class="ws-ff">
-            <span>часов</span>
-            <input type="number" min="0" max="99999" step="1" id="playtime-hours" class="settings-input" value="0" />
-          </label>
-          <label class="ws-ff">
-            <span>минут</span>
-            <input type="number" min="0" max="59" step="1" id="playtime-minutes" class="settings-input" value="0" />
-          </label>
-        </div>
-        <div class="app-confirm-actions" style="justify-content:flex-end;margin-top:16px">
-          <button type="button" class="hp-btn-edit" data-close-playtime>Отменить</button>
-          <button type="button" class="btn-danger" id="playtime-edit-save">Обновить время игры</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-<!-- ===== Модалка установки игры ===== -->
-<div class="submit-modal hidden" id="install-modal">
-  <div class="submit-modal-backdrop" data-close-install></div>
-  <div class="submit-modal-box" style="max-width:440px">
-    <div class="submit-modal-head">
-      <h2>Установить</h2>
-      <button type="button" class="pub-modal-close" data-close-install aria-label="Закрыть">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="submit-modal-body">
-      <div class="install-game-row">
-        <div class="install-game-cover" id="install-cover"></div>
-        <div class="install-game-meta">
-          <div class="install-game-title" id="install-title">Игра</div>
-          <div class="install-game-size" id="install-size">—</div>
-        </div>
-      </div>
-      <label class="ws-ff" style="margin-top:14px">
-        <span>Версия</span>
-        <select class="settings-select" id="install-version" style="width:100%"></select>
-      </label>
-      <p class="settings-hint" style="margin-top:10px">Файлы: AppData\Roaming\CATio\games\…</p>
-    </div>
-    <div class="submit-modal-foot">
-      <button type="button" class="hp-btn-edit" data-close-install>Отмена</button>
-      <button type="button" class="hp-btn-edit" id="install-confirm" style="background:var(--accent);color:#12110e;border-color:var(--accent)">Установить</button>
-    </div>
-  </div>
-</div>
-
+<?php require __DIR__ . '/partials/modals.php'; ?>
 </body>
 </html>

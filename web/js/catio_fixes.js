@@ -1079,6 +1079,5 @@
   };
 
 
-  console.log('[CATio] catio_fixes.js v6 loaded');
-
+  
 })();

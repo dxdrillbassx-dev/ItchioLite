@@ -1,20 +1,42 @@
 <?php
 // CATio — система авторизации
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/includes/security.php';
 
 // PHP-сессия (CSRF) живёт 30 дней — клиент не будет слетать при каждом запуске
 // Не трогаем cookie/ini/session после того, как уже ушли headers (иначе Warning на XAMPP)
 $sessionLifetime = 60 * 60 * 24 * 30;
 if (session_status() === PHP_SESSION_NONE) {
+    // XAMPP на Windows часто не даёт писать в C:\xampp\tmp → Permission denied.
+    // Кладём файлы сессий в папку проекта (web/tmp/sessions).
+    $sessDir = __DIR__ . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'sessions';
+    if (!is_dir($sessDir)) {
+        @mkdir($sessDir, 0700, true);
+    }
+    // fallback: web/tmp
+    if (!is_dir($sessDir) || !is_writable($sessDir)) {
+        $sessDir = __DIR__ . DIRECTORY_SEPARATOR . 'tmp';
+        if (!is_dir($sessDir)) {
+            @mkdir($sessDir, 0700, true);
+        }
+    }
+    if (is_dir($sessDir) && is_writable($sessDir)) {
+        session_save_path($sessDir);
+    }
+
     if (!headers_sent()) {
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443)
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
         session_set_cookie_params([
             'lifetime' => $sessionLifetime,
             'path' => '/',
             'httponly' => true,
+            'secure' => $secure,
             'samesite' => 'Lax',
         ]);
         @ini_set('session.gc_maxlifetime', (string)$sessionLifetime);
-        session_start();
+        @session_start();
     } else {
         // headers уже ушли — пробуем стартовать без смены cookie params
         @session_start();
@@ -90,10 +112,14 @@ function createSession($userId) {
 
     // HttpOnly cookie, 30 дней. Имя catio_sid — НОВОЕ, чтобы застрявшая
     // зомби-кука catio_session больше не участвовала в авторизации вообще.
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443)
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     setcookie('catio_sid', $token, [
         'expires' => time() + 30 * 24 * 3600,
         'path' => '/',
         'httponly' => true,
+        'secure' => $secure,
         'samesite' => 'Lax',
     ]);
 
@@ -201,6 +227,7 @@ function registerUser($username, $email, $password) {
     $userId = $db->lastInsertId();
 
     // Автоматический вход после регистрации
+    if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
     createSession($userId);
 
     return ['success' => true, 'user_id' => $userId, 'role' => $role];
@@ -225,6 +252,7 @@ function loginUser($email, $password) {
         $stmt->execute([$newHash, $user['id']]);
     }
 
+    if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
     createSession($user['id']);
 
     return ['success' => true, 'user_id' => $user['id']];

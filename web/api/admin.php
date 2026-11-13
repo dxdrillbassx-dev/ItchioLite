@@ -1,36 +1,13 @@
 <?php
-// CATio — админ: редактирование пользователей, роли, баны
-require_once __DIR__ . '/../auth.php';
-header('Content-Type: application/json; charset=utf-8');
-
-set_exception_handler(function ($e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Ошибка сервера: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
-});
+// CATio — админ: пользователи, роли, баны
+require_once __DIR__ . '/bootstrap.php';
 
 $pdo = getDB();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
-function jsonBodyA(): array {
-    $b = json_decode(file_get_contents('php://input'), true);
-    return is_array($b) ? $b : $_POST;
-}
-function requireAdminA(): array {
-    $u = getCurrentUser();
-    if (!$u) {
-        http_response_code(401);
-        echo json_encode(['ok' => false, 'error' => 'Нужно войти'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    if (($u['role'] ?? '') !== 'admin') {
-        http_response_code(403);
-        echo json_encode(['ok' => false, 'error' => 'Только для админов'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    return $u;
-}
+function jsonBodyA(): array { return jsonBody(); }
+function requireAdminA(): array { return requireAdmin(); }
 
 /** ID самого первого админа (минимальный id среди role=admin; иначе самый первый пользователь). */
 function founderAdminId(PDO $pdo): int {
@@ -87,13 +64,7 @@ function canManageAdminTarget(PDO $pdo, array $actor, array $target, string $new
     return [true, ''];
 }
 
-function checkCsrfA(array $body): void {
-    if (!verifyCsrfToken($body['csrf_token'] ?? '')) {
-        http_response_code(403);
-        echo json_encode(['ok' => false, 'error' => 'Неверный CSRF-токен'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-}
+function checkCsrfA(array $body): void { checkCsrf($body); }
 
 try {
     switch ($action) {
