@@ -105,12 +105,22 @@ try {
         case 'get_user': {
             requireAdminA();
             $id = (int)($_GET['id'] ?? 0);
-            $st = $pdo->prepare("SELECT id, username, email, role, balance, avatar, avatar_color, avatar_url,
-                banner_url, banner_pos, banner_zoom, karma, created_at,
-                COALESCE(is_banned,0) AS is_banned, ban_reason, banned_at, banned_until, banned_by
-                FROM users WHERE id = ?");
-            $st->execute([$id]);
-            $u = $st->fetch();
+            try {
+                $st = $pdo->prepare("SELECT id, username, email, role, balance, avatar, avatar_color, avatar_url,
+                    banner_url, banner_pos, banner_zoom, karma, created_at, last_seen,
+                    friend_code, profile_visibility,
+                    COALESCE(is_banned,0) AS is_banned, ban_reason, banned_at, banned_until, banned_by
+                    FROM users WHERE id = ?");
+                $st->execute([$id]);
+                $u = $st->fetch();
+            } catch (Throwable $e) {
+                $st = $pdo->prepare("SELECT id, username, email, role, balance, avatar, avatar_color, avatar_url,
+                    banner_url, banner_pos, banner_zoom, karma, created_at,
+                    COALESCE(is_banned,0) AS is_banned, ban_reason, banned_at, banned_until, banned_by
+                    FROM users WHERE id = ?");
+                $st->execute([$id]);
+                $u = $st->fetch();
+            }
             if (!$u) {
                 http_response_code(404);
                 echo json_encode(['ok' => false, 'error' => 'Не найден'], JSON_UNESCAPED_UNICODE);
@@ -174,9 +184,11 @@ try {
                 $pdo->prepare("UPDATE users SET role = ? WHERE id = ?")->execute([$role, $id]);
             }
 
-            // balance
+            // balance: 0 .. 999999999
             if (isset($body['balance'])) {
-                $bal = max(0, (int)$body['balance']);
+                $bal = (int)$body['balance'];
+                if ($bal < 0) $bal = 0;
+                if ($bal > 999999999) $bal = 999999999;
                 $pdo->prepare("UPDATE users SET balance = ? WHERE id = ?")->execute([$bal, $id]);
             }
 

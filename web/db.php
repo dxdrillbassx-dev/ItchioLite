@@ -614,9 +614,92 @@ function getDB() {
 
         return $pdo;
     } catch (PDOException $e) {
-        die(json_encode(['error' => 'DB connection failed: ' . $e->getMessage()]));
+        @error_log('CATio DB connection failed: ' . $e->getMessage());
+        if (function_exists('catio_render_error')) {
+            catio_render_error(503, 'db');
+        }
+        // fallback если helper ещё не подключён
+        $script = $_SERVER['SCRIPT_NAME'] ?? '';
+        $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+        $isApi = (
+            strpos($script, '/api/') !== false ||
+            strpos($accept, 'application/json') !== false ||
+            (isset($_GET['format']) && $_GET['format'] === 'json')
+        );
+        if ($isApi) {
+            if (!headers_sent()) {
+                http_response_code(503);
+                header('Content-Type: application/json; charset=utf-8');
+                header('Cache-Control: no-store');
+            }
+            die(json_encode(['ok' => false, 'error' => 'База данных недоступна'], JSON_UNESCAPED_UNICODE));
+        }
+        if (!headers_sent()) {
+            http_response_code(503);
+            header('Content-Type: text/html; charset=utf-8');
+            header('Cache-Control: no-store');
+        }
+        $f = __DIR__ . '/offline.html';
+        if (is_file($f)) { readfile($f); exit; }
+        echo '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>503</title></head><body style="background:#12110e;color:#c7c0b8;font-family:Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center"><div><h1 style="color:#fff">503 — кот без базы</h1><p>MySQL недоступен. Запусти его в XAMPP.</p><a href="javascript:location.reload()" style="color:#ef5b2c">Обновить</a></div></body></html>';
+        exit;
     }
 }
+
+/**
+ * Единая точка ошибок: 404 / 503 / 500.
+ * API → JSON, браузер → HTML в стиле CATio.
+ * $kind: 'db' | 'notfound' | 'server' | null
+ */
+function catio_render_error(int $code = 500, ?string $kind = null): void {
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+    $isApi = (
+        strpos($script, '/api/') !== false ||
+        strpos($accept, 'application/json') !== false ||
+        (isset($_GET['format']) && $_GET['format'] === 'json')
+    );
+
+    $messages = [
+        404 => 'Страница не найдена',
+        503 => 'Сервис временно недоступен',
+        500 => 'Внутренняя ошибка сервера',
+    ];
+    if ($kind === 'db') {
+        $messages[503] = 'База данных недоступна';
+    }
+    $msg = $messages[$code] ?? $messages[500];
+
+    if ($isApi) {
+        if (!headers_sent()) {
+            http_response_code($code);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
+        }
+        echo json_encode(['ok' => false, 'error' => $msg], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if (!headers_sent()) {
+        http_response_code($code);
+        header('Content-Type: text/html; charset=utf-8');
+        header('Cache-Control: no-store');
+    }
+
+    $map = [
+        404 => '404.html',
+        503 => 'offline.html',
+        500 => '500.html',
+    ];
+    $file = __DIR__ . '/' . ($map[$code] ?? '500.html');
+    if (is_file($file)) {
+        readfile($file);
+        exit;
+    }
+    echo '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>' . (int)$code . '</title></head><body style="background:#12110e;color:#c7c0b8;font-family:Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center"><div><h1 style="color:#fff">' . (int)$code . '</h1><p>' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') . '</p></div></body></html>';
+    exit;
+}
+
 
 // Пересчёт среднего рейтинга игры по таблице ratings.
 // Если оценок ещё нет — rating в games не трогаем.

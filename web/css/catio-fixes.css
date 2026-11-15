@@ -119,3 +119,191 @@ body.catio-hide-builds #sg-builds-section { display: none !important; }
 #ws-hero-bg.has-image {
   /* картинка через inline style */
 }
+
+
+/* ===== Desktop client: no text select (кроме инпутов) ===== */
+body.client,
+body.client *:not(input):not(textarea):not(select):not([contenteditable]):not([contenteditable="true"]) {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+body.client input,
+body.client textarea,
+body.client select,
+body.client [contenteditable],
+body.client [contenteditable="true"] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+
+/* ===== Launcher aux: только контент друзей/чата, без шелла приложения ===== */
+body.aux,
+body.client.aux {
+  overflow: hidden !important;
+  background: #1a1916 !important;
+}
+/* Прячем весь каркас лаунчера */
+body.aux #app > aside,
+body.aux #app .sidebar,
+body.aux #app .side-nav,
+body.aux aside.sidebar,
+body.aux .app-sidebar,
+body.aux nav.side,
+body.aux .topbar,
+body.aux header.top,
+body.aux .app-header,
+body.aux .client-chrome,
+body.aux .bottom-bar,
+body.aux #bottom-bar,
+body.aux .app-bottom,
+body.aux .main-views,
+body.aux #view-home,
+body.aux #view-store,
+body.aux #view-library,
+body.aux #view-game,
+body.aux #view-profile,
+body.aux #view-settings,
+body.aux #view-admin,
+body.aux #view-publisher,
+body.aux #view-workshop,
+body.aux #view-community,
+body.aux .content-area,
+body.aux .page-wrap,
+body.aux .titlebar-drag {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+/* На всякий: весь #app кроме модалок */
+body.aux #app {
+  background: transparent !important;
+}
+body.aux #app > *:not(#friends-modal):not(#chat-modal) {
+  /* модалки часто вне #app — прячем детей app */
+}
+
+/* Друзья */
+body.aux-friends #friends-modal,
+body.client.aux-friends #friends-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: #1a1916 !important;
+  pointer-events: auto !important;
+}
+body.aux-friends #friends-modal.hidden {
+  display: flex !important;
+}
+body.aux-friends .friends-modal-backdrop {
+  display: none !important;
+}
+body.aux-friends .friends-modal-head,
+body.aux-friends #friends-close,
+body.aux-friends .friends-modal-close,
+body.aux-friends .friends-modal-title {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+}
+body.aux-friends .friends-modal-box {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #1a1916 !important;
+}
+body.aux-friends .friends-modal-body {
+  flex: 1 !important;
+  overflow: auto !important;
+  max-height: none !important;
+}
+
+/* Сообщения */
+body.aux-chat #chat-modal,
+body.client.aux-chat #chat-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: #1a1916 !important;
+  pointer-events: auto !important;
+}
+body.aux-chat #chat-modal.hidden {
+  display: flex !important;
+}
+body.aux-chat .chat-modal-backdrop {
+  display: none !important;
+}
+body.aux-chat #chat-close,
+body.aux-chat .chat-modal-close,
+body.aux-chat button.chat-modal-close {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+}
+body.aux-chat .chat-modal-box {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #1a1916 !important;
+}
+
+
+/* Жёстко: сайдбар и нижняя панель в aux */
+body.aux aside.sidebar,
+body.client.aux aside.sidebar {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+body.aux .bottom-bar,
+body.aux #bottom-bar,
+body.client.aux .bottom-bar {
+  display: none !important;
+  height: 0 !important;
+}
+body.aux #app {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+body.aux .main,
+body.aux .content,
+body.aux .app-main,
+body.aux main {
+  display: none !important;
+}

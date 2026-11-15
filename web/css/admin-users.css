@@ -1,5 +1,6 @@
 /* Пользователи = те же карточки, что модерация */
-.admin-users-toolbar {
+.admin-users-toolbar,
+.admin-mod-toolbar {
   display: flex !important;
   flex-direction: row !important;
   flex-wrap: nowrap !important;
@@ -7,14 +8,16 @@
   gap: 10px !important;
   margin-bottom: 12px !important;
 }
-.admin-users-toolbar #admin-users-search {
+.admin-users-toolbar #admin-users-search,
+.admin-mod-toolbar #admin-mod-search {
   flex: 1 1 0 !important;
   min-width: 180px !important;
   width: 0 !important;
   height: 44px !important;
   box-sizing: border-box !important;
 }
-.admin-users-toolbar #admin-users-filter {
+.admin-users-toolbar #admin-users-filter,
+.admin-mod-toolbar #admin-mod-filter {
   flex: 0 1 190px !important;
   min-width: 140px !important;
   max-width: 190px !important;
@@ -23,17 +26,31 @@
   box-sizing: border-box !important;
 }
 .admin-users-toolbar .catio-select,
-.admin-users-toolbar .catio-select__btn {
+.admin-users-toolbar .catio-select__btn,
+.admin-mod-toolbar .catio-select,
+.admin-mod-toolbar .catio-select__btn {
   height: 44px !important;
   min-height: 44px !important;
   box-sizing: border-box !important;
 }
-.admin-users-toolbar .catio-select { flex: 0 1 190px !important; min-width: 140px !important; max-width: 190px !important; }
+.admin-users-toolbar .catio-select,
+.admin-mod-toolbar .catio-select {
+  flex: 0 1 190px !important;
+  min-width: 140px !important;
+  max-width: 190px !important;
+}
 @media (max-width: 620px) {
-  .admin-users-toolbar { gap: 8px !important; }
-  .admin-users-toolbar #admin-users-search { min-width: 0 !important; }
+  .admin-users-toolbar,
+  .admin-mod-toolbar { gap: 8px !important; }
+  .admin-users-toolbar #admin-users-search,
+  .admin-mod-toolbar #admin-mod-search { min-width: 0 !important; }
   .admin-users-toolbar #admin-users-filter,
-  .admin-users-toolbar .catio-select { flex-basis: 145px !important; width: 145px !important; }
+  .admin-users-toolbar .catio-select,
+  .admin-mod-toolbar #admin-mod-filter,
+  .admin-mod-toolbar .catio-select {
+    flex-basis: 145px !important;
+    width: 145px !important;
+  }
 }
 
 .admin-users-list {
@@ -42,25 +59,52 @@
   gap: 8px;
 }
 
-/* баннер на фоне строки (как опция) */
-.admin-user-row.has-banner {
-  background-image: var(--user-banner);
-  background-size: cover;
-  background-position: center;
+/*
+  Баннер на фоне строки.
+  Раньше cover + сильный градиент съедали картинку → «просто градиент».
+  Слой картинки отдельный, умеренный оверлей, позиция из --row-banner-pos.
+*/
+.admin-user-row.has-banner,
+.admin-pending-item.has-banner {
   position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background-image: none !important; /* картинка в ::after, не растягиваем сам блок криво */
 }
-.admin-user-row.has-banner::before {
+.admin-user-row.has-banner::after,
+.admin-pending-item.has-banner::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(12,11,10,.9) 0%, rgba(12,11,10,.55) 50%, rgba(12,11,10,.8) 100%);
+  z-index: 0;
   pointer-events: none;
   border-radius: inherit;
-  z-index: 0;
+  background-image: var(--row-banner, var(--user-banner));
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: var(--row-banner-pos, center 35%);
+  opacity: 0.55;
+  transform: scale(1.02);
 }
-.admin-user-row.has-banner > * {
-  position: relative;
+.admin-user-row.has-banner::before,
+.admin-pending-item.has-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(18, 17, 14, 0.88) 0%,
+    rgba(18, 17, 14, 0.55) 42%,
+    rgba(18, 17, 14, 0.72) 100%
+  );
+}
+.admin-user-row.has-banner > *,
+.admin-pending-item.has-banner > * {
+  position: relative;
+  z-index: 2;
 }
 
 /* тип-бейдж роли */
@@ -82,55 +126,264 @@
   max-height: 36px !important;
   flex-shrink: 0 !important;
   aspect-ratio: 1 / 1 !important;
+  border-radius: 10px !important;
+  object-fit: cover !important;
+  background-size: cover !important;
+  background-position: center !important;
+}
+
+
+/* ===== Модалка пользователя: 2 колонки ===== */
+.admin-user-edit-box {
+  max-width: 980px !important;
+  width: min(980px, 96vw) !important;
+}
+.admin-user-edit-body {
+  padding: 0 !important;
+  overflow: auto;
+  max-height: min(72vh, 720px);
+}
+.admin-user-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 420px;
+  gap: 0;
+}
+.admin-user-col {
+  padding: 16px 18px;
+  box-sizing: border-box;
+}
+.admin-user-col--profile {
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+.admin-user-col--mod {
+  display: flex;
+  flex-direction: column;
+  background: rgba(0,0,0,0.12);
+}
+.admin-user-col--mod .pub-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+/* Hero как в профиле */
+.admin-user-hero {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 14px;
+  background: #1a1814;
+}
+.admin-user-hero-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #2a241c 0%, #12110e 100%);
+  background-size: cover;
+  background-position: center 35%;
+  opacity: 1;
+}
+.admin-user-hero-bg.has-image {
+  opacity: 1;
+}
+.admin-user-hero-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(18,17,14,0.15) 0%, rgba(18,17,14,0.85) 100%);
+}
+.admin-user-hero-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 48px 14px 12px;
+}
+.admin-user-hero-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: #ef5b2c;
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.4rem;
+  color: #12110e;
+}
+.admin-user-hero-meta { min-width: 0; padding-bottom: 4px; }
+.admin-user-hero-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-user-hero-role {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.65);
+  margin-top: 2px;
+}
+.admin-user-hero-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+.admin-user-hero-actions .hp-btn-edit {
+  font-size: 0.82rem;
+  padding: 8px 12px;
+}
+
+.admin-user-fields-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.admin-user-mini-head {
+  margin-bottom: 8px !important;
+}
+.admin-user-mini-head h3 {
+  font-size: 0.85rem !important;
+  margin: 0 !important;
+}
+.admin-user-fields-edit .settings-label,
+.admin-user-fields-view .settings-label {
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.admin-user-readonly {
+  opacity: 0.85;
+  cursor: default !important;
+  pointer-events: none;
+  user-select: text;
+  background: rgba(0,0,0,0.25) !important;
+}
+.admin-user-mod-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+@media (max-width: 820px) {
+  .admin-user-split { grid-template-columns: 1fr; }
+  .admin-user-col--profile { border-right: 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .admin-user-fields-split { grid-template-columns: 1fr; }
+}
+
+
+/* Футер модалки пользователя */
+#admin-user-modal .submit-modal-foot.admin-user-foot,
+#admin-user-modal .admin-user-foot {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  padding: 12px 16px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+#admin-user-modal .admin-user-foot-spacer {
+  flex: 1 1 auto !important;
+  min-width: 8px !important;
+}
+#admin-user-modal .admin-user-foot .hp-btn-edit,
+#admin-user-modal .admin-user-foot .hp-btn-save {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  float: none !important;
+}
+
+.admin-user-pubs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.admin-user-pub-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  font-size: 0.85rem;
+}
+.admin-user-pub-chip button {
+  border: 0;
+  background: rgba(255,100,100,0.15);
+  color: #ffb0b0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+/* аватар участника издательства */
+.pub-member-avatar.hp-friend-avatar {
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
-  overflow: hidden !important;
 }
 
-/* Редактирование пользователя — та же оболочка и ритм, что у редактора игры */
-#admin-user-modal .admin-user-edit-box {
-  width: min(920px, calc(100vw - 32px));
-  max-width: 920px;
-  max-height: min(90vh, 920px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+
+/* Участники издательства — аватарки всегда видны */
+#pub-page-members .pub-member-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
 }
-#admin-user-modal .admin-user-edit-body {
-  overflow-y: auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 18px 22px 22px;
+#pub-page-members .pub-member-av {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  background-size: cover !important;
+  background-position: center !important;
+  font-weight: 700 !important;
+  color: #fff !important;
 }
-#admin-user-modal .pub-section { margin: 0; }
-#admin-user-modal .submit-grid { align-items: start; }
-#admin-user-modal .settings-label { min-width: 0; }
-#admin-user-modal .settings-label input:not([type="color"]),
-#admin-user-modal .settings-label select {
-  width: 100%;
-  min-height: 42px;
-  box-sizing: border-box;
+#pub-page-members .pub-member-av-img {
+  width: 36px !important;
+  height: 36px !important;
+  object-fit: cover !important;
+  display: block !important;
+  border-radius: 10px !important;
 }
-#admin-user-modal .admin-user-color-input {
-  width: 100%;
-  height: 42px;
-  padding: 5px;
-  box-sizing: border-box;
+#pub-page-members .pub-member-meta {
+  min-width: 0 !important;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
 }
-#admin-user-modal .admin-user-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 9px;
-  margin-top: 12px;
+#pub-page-members .pub-member-name {
+  font-weight: 600 !important;
+  color: var(--text-bright, #fff) !important;
 }
-#admin-user-modal #admin-user-status { margin: 12px 0 0; }
-#admin-user-modal .pub-modal-close { flex: 0 0 auto; }
-@media (max-width: 640px) {
-  #admin-user-modal .admin-user-edit-box { width: calc(100vw - 20px); max-height: 94vh; }
-  #admin-user-modal .admin-user-edit-body { padding: 14px; }
-  #admin-user-modal .admin-user-actions > button { flex: 1 1 100%; }
+#pub-page-members .pub-member-role {
+  font-size: 0.75rem !important;
+  color: var(--text-muted, #9a948c) !important;
 }

@@ -57,6 +57,10 @@ async function loadProfileFriends(userId) {
 }
 
 function openFriendsModal() {
+  // В десктоп-клиенте (не aux-окно) — отдельное окно Windows
+  if (window.IS_CLIENT && !window.IS_AUX && typeof catioOpenWindow === 'function') {
+    try { catioOpenWindow('friends'); return; } catch (e) {}
+  }
   const modal = $('#friends-modal');
   if (!modal) return;
   modal.classList.remove('hidden');
@@ -69,6 +73,10 @@ function openFriendsModal() {
 }
 
 function closeFriendsModal() {
+  if (window.IS_AUX && window.AUX_TYPE === 'friends') {
+    try { if (typeof catioCloseWindow === 'function') catioCloseWindow(); else window.close(); } catch (e) {}
+    return;
+  }
   const modal = $('#friends-modal');
   if (modal) modal.classList.add('hidden');
   const results = $('#friends-search-results');

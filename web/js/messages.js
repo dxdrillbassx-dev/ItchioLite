@@ -9,6 +9,14 @@ let chatPeerId = null;
 let chatPollTimer = null;
 
 function openChat(userId, username) {
+  // Клиент: отдельное окно чата (кроме уже aux-окна чата)
+  if (window.IS_CLIENT && !window.IS_AUX && typeof catioOpenWindow === 'function') {
+    try { catioOpenWindow('chat', +userId, username || ''); return; } catch (e) {}
+  }
+  // Из окна «Друзья» (aux) тоже открываем чат отдельным окном
+  if (window.IS_CLIENT && window.IS_AUX && window.AUX_TYPE === 'friends' && typeof catioOpenWindow === 'function') {
+    try { catioOpenWindow('chat', +userId, username || ''); return; } catch (e) {}
+  }
   chatPeerId = +userId;
   const modal = $('#chat-modal');
   if (!modal) return;
@@ -35,6 +43,10 @@ function openChat(userId, username) {
 }
 
 function closeChat() {
+  if (window.IS_AUX && window.AUX_TYPE === 'chat') {
+    try { if (typeof catioCloseWindow === 'function') catioCloseWindow(); else window.close(); } catch (e) {}
+    return;
+  }
   const modal = $('#chat-modal');
   if (modal) modal.classList.add('hidden');
   chatPeerId = null;

@@ -350,3 +350,35 @@ window.forceShowView = function forceShowView(name, gameId) {
   window.__catioActiveView = null;
   showView(name, gameId, { force: true });
 };
+
+/* Desktop client: жёсткий запрет выделения (дубль к CSS, на случай SPA) */
+(function catioClientSelectLock() {
+  if (!window.IS_CLIENT) return;
+  function editable(t) {
+    if (!t) return false;
+    if (t.nodeType === 3) t = t.parentElement;
+    if (!t || !t.closest) return false;
+    return !!(t.closest && t.closest('input,textarea,select,[contenteditable],[contenteditable="true"],[role="textbox"]'));
+  }
+  function wipe() {
+    try {
+      var s = window.getSelection && window.getSelection();
+      if (!s || !s.rangeCount || s.isCollapsed) return;
+      if (editable(s.anchorNode)) return;
+      s.removeAllRanges();
+    } catch (e) {}
+  }
+  document.addEventListener('selectstart', function (e) {
+    if (editable(e.target)) return;
+    e.preventDefault();
+  }, true);
+  document.addEventListener('dragstart', function (e) {
+    if (editable(e.target)) return;
+    e.preventDefault();
+  }, true);
+  document.addEventListener('selectionchange', wipe, true);
+  document.addEventListener('mouseup', wipe, true);
+  document.addEventListener('mousemove', function (e) {
+    if (e.buttons) wipe();
+  }, true);
+})();

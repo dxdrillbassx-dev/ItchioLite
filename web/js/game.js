@@ -242,7 +242,7 @@ function renderGamePage(wrap, data) {
         <div class="gp-main">
           <div class="gp-meta-card">
             ${releaseLabel ? `<p class="gp-meta-strong">${escapeHtml(releaseLabel)}</p>` : ''}
-            ${publisher ? `<p class="gp-meta-muted">Издатель ${g.publisher_id ? `<button type="button" class="gp-publisher-link" data-pub-id="${g.publisher_id}">${escapeHtml(publisher)}</button>` : escapeHtml(publisher)}</p>` : ''}
+            ${publisher ? `<p class="gp-meta-muted">Издатель ${(+g.publisher_id > 0) ? `<button type="button" class="gp-publisher-link" data-pub-id="${+g.publisher_id}">${escapeHtml(publisher)}</button>` : escapeHtml(publisher)}</p>` : ''}
             ${!releaseLabel && !publisher ? `<p class="gp-meta-muted">${escapeHtml(g.genre || 'Игра')}</p>` : ''}
           </div>
 

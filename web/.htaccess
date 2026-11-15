@@ -1,0 +1,12 @@
+# CATio error pages
+# Пути относительно DocumentRoot. Если папка не itch-steam-like —
+# поправь префикс или используй ErrorDocument 404 /404.html при корневом хосте.
+
+Options -Indexes
+
+ErrorDocument 404 /itch-steam-like/404.html
+ErrorDocument 500 /itch-steam-like/500.html
+ErrorDocument 503 /itch-steam-like/offline.html
+
+# На всякий случай не кэшируем error-страницы через PHP-обёртку не нужно —
+# статика отдаётся как есть.

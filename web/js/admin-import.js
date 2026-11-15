@@ -7,6 +7,51 @@ window.WS_API = window.WS_API || 'api/workshop.php';
 window.STEAM_API = window.STEAM_API || '';
 window.GAME_PACK_API = window.GAME_PACK_API || 'api/game_pack.php';
 
+/** Превью картинки в карточке публикации (cover/banner/logo/icon). */
+window.setPubPreviewImg = function setPubPreviewImg(previewId, url) {
+  const el = document.getElementById(previewId);
+  if (!el) return;
+  if (!url) {
+    el.style.backgroundImage = '';
+    el.classList.remove('has-img');
+    const img0 = el.querySelector && el.querySelector('img');
+    if (img0) img0.removeAttribute('src');
+    return;
+  }
+  const u = String(url);
+  el.style.backgroundImage = 'url(' + JSON.stringify(u) + ')';
+  el.classList.add('has-img');
+  let img = el.querySelector && el.querySelector('img');
+  if (img) img.src = u;
+};
+
+/** Привязка file input → превью. */
+window.initPublishFilePreviews = function initPublishFilePreviews(root) {
+  const scope = root && root.querySelector ? root : document;
+  const pairs = [
+    ['sg-cover', 'sg-cover-preview'],
+    ['sg-banner', 'sg-banner-preview'],
+    ['sg-logo', 'sg-logo-preview'],
+    ['sg-icon', 'sg-icon-preview'],
+  ];
+  pairs.forEach(function (pair) {
+    const inputId = pair[0], prevId = pair[1];
+    const input = (scope.getElementById ? scope.getElementById(inputId) : null) || document.getElementById(inputId);
+    if (!input || input.dataset.previewBound === '1') return;
+    input.dataset.previewBound = '1';
+    input.addEventListener('change', function () {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      if (typeof window.setPubPreviewImg === 'function') window.setPubPreviewImg(prevId, url);
+      const nameEl = document.getElementById(inputId + '-name') || document.getElementById(prevId.replace('-preview', '-name'));
+      if (nameEl) nameEl.textContent = f.name || 'файл выбран';
+    });
+  });
+};
+
+
+
 /* CATio — export progress modal + Steam/classic import */
 
 // ===== Модалка прогресса экспорта =====
@@ -1657,19 +1702,26 @@ async function loadAdminPending() {
     const parts = [];
     // Единый список как уведомления: тип сразу в карточке + 3 квадратные кнопки
     if (games.length) {
-      parts.push(games.map(g => `
-        <div class="admin-pending-item" data-kind="game" data-id="${g.id}" role="button" tabindex="0">
+      parts.push(games.map(g => {
+        const ban = (g.banner_url || g.cover_url || '').trim();
+        const banUrl = ban ? (typeof bustUrl === 'function' ? bustUrl(ban) : ban) : '';
+        const banAttr = banUrl
+          ? ' style="--row-banner:url(' + JSON.stringify(banUrl) + ')"'
+          : '';
+        return `
+        <div class="admin-pending-item${banUrl ? ' has-banner' : ''}" data-kind="game" data-id="${g.id}" data-title="${escapeHtml(g.title || '')}" data-submitter="${escapeHtml(g.submitter || '')}" role="button" tabindex="0"${banAttr}>
           ${adminCoverHtml(g.cover_url ? bustUrl(g.cover_url) : '', 'game')}
           <div style="flex:1;min-width:0">
             <div class="t"><span class="admin-pending-type is-game">Игра</span>${escapeHtml(g.title)}</div>
             <div class="s">${escapeHtml(g.submitter || '—')} · ${escapeHtml(g.genre || '')}</div>
           </div>
           ${adminPendingActionsHtml({ kind: 'game', id: g.id, title: g.title || '' })}
-        </div>`).join(''));
+        </div>`;
+      }).join(''));
     }
     if (builds.length) {
       parts.push(builds.map(b => `
-        <div class="admin-pending-item admin-pending-build" data-kind="build" data-id="${b.id}">
+        <div class="admin-pending-item admin-pending-build" data-kind="build" data-id="${b.id}" data-title="${escapeHtml(b.game_title || '')}" data-submitter="${escapeHtml(b.submitter || b.author_name || '')}">
           ${adminCoverHtml(b.cover_url ? bustUrl(b.cover_url) : '', 'build')}
           <div style="flex:1;min-width:0">
             <div class="t"><span class="admin-pending-type is-build">Версия</span>${escapeHtml(b.game_title || 'Игра')} <span style="opacity:.75;font-weight:500">v${escapeHtml(b.version || '')}</span></div>
@@ -1713,6 +1765,7 @@ async function loadAdminPending() {
         </div>`).join(''));
     }
     list.innerHTML = parts.join('');
+    try { bindAdminModToolbar(); applyAdminModFilters(); } catch (e) {}
 
     $$('.admin-pending-item', list).forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -1975,7 +2028,7 @@ async function openAdminGame(id) {
         try { fillSysReq('#sg-sys-rec-fields', g.sys_req_rec); } catch (e) {}
         try { renderLangTable('#sg-lang-table', g.languages); } catch (e) {}
         const setPrev = (pid, url) => {
-          if (typeof setPubPreviewImg === 'function') setPubPreviewImg(pid, url || '');
+          if (typeof window.setPubPreviewImg === 'function') window.setPubPreviewImg(pid, url || '');
         };
         setPrev('sg-cover-preview', g.cover_url || g.cover_src);
         setPrev('sg-banner-preview', g.banner_url);
@@ -2071,6 +2124,56 @@ async function openAdminGame(id) {
 }
 
 
+
+
+function applyAdminModFilters() {
+  const list = document.getElementById('admin-pending-list');
+  if (!list) return;
+  const q = ((document.getElementById('admin-mod-search') || {}).value || '').trim().toLowerCase();
+  const filter = ((document.getElementById('admin-mod-filter') || {}).value || 'all');
+  let visible = 0;
+  list.querySelectorAll('.admin-pending-item').forEach(function (el) {
+    const kind = (el.getAttribute('data-kind') || '').toLowerCase();
+    const title = (el.getAttribute('data-title') || el.textContent || '').toLowerCase();
+    const sub = (el.getAttribute('data-submitter') || '').toLowerCase();
+    let ok = true;
+    if (filter && filter !== 'all' && kind !== filter) ok = false;
+    if (ok && q) {
+      ok = title.indexOf(q) !== -1 || sub.indexOf(q) !== -1 || kind.indexOf(q) !== -1;
+    }
+    el.style.display = ok ? '' : 'none';
+    if (ok) visible++;
+  });
+  let empty = list.querySelector('.admin-mod-filter-empty');
+  if (!visible && list.querySelector('.admin-pending-item')) {
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'friends-empty admin-mod-filter-empty';
+      empty.textContent = 'Ничего не найдено';
+      list.appendChild(empty);
+    }
+  } else if (empty) {
+    empty.remove();
+  }
+}
+
+function bindAdminModToolbar() {
+  const search = document.getElementById('admin-mod-search');
+  const filter = document.getElementById('admin-mod-filter');
+  if (search && !search.dataset.bound) {
+    search.dataset.bound = '1';
+    let t = null;
+    search.addEventListener('input', function () {
+      clearTimeout(t);
+      t = setTimeout(applyAdminModFilters, 180);
+    });
+  }
+  if (filter && !filter.dataset.bound) {
+    filter.dataset.bound = '1';
+    filter.addEventListener('change', applyAdminModFilters);
+  }
+}
+
 async function loadAdminUsers() {
   const list = document.getElementById('admin-users-list');
   if (!list) return;
@@ -2104,9 +2207,9 @@ async function loadAdminUsers() {
         const ts = new Date(String(u.created_at).replace(' ', 'T')).getTime();
         if (ts && (Date.now() - ts) < 30 * 86400 * 1000) { roleLabel = 'Новичок'; roleClass = 'is-newbie'; }
       }
-      const banner = (u.banner_url || '').trim();
+            const banner = (u.banner_url || '').trim();
       const bannerAttr = banner
-        ? ' style="--user-banner:url(\'' + String(banner).replace(/'/g, '%27') + '\')"'
+        ? ' style="--row-banner:url(' + JSON.stringify(banner) + ')"'
         : '';
       const icoUser = (typeof icon === 'function' ? icon('user', 16) : '');
       const icoEdit = (typeof icon === 'function' ? (icon('edit', 16) || icon('pencil', 16) || icon('settings', 16)) : '');
@@ -2419,7 +2522,7 @@ function applyGamePackToSubmitForm(data) {
   };
   const setPreview = (previewId, url, nameId, label) => {
     if (!url) return;
-    if (typeof setPubPreviewImg === 'function') setPubPreviewImg(previewId, url);
+    if (typeof window.setPubPreviewImg === 'function') window.setPubPreviewImg(previewId, url);
     if (nameId) {
       const n = document.getElementById(nameId);
       if (n) n.textContent = label || url.split('/').pop() || 'из пакета';
@@ -2710,3 +2813,454 @@ try {
     try { if (typeof initSubmitGame === 'function') initSubmitGame(); } catch (e) { console.warn(e); }
   });
 } catch (e) { console.warn('[admin-import] init', e); }
+
+
+
+
+/* ===== Админ: модалка пользователя (split: профиль | модерация) ===== */
+window.__adminUserCurrent = null;
+window.ADMIN_USER_BALANCE_MAX = 999999999;
+
+function adminUserFmtDate(v) {
+  if (!v) return '—';
+  try {
+    const d = new Date(String(v).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return String(v);
+    const pad = n => String(n).padStart(2, '0');
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  } catch (e) { return String(v); }
+}
+
+function adminUserRoleLabel(u) {
+  if (!u) return 'Игрок';
+  if (+u.is_banned) return 'Забанен';
+  if (u.role === 'admin') return 'Администратор';
+  if (u.role === 'developer') return 'Разработчик';
+  return 'Игрок';
+}
+
+function adminUserPaintHero(u) {
+  const bg = document.getElementById('admin-user-hero-bg');
+  const av = document.getElementById('admin-user-hero-avatar');
+  const nameEl = document.getElementById('admin-user-hero-name');
+  const roleEl = document.getElementById('admin-user-hero-role');
+  if (nameEl) nameEl.textContent = (u && u.username) || '—';
+  if (roleEl) roleEl.textContent = adminUserRoleLabel(u);
+
+  if (bg) {
+    const ban = (u && u.banner_url) ? String(u.banner_url) : '';
+    if (ban) {
+      const pos = (u.banner_pos || '50% 40%');
+      const zoom = Math.max(1, Math.min(3, parseFloat(u.banner_zoom) || 1));
+      const size = zoom <= 1.01 ? 'cover' : (Math.round(zoom * 100) + '%');
+      bg.classList.add('has-image');
+      bg.style.backgroundImage = 'url(' + JSON.stringify(ban) + ')';
+      bg.style.backgroundPosition = pos;
+      bg.style.backgroundSize = size;
+    } else {
+      bg.classList.remove('has-image');
+      bg.style.backgroundImage = '';
+      bg.style.backgroundPosition = '';
+      bg.style.backgroundSize = '';
+    }
+  }
+
+  if (av) {
+    const url = (u && u.avatar_url) ? String(u.avatar_url) : '';
+    const letter = ((u && u.username) || '?').trim().charAt(0).toUpperCase() || '?';
+    if (url) {
+      av.style.backgroundImage = 'url(' + JSON.stringify(url) + ')';
+      av.style.backgroundColor = 'transparent';
+      av.textContent = '';
+    } else {
+      av.style.backgroundImage = '';
+      av.style.backgroundColor = (u && u.avatar_color) || '#ef5b2c';
+      av.textContent = letter;
+    }
+  }
+}
+
+function adminUserClampBalanceInput(el) {
+  if (!el) return 0;
+  let raw = String(el.value || '').replace(/\D+/g, '');
+  if (raw === '') { el.value = ''; return 0; }
+  // trim leading zeros but keep single 0
+  raw = raw.replace(/^0+(?=\d)/, '');
+  let n = parseInt(raw, 10);
+  if (!isFinite(n) || n < 0) n = 0;
+  const max = window.ADMIN_USER_BALANCE_MAX || 999999999;
+  if (n > max) n = max;
+  el.value = String(n);
+  return n;
+}
+
+function adminUserBindBalance() {
+  const el = document.getElementById('admin-user-balance');
+  if (!el || el.dataset.boundBal === '1') return;
+  el.dataset.boundBal = '1';
+  el.addEventListener('beforeinput', function (e) {
+    if (e.inputType && e.inputType.indexOf('insert') === 0 && e.data && /\D/.test(e.data)) {
+      e.preventDefault();
+    }
+  });
+  el.addEventListener('input', function () {
+    const start = el.selectionStart;
+    const before = el.value;
+    adminUserClampBalanceInput(el);
+    // keep caret reasonable
+    try { el.setSelectionRange(el.value.length, el.value.length); } catch (err) {}
+  });
+  el.addEventListener('blur', function () {
+    if (el.value === '') el.value = '0';
+    adminUserClampBalanceInput(el);
+  });
+  el.addEventListener('paste', function (e) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+    el.value = String(text).replace(/\D+/g, '');
+    adminUserClampBalanceInput(el);
+  });
+}
+
+function adminUserBindFilePreviews() {
+  const av = document.getElementById('admin-user-avatar');
+  const bn = document.getElementById('admin-user-banner');
+  if (av && av.dataset.boundAdminPrev !== '1') {
+    av.dataset.boundAdminPrev = '1';
+    av.addEventListener('change', function () {
+      const f = av.files && av.files[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      const heroAv = document.getElementById('admin-user-hero-avatar');
+      if (heroAv) {
+        heroAv.style.backgroundImage = 'url(' + JSON.stringify(url) + ')';
+        heroAv.style.backgroundColor = 'transparent';
+        heroAv.textContent = '';
+      }
+    });
+  }
+  if (bn && bn.dataset.boundAdminPrev !== '1') {
+    bn.dataset.boundAdminPrev = '1';
+    bn.addEventListener('change', function () {
+      const f = bn.files && bn.files[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      const bg = document.getElementById('admin-user-hero-bg');
+      if (bg) {
+        bg.classList.add('has-image');
+        bg.style.backgroundImage = 'url(' + JSON.stringify(url) + ')';
+        bg.style.backgroundSize = 'cover';
+        bg.style.backgroundPosition = 'center 35%';
+      }
+    });
+  }
+}
+
+function adminUserUpdateBanState(u) {
+  const el = document.getElementById('admin-user-ban-state');
+  if (!el) return;
+  if (+(u && u.is_banned)) {
+    let s = 'Статус: <b style="color:#ff8a9a">забанен</b>';
+    if (u.banned_until) s += ' до ' + adminUserFmtDate(u.banned_until);
+    else s += ' навсегда';
+    if (u.ban_reason) s += '<br>Причина: ' + escapeHtml(u.ban_reason);
+    if (u.banned_by_name) s += '<br>Кто: ' + escapeHtml(u.banned_by_name);
+    el.innerHTML = s;
+  } else {
+    el.innerHTML = 'Статус: <b style="color:#9dffa8">активен</b>';
+  }
+}
+
+
+
+async function adminUserLoadPublisherSelect() {
+  const sel = document.getElementById('admin-user-pub-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— выберите —</option>';
+  try {
+    // список всех издательств через mine текущего админа неполный —
+    // берём for_user целевого + mine админа; для аддона используем search list via for_user empty + mine force
+    let pubs = [];
+    try {
+      const all = await fetchJSON((window.PUB_API || 'api/publishers.php') + '?action=list_all');
+      if (all && all.ok) pubs = all.publishers || [];
+      else {
+        const mine = await fetchJSON((window.PUB_API || 'api/publishers.php') + '?action=mine');
+        if (mine && mine.ok) pubs = mine.publishers || [];
+      }
+    } catch (e) {
+      try {
+        const mine = await fetchJSON((window.PUB_API || 'api/publishers.php') + '?action=mine');
+        if (mine && mine.ok) pubs = mine.publishers || [];
+      } catch (e2) {}
+    }
+    // unique by id
+    const map = {};
+    pubs.forEach(p => { map[p.id] = p; });
+    // also try listing from for_user of target to show membership
+    const uid = +(document.getElementById('admin-user-id') || {}).value || 0;
+    if (uid) {
+      try {
+        const fu = await fetchJSON((window.PUB_API || 'api/publishers.php') + '?action=for_user&user_id=' + uid);
+        if (fu && fu.ok) {
+          (fu.publishers || []).forEach(p => { map[p.id] = Object.assign({}, map[p.id] || {}, p); });
+          adminUserRenderUserPubs(fu.publishers || []);
+        } else {
+          adminUserRenderUserPubs([]);
+        }
+      } catch (e) {
+        adminUserRenderUserPubs([]);
+      }
+    }
+    Object.values(map).sort((a,b) => String(a.name||'').localeCompare(String(b.name||''))).forEach(p => {
+      const o = document.createElement('option');
+      o.value = String(p.id);
+      o.textContent = p.name || ('#' + p.id);
+      sel.appendChild(o);
+    });
+  } catch (e) {
+    sel.innerHTML = '<option value="">— ошибка загрузки —</option>';
+  }
+}
+
+function adminUserRenderUserPubs(list) {
+  const box = document.getElementById('admin-user-pubs-list');
+  if (!box) return;
+  if (!list || !list.length) {
+    box.innerHTML = '<div class="pub-hint">Не состоит в издательствах</div>';
+    return;
+  }
+  box.innerHTML = list.map(p => {
+    return '<div class="admin-user-pub-chip" data-pid="' + p.id + '">' +
+      '<span>' + escapeHtml(p.name || ('#' + p.id)) + ' · ' + escapeHtml(p.role || 'member') + '</span>' +
+      '<button type="button" data-rm-pub="' + p.id + '" title="Исключить">×</button>' +
+    '</div>';
+  }).join('');
+  box.querySelectorAll('[data-rm-pub]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pid = +btn.dataset.rmPub;
+      const uid = +(document.getElementById('admin-user-id') || {}).value;
+      if (!pid || !uid) return;
+      try {
+        const data = await fetchJSON((window.PUB_API || 'api/publishers.php') + '?action=admin_remove_member', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ publisher_id: pid, user_id: uid, csrf_token: window.CSRF_TOKEN || '' }),
+        });
+        if (!data.ok) throw new Error(data.error || 'Ошибка');
+        toast('Исключён из издательства');
+        adminUserLoadPublisherSelect();
+      } catch (err) {
+        toast(err.message || 'Ошибка');
+      }
+    });
+  });
+}
+
+async function adminUserAddToPublisher() {
+  const pid = +(document.getElementById('admin-user-pub-select') || {}).value;
+  const uid = +(document.getElementById('admin-user-id') || {}).value;
+  if (!pid) { toast('Выберите издательство'); return; }
+  if (!uid) return;
+  try {
+    const data = await fetchJSON((window.PUB_API || 'api/publishers.php') + '?action=admin_add_member', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publisher_id: pid, user_id: uid, role: 'member', csrf_token: window.CSRF_TOKEN || '' }),
+    });
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    toast('Добавлен в издательство');
+    adminUserLoadPublisherSelect();
+  } catch (err) {
+    toast(err.message || 'Ошибка');
+  }
+}
+
+async function openAdminUserModal(ref) {
+  const id = +(ref && ref.id);
+  if (!id) return;
+  const modal = document.getElementById('admin-user-modal');
+  if (!modal) { toast('Модалка пользователя не найдена'); return; }
+
+  adminUserBindFilePreviews();
+  adminUserBindBalance();
+  modal.classList.remove('hidden');
+  const status = document.getElementById('admin-user-status');
+  if (status) status.textContent = 'Загрузка…';
+
+  try {
+    const api = window.ADMIN_API || 'api/admin.php';
+    const data = await fetchJSON(api + '?action=get_user&id=' + id);
+    if (!data.ok || !data.user) throw new Error(data.error || 'Не найден');
+    const u = data.user;
+    window.__adminUserCurrent = u;
+
+    const set = (i, v) => { const el = document.getElementById(i); if (el) el.value = v == null ? '' : String(v); };
+    set('admin-user-id', u.id);
+    set('admin-user-id-view', u.id);
+    set('admin-user-name', u.username || '');
+    set('admin-user-email', u.email || '—');
+    set('admin-user-friend-code', u.friend_code || '—');
+    set('admin-user-role', u.role || 'user');
+    set('admin-user-balance', u.balance != null ? String(Math.max(0, Math.min(window.ADMIN_USER_BALANCE_MAX, +u.balance || 0))) : '0');
+    set('admin-user-created', adminUserFmtDate(u.created_at));
+    set('admin-user-seen', adminUserFmtDate(u.last_seen));
+    set('admin-user-ban-reason', u.ban_reason || '');
+    set('admin-user-ban-days', '0');
+
+    const avIn = document.getElementById('admin-user-avatar');
+    const bnIn = document.getElementById('admin-user-banner');
+    if (avIn) avIn.value = '';
+    if (bnIn) bnIn.value = '';
+
+    adminUserPaintHero(u);
+    adminUserUpdateBanState(u);
+    try { adminUserLoadPublisherSelect(); } catch (e) {}
+
+    const title = document.getElementById('admin-user-title');
+    if (title) title.textContent = 'Пользователь: ' + (u.username || ('#' + u.id));
+    if (status) status.textContent = '';
+  } catch (err) {
+    if (status) status.textContent = err.message || 'Ошибка';
+    toast(err.message || 'Ошибка загрузки');
+  }
+}
+window.openAdminUserModal = openAdminUserModal;
+
+function closeAdminUserModal() {
+  document.getElementById('admin-user-modal')?.classList.add('hidden');
+  window.__adminUserCurrent = null;
+}
+
+async function adminUserUploadMedia(userId, kind, file) {
+  if (!file) return null;
+  const fd = new FormData();
+  fd.append('user_id', String(userId));
+  fd.append('kind', kind);
+  fd.append('file', file);
+  fd.append('csrf_token', window.CSRF_TOKEN || '');
+  const api = window.ADMIN_API || 'api/admin.php';
+  const res = await fetch(api + '?action=upload_user_media', { method: 'POST', body: fd, credentials: 'same-origin' });
+  const data = await (typeof readApiJson === 'function' ? readApiJson(res) : res.json());
+  if (!data || !data.ok) throw new Error((data && data.error) || 'Ошибка загрузки файла');
+  return data.url || null;
+}
+
+async function adminUserSave() {
+  const id = +(document.getElementById('admin-user-id') || {}).value;
+  if (!id) return;
+  const status = document.getElementById('admin-user-status');
+  const btn = document.getElementById('admin-user-save');
+  const balEl = document.getElementById('admin-user-balance');
+  const balance = adminUserClampBalanceInput(balEl);
+  if (btn) btn.disabled = true;
+  try {
+    const api = window.ADMIN_API || 'api/admin.php';
+    const body = {
+      user_id: id,
+      username: (document.getElementById('admin-user-name') || {}).value || '',
+      role: (document.getElementById('admin-user-role') || {}).value || 'user',
+      balance: balance,
+      csrf_token: window.CSRF_TOKEN || '',
+    };
+    const data = await fetchJSON(api + '?action=update_user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!data.ok) throw new Error(data.error || 'Ошибка сохранения');
+
+    const avFile = (document.getElementById('admin-user-avatar') || {}).files?.[0];
+    const bnFile = (document.getElementById('admin-user-banner') || {}).files?.[0];
+    if (avFile) await adminUserUploadMedia(id, 'avatar', avFile);
+    if (bnFile) await adminUserUploadMedia(id, 'banner', bnFile);
+
+    toast('Сохранено');
+    if (status) status.textContent = 'Сохранено';
+    try { loadAdminUsers(); } catch (e) {}
+    await openAdminUserModal({ id: id });
+  } catch (err) {
+    toast(err.message || 'Ошибка');
+    if (status) status.textContent = err.message || 'Ошибка';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function adminUserBan() {
+  const id = +(document.getElementById('admin-user-id') || {}).value;
+  if (!id) return;
+  const reason = ((document.getElementById('admin-user-ban-reason') || {}).value || '').trim();
+  let days = +(document.getElementById('admin-user-ban-days') || {}).value || 0;
+  if (days < 0) days = 0;
+  if (days > 3650) days = 3650;
+  if (!reason) { toast('Укажите причину бана'); return; }
+  try {
+    const api = window.ADMIN_API || 'api/admin.php';
+    const data = await fetchJSON(api + '?action=ban', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: id, reason: reason, days: days, csrf_token: window.CSRF_TOKEN || '' }),
+    });
+    if (!data.ok) throw new Error(data.error || 'Ошибка бана');
+    toast(days > 0 ? ('Бан на ' + days + ' дн.') : 'Бан навсегда');
+    await openAdminUserModal({ id: id });
+    try { loadAdminUsers(); } catch (e) {}
+  } catch (err) {
+    toast(err.message || 'Ошибка');
+  }
+}
+
+async function adminUserUnban() {
+  const id = +(document.getElementById('admin-user-id') || {}).value;
+  if (!id) return;
+  try {
+    const api = window.ADMIN_API || 'api/admin.php';
+    const data = await fetchJSON(api + '?action=unban', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: id, csrf_token: window.CSRF_TOKEN || '' }),
+    });
+    if (!data.ok) throw new Error(data.error || 'Ошибка');
+    toast('Бан снят');
+    await openAdminUserModal({ id: id });
+    try { loadAdminUsers(); } catch (e) {}
+  } catch (err) {
+    toast(err.message || 'Ошибка');
+  }
+}
+
+function initAdminUserModalControls() {
+  if (window.__adminUserModalBound) return;
+  window.__adminUserModalBound = true;
+  document.querySelectorAll('[data-close-admin-user]').forEach(el => {
+    el.addEventListener('click', closeAdminUserModal);
+  });
+  document.getElementById('admin-user-save')?.addEventListener('click', adminUserSave);
+  document.getElementById('admin-user-ban')?.addEventListener('click', adminUserBan);
+  document.getElementById('admin-user-unban')?.addEventListener('click', adminUserUnban);
+  document.getElementById('admin-user-btn-edit-profile')?.addEventListener('click', () => {
+    document.getElementById('admin-user-avatar')?.click();
+  });
+  document.getElementById('admin-user-btn-edit-banner')?.addEventListener('click', () => {
+    document.getElementById('admin-user-banner')?.click();
+  });
+  document.getElementById('admin-user-pub-add')?.addEventListener('click', adminUserAddToPublisher);
+  document.getElementById('admin-user-open-profile')?.addEventListener('click', () => {
+    const u = window.__adminUserCurrent;
+    if (!u) return;
+    if (typeof openProfile === 'function') {
+      try { openProfile(u.id); return; } catch (e) {}
+    }
+    location.href = '?view=profile&user=' + encodeURIComponent(u.id) + (window.IS_CLIENT ? '&client=1' : '');
+  });
+  adminUserBindFilePreviews();
+  adminUserBindBalance();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAdminUserModalControls);
+} else {
+  try { initAdminUserModalControls(); } catch (e) {}
+}
+

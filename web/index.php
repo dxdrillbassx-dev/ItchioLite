@@ -6,6 +6,10 @@ require_once __DIR__ . '/assets/icons/icon.php';
 getDB();
 
 $isClient = isset($_GET['client']) && $_GET['client'] == '1';
+$aux = isset($_GET['aux']) ? preg_replace('/[^a-z]/', '', strtolower((string)$_GET['aux'])) : '';
+$isAux = ($aux === 'friends' || $aux === 'chat');
+$auxPeer = isset($_GET['peer']) ? (int)$_GET['peer'] : 0;
+
 $currentView = isset($_GET['view']) ? $_GET['view'] : 'home';
 // Выход по ссылке с экрана бана
 if (isset($_GET['logout']) && $_GET['logout'] == '1') {
@@ -153,7 +157,7 @@ if ($isAuthorized) {
 
   <link rel="stylesheet" href="css/admin-users.css?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>">
 </head>
-<body class="<?php echo ($isClient ? 'client' : 'web') . ($isAuthorized ? '' : ' guest'); ?>">
+<body class="<?php echo ($isClient ? 'client' : 'web') . ($isAuthorized ? '' : ' guest') . (!empty($isAux) ? ' aux aux-' . htmlspecialchars($aux, ENT_QUOTES, 'UTF-8') : ''); ?>">
   <div id="app">
     <?php if ($isClient && $isAuthorized): ?>
     <!-- ===== САЙДБАР (как в Hydra) — только в десктоп-клиенте ===== -->
@@ -1397,6 +1401,9 @@ if ($isAuthorized) {
 
   <script>
     window.IS_CLIENT = <?= $isClient ? 'true' : 'false' ?>;
+    window.IS_AUX = <?= !empty($isAux) ? 'true' : 'false' ?>;
+    window.AUX_TYPE = <?= json_encode($aux ?? '', JSON_UNESCAPED_UNICODE) ?>;
+    window.AUX_PEER = <?= (int)($auxPeer ?? 0) ?>;
     window.CSRF_TOKEN = '<?php echo $csrfToken; ?>';
     window.AUTH_STATE = <?php echo json_encode($auth); ?>;
     window.FORCE_AUTH_VIEW = <?= $isAuthorized ? 'false' : 'true' ?>;
@@ -1618,5 +1625,41 @@ function socialAuth(provider) {
   <script src="js/catio_fixes.js?v=<?php echo isset($assetVer) ? $assetVer : time(); ?>"></script>
 
 <?php require __DIR__ . '/partials/modals.php'; ?>
+
+<script>
+(function () {
+  if (!window.IS_AUX) return;
+  document.documentElement.classList.add('aux');
+  if (window.AUX_TYPE) document.documentElement.classList.add('aux-' + window.AUX_TYPE);
+  var tries = 0;
+  function boot() {
+    tries++;
+    try {
+      if (window.AUX_TYPE === 'friends') {
+        var m = document.getElementById('friends-modal');
+        if (m) {
+          m.classList.remove('hidden');
+          if (typeof openFriendsModal === 'function') openFriendsModal();
+          if (typeof loadFriendsList === 'function') loadFriendsList();
+          return;
+        }
+      }
+      if (window.AUX_TYPE === 'chat' && window.AUX_PEER) {
+        var c = document.getElementById('chat-modal');
+        if (c) {
+          c.classList.remove('hidden');
+          if (typeof openChat === 'function') openChat(window.AUX_PEER, '');
+          return;
+        }
+      }
+    } catch (e) { console.warn('aux boot', e); }
+    if (tries < 40) setTimeout(boot, 100);
+  }
+  setTimeout(boot, 0);
+  setTimeout(boot, 200);
+  setTimeout(boot, 600);
+})();
+</script>
+
 </body>
 </html>

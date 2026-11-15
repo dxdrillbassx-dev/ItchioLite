@@ -22,7 +22,8 @@ document.addEventListener('click', (e) => {
   const pl = e.target.closest && e.target.closest('.gp-publisher-link');
   if (pl) {
     e.preventDefault();
-    openPublisherPage(+pl.dataset.pubId);
+    const pid = +(pl.dataset.pubId || pl.getAttribute('data-pub-id') || 0);
+    if (pid > 0) openPublisherPage(pid);
   }
 });
 
@@ -140,7 +141,7 @@ window.openPubsListModal = async function openPubsListModal() {
   }
 
   try {
-    const fresh = await window.fetchMyPublishers(true);
+    const fresh = await window.fetchMyPublishers(true); // always from API/DB
     if (Array.isArray(fresh)) {
       pubs = fresh;
       window.__pendingPublishPublishers = pubs;
@@ -673,17 +674,27 @@ window.applyPublisherOptionsToSelect = function applyPublisherOptionsToSelect(se
     sel.add(opt);
   });
 
+  // Всегда доступен вариант «без издательства». Не авто-выбираем первое —
+  // иначе игра получает чужой publisher_id и клик ведёт не туда.
+  const empty = new Option('— без издательства —', '', false, false);
+  empty.dataset.avatar = '';
+  empty.dataset.kind = 'empty';
+  // empty уже мог быть добавлен для admin выше — не дублируем
+  let hasEmpty = false;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === '') { hasEmpty = true; break; }
+  }
+  if (!hasEmpty) {
+    // вставить первым
+    if (sel.options.length) sel.add(empty, sel.options[0]);
+    else sel.add(empty);
+  }
+
   const pref = prefer != null && prefer !== '' ? String(prefer) : '';
   if (pref && list.some(p => String(p.id) === pref)) {
     sel.value = pref;
-  } else if (!isAdmin && list.length >= 1) {
-    sel.value = String(list[0].id);
-  } else if (list.length === 1 && isAdmin) {
-    sel.value = String(list[0].id);
-  } else if (!isAdmin && list.length === 0) {
-    sel.value = '';
   } else {
-    sel.value = isAdmin ? '' : (list[0] ? String(list[0].id) : '');
+    sel.value = '';
   }
 
   const hid = document.getElementById('sg-publisher');
@@ -956,21 +967,37 @@ async function openPublisherPage(id, slug) {
     if (membersCountEl) membersCountEl.textContent = String(list.length);
     if (memEl) {
       const html = list.length ? list.map(m => {
-        const avStyle = m.avatar_url
-          ? ('background-image:url(' + JSON.stringify(m.avatar_url) + ')')
-          : ('background:' + (m.avatar_color || '#ef5b2c'));
-        const letter = m.avatar_url ? '' : escapeHtml((m.username || '?').slice(0, 1).toUpperCase());
+        let avUrl = (m.avatar_url || '').trim();
+        if (avUrl && typeof avatarUrlBust === 'function') {
+          try { avUrl = avatarUrlBust(avUrl, m.id); } catch (e) {}
+        }
+        // относительные пути → от корня сайта
+        if (avUrl && !/^https?:\/\//i.test(avUrl) && avUrl.charAt(0) !== '/') {
+          avUrl = avUrl.replace(/^\.\//, '');
+        }
+        const color = m.avatar_color || '#ef5b2c';
+        const letter = escapeHtml((m.username || m.avatar || '?').toString().slice(0, 1).toUpperCase());
         const role = m.role === 'owner' ? 'владелец' : 'участник';
-        return '<div class="hp-friend-row pub-member-row" data-username="' + escapeHtml(m.username) + '" data-id="' + m.id + '" role="button" tabindex="0">' +
-          '<div class="hp-friend-avatar" style="' + avStyle + '">' + letter + '</div>' +
-          '<div class="hp-friend-text">' +
-            '<div class="hp-friend-name">' + escapeHtml(m.username) + '</div>' +
-            '<div class="hp-friend-status">' + role + '</div>' +
+        const avInner = avUrl
+          ? ('<img class="pub-member-av-img" src="' + escapeHtml(avUrl) + '" alt="" width="36" height="36" '
+             + 'style="width:36px;height:36px;border-radius:10px;object-fit:cover;display:block" '
+             + 'onerror="this.style.display=\'none\';this.parentNode.style.background=\'' + color + '\';this.parentNode.textContent=\'' + letter + '\';" />')
+          : letter;
+        return '<div class="pub-member-row" data-username="' + escapeHtml(m.username || '') + '" data-id="' + m.id + '" role="button" tabindex="0">' +
+          '<div class="pub-member-av" style="width:36px;height:36px;min-width:36px;min-height:36px;border-radius:10px;flex-shrink:0;'
+          + 'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;color:#fff;'
+          + 'background:' + color + ';'
+          + (avUrl ? ('background-image:url(' + JSON.stringify(avUrl) + ');background-size:cover;background-position:center;') : '')
+          + '">' + avInner + '</div>' +
+          '<div class="pub-member-meta">' +
+            '<div class="pub-member-name">' + escapeHtml(m.username || '') + '</div>' +
+            '<div class="pub-member-role">' + role + '</div>' +
           '</div></div>';
       }).join('') : '<div class="settings-hint" style="padding:8px 6px">Нет участников</div>';
       // через setAccordionHTML — сохраняем .acc-inner для корректного схлопывания
       if (typeof setAccordionHTML === 'function') setAccordionHTML(memEl, html);
       else memEl.innerHTML = html;
+      // клики — ищем внутри body (в т.ч. .acc-inner)
       $$('.pub-member-row', memEl).forEach(r => {
         r.addEventListener('click', () => openUserProfile(r.dataset.username, r.dataset.id));
       });

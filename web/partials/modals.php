@@ -1227,51 +1227,120 @@
       <div class="submit-modal-head pub-modal-head">
         <div>
           <h2 id="admin-user-title">Редактирование пользователя</h2>
-          <p class="pub-modal-sub">Настройки профиля, оформление и управление доступом</p>
+          <p class="pub-modal-sub">Профиль слева · модерация справа</p>
         </div>
         <button type="button" class="pub-modal-close" id="admin-user-close" data-close-admin-user aria-label="Закрыть">
           <?= icon('x', 18) ?>
         </button>
       </div>
+
       <div class="submit-modal-body pub-modal-body admin-user-edit-body" id="admin-user-body">
         <input type="hidden" id="admin-user-id" value="" />
+        <input type="file" id="admin-user-avatar" class="pub-file-input" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+        <input type="file" id="admin-user-banner" class="pub-file-input" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
 
-        <section class="pub-section">
-          <div class="pub-section-head"><span class="pub-section-ico"><?= icon('user', 16) ?></span><h3>Основное</h3></div>
-          <div class="submit-grid">
-            <label class="settings-label"><span>Никнейм</span><input class="auth-input" type="text" id="admin-user-name" maxlength="32" /></label>
-            <label class="settings-label"><span>Роль</span>
-              <select class="auth-input" id="admin-user-role">
-                <option value="user">Игрок</option><option value="developer">Разработчик</option><option value="admin">Администратор</option>
-              </select>
-            </label>
-            <label class="settings-label"><span>Баланс (₽)</span><input class="auth-input" type="number" id="admin-user-balance" min="0" step="1" /></label>
-            <label class="settings-label"><span>Карма</span><input class="auth-input" type="number" id="admin-user-karma" step="1" /></label>
-            <label class="settings-label"><span>Цвет аватара</span><input class="auth-input admin-user-color-input" type="color" id="admin-user-color" value="#ef5b2c" /></label>
-          </div>
-        </section>
+        <div class="admin-user-split">
+          <!-- ===== ЛЕВАЯ ПОЛОВИНА: профиль ===== -->
+          <div class="admin-user-col admin-user-col--profile">
+            <div class="admin-user-hero" id="admin-user-hero">
+              <div class="admin-user-hero-bg" id="admin-user-hero-bg"></div>
+              <div class="admin-user-hero-content">
+                <div class="admin-user-hero-avatar" id="admin-user-hero-avatar"></div>
+                <div class="admin-user-hero-meta">
+                  <div class="admin-user-hero-name" id="admin-user-hero-name">—</div>
+                  <div class="admin-user-hero-role" id="admin-user-hero-role">Игрок</div>
+                </div>
+              </div>
+              <div class="admin-user-hero-actions">
+                <button type="button" class="hp-btn-edit" id="admin-user-btn-edit-profile">Редактировать профиль</button>
+                <button type="button" class="hp-btn-edit" id="admin-user-btn-edit-banner">Настроить баннер</button>
+              </div>
+            </div>
 
-        <section class="pub-section">
-          <div class="pub-section-head"><span class="pub-section-ico"><?= icon('image', 16) ?></span><h3>Оформление профиля</h3></div>
-          <div class="submit-grid">
-            <label class="settings-label"><span>Новый аватар</span><input class="auth-input" type="file" id="admin-user-avatar" accept="image/*" /></label>
-            <label class="settings-label"><span>Новая шапка профиля</span><input class="auth-input" type="file" id="admin-user-banner" accept="image/*" /></label>
-          </div>
-        </section>
+            <div class="admin-user-fields-split">
+              <div class="admin-user-fields-edit">
+                <div class="pub-section-head admin-user-mini-head">
+                  <span class="pub-section-ico"><?= icon('edit', 14) ?></span>
+                  <h3>Можно изменить</h3>
+                </div>
+                <label class="settings-label"><span>Никнейм</span>
+                  <input class="auth-input" type="text" id="admin-user-name" maxlength="32" autocomplete="off" />
+                </label>
+                <label class="settings-label"><span>Роль</span>
+                  <select class="auth-input" id="admin-user-role">
+                    <option value="user">Игрок</option>
+                    <option value="developer">Разработчик</option>
+                    <option value="admin">Администратор</option>
+                  </select>
+                </label>
+                <label class="settings-label"><span>Баланс (₽)</span>
+                  <input class="auth-input" type="text" inputmode="numeric" pattern="[0-9]*" id="admin-user-balance"
+                    maxlength="9" placeholder="0" autocomplete="off" />
+                </label>
+                <p class="pub-hint">Баланс: только цифры, от 0 до 999&nbsp;999&nbsp;999</p>
+                <label class="settings-label"><span>Добавить в издательство</span>
+                  <select class="auth-input" id="admin-user-pub-select">
+                    <option value="">— загрузка… —</option>
+                  </select>
+                </label>
+                <button type="button" class="hp-btn-edit" id="admin-user-pub-add" style="width:100%;margin-top:4px">Добавить в издательство</button>
+                <div id="admin-user-pubs-list" class="admin-user-pubs-list"></div>
+              </div>
 
-        <section class="pub-section admin-user-ban-section">
-          <div class="pub-section-head"><span class="pub-section-ico"><?= icon('shield', 16) ?></span><h3>Управление баном</h3></div>
-          <div class="submit-grid">
-            <label class="settings-label"><span>Причина бана</span><input class="auth-input" type="text" id="admin-user-ban-reason" placeholder="Нарушение правил…" /></label>
-            <label class="settings-label"><span>Срок (дней, 0 — навсегда)</span><input class="auth-input" type="number" id="admin-user-ban-days" min="0" value="0" /></label>
+              <div class="admin-user-fields-view">
+                <div class="pub-section-head admin-user-mini-head">
+                  <span class="pub-section-ico"><?= icon('eye', 14) ?></span>
+                  <h3>Только просмотр</h3>
+                </div>
+                <label class="settings-label"><span>ID</span>
+                  <input class="auth-input admin-user-readonly" type="text" id="admin-user-id-view" readonly tabindex="-1" />
+                </label>
+                <label class="settings-label"><span>Email</span>
+                  <input class="auth-input admin-user-readonly" type="text" id="admin-user-email" readonly tabindex="-1" />
+                </label>
+                <label class="settings-label"><span>Код друга</span>
+                  <input class="auth-input admin-user-readonly" type="text" id="admin-user-friend-code" readonly tabindex="-1" />
+                </label>
+                <label class="settings-label"><span>Регистрация</span>
+                  <input class="auth-input admin-user-readonly" type="text" id="admin-user-created" readonly tabindex="-1" />
+                </label>
+                <label class="settings-label"><span>Был в сети</span>
+                  <input class="auth-input admin-user-readonly" type="text" id="admin-user-seen" readonly tabindex="-1" />
+                </label>
+              </div>
+            </div>
           </div>
-          <p class="comment-hint" id="admin-user-status" aria-live="polite"></p>
-          <div class="admin-user-actions">
-            <button type="button" class="hp-btn-save" id="admin-user-save">Сохранить изменения</button>
-            <button type="button" class="btn-danger" id="admin-user-ban">Забанить</button>
-            <button type="button" class="hp-btn-edit" id="admin-user-unban">Снять бан</button>
+
+          <!-- ===== ПРАВАЯ ПОЛОВИНА: модерация ===== -->
+          <div class="admin-user-col admin-user-col--mod">
+            <section class="pub-section admin-user-ban-section" style="margin:0;height:100%;box-sizing:border-box">
+              <div class="pub-section-head">
+                <span class="pub-section-ico"><?= icon('shield', 16) ?></span>
+                <h3>Модерация</h3>
+              </div>
+              <p class="pub-hint" id="admin-user-ban-state">Статус: активен</p>
+              <label class="settings-label full"><span>Причина бана</span>
+                <input class="auth-input" type="text" id="admin-user-ban-reason" placeholder="Нарушение правил, токсичность, читы…" maxlength="512" />
+              </label>
+              <label class="settings-label"><span>Срок (дней, 0 = навсегда)</span>
+                <input class="auth-input" type="number" id="admin-user-ban-days" min="0" max="3650" value="0" />
+              </label>
+              <div class="admin-user-mod-actions">
+                <button type="button" class="btn-danger" id="admin-user-ban">Забанить</button>
+                <button type="button" class="hp-btn-edit" id="admin-user-unban">Снять бан</button>
+              </div>
+              <p class="comment-hint" id="admin-user-status" aria-live="polite"></p>
+              <p class="pub-hint" style="margin-top:auto">Сюда же позже можно добавить варны, заметки модератора, историю действий.</p>
+            </section>
           </div>
-        </section>
+        </div>
+      </div>
+
+      <div class="submit-modal-foot admin-user-foot">
+        <button type="button" class="hp-btn-edit" id="admin-user-open-profile" title="Открыть публичный профиль">Открыть профиль</button>
+        <div class="admin-user-foot-spacer"></div>
+        <button type="button" class="hp-btn-edit" data-close-admin-user>Отмена</button>
+        <button type="button" class="hp-btn-save" id="admin-user-save">Сохранить</button>
       </div>
     </div>
   </div>

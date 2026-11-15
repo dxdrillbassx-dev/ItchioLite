@@ -103,6 +103,30 @@ try {
             usort($rows, function ($a, $b) {
                 return strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
             });
+
+            // актуальные счётчики из БД (не из кэша клиента)
+            foreach ($rows as &$r) {
+                $pid = (int)($r['id'] ?? 0);
+                $r['members_count'] = 0;
+                $r['games_count'] = 0;
+                if ($pid <= 0) continue;
+                try {
+                    $stc = $pdo->prepare("SELECT COUNT(*) FROM publisher_members WHERE publisher_id = ?");
+                    $stc->execute([$pid]);
+                    $r['members_count'] = (int)$stc->fetchColumn();
+                } catch (Throwable $e) {
+                    $r['members_count'] = !empty($r['my_role']) ? 1 : 0;
+                }
+                try {
+                    $stg = $pdo->prepare("SELECT COUNT(*) FROM games WHERE publisher_id = ? AND is_published = 1 AND COALESCE(status,'published') NOT IN ('pending','rejected','draft')");
+                    $stg->execute([$pid]);
+                    $r['games_count'] = (int)$stg->fetchColumn();
+                } catch (Throwable $e) {
+                    $r['games_count'] = 0;
+                }
+            }
+            unset($r);
+
             jsonOut(['ok' => true, 'publishers' => $rows, 'user_id' => $uid, 'count' => count($rows)]);
             break;
         }
@@ -121,14 +145,44 @@ try {
             $p = $st->fetch();
             if (!$p) jsonOut(['ok'=>false,'error'=>'Не найдено'], 404);
             $ms = $pdo->prepare("
-                SELECT u.id, u.username, u.avatar_url, u.avatar_color, pm.role
+                SELECT u.id, u.username, u.avatar_url, u.avatar_color, u.avatar, pm.role
                 FROM publisher_members pm
                 JOIN users u ON u.id = pm.user_id
                 WHERE pm.publisher_id = ?
-                ORDER BY pm.role = 'owner' DESC, u.username ASC
+                ORDER BY FIELD(pm.role, 'owner', 'member') ASC, u.username ASC
             ");
             $ms->execute([(int)$p['id']]);
-            $p['members'] = $ms->fetchAll();
+            $p['members'] = $ms->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            // fallback: владелец из publishers.owner_id, если members пуст/без него
+            try {
+                $oid = (int)($p['owner_id'] ?? 0);
+                if ($oid > 0) {
+                    $has = false;
+                    foreach ($p['members'] as $m) {
+                        if ((int)$m['id'] === $oid) { $has = true; break; }
+                    }
+                    if (!$has) {
+                        $ou = $pdo->prepare("SELECT id, username, avatar_url, avatar_color, avatar FROM users WHERE id = ?");
+                        $ou->execute([$oid]);
+                        $orow = $ou->fetch(PDO::FETCH_ASSOC);
+                        if ($orow) {
+                            $orow['role'] = 'owner';
+                            array_unshift($p['members'], $orow);
+                            try {
+                                $pdo->prepare("INSERT IGNORE INTO publisher_members (publisher_id, user_id, role) VALUES (?,?, 'owner')")
+                                    ->execute([(int)$p['id'], $oid]);
+                            } catch (Throwable $e) {}
+                        }
+                    }
+                }
+            } catch (Throwable $e) {}
+            foreach ($p['members'] as &$m) {
+                $m['id'] = (int)$m['id'];
+                if (empty($m['avatar_url']) && !empty($m['avatar'])) {
+                    // legacy letter-only
+                }
+            }
+            unset($m);
             $viewerId = 0;
             try {
                 $meTmp = getCurrentUser();
@@ -369,6 +423,65 @@ try {
         }
 
         default:
+
+        
+        case 'list_all': {
+            requireAdmin();
+            $rows = [];
+            try {
+                $st = $pdo->query("SELECT id, name, slug, avatar_url, owner_id FROM publishers ORDER BY name ASC LIMIT 500");
+                $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable $e) {
+                jsonOut(['ok'=>false,'error'=>$e->getMessage()], 500);
+            }
+            jsonOut(['ok'=>true, 'publishers'=>$rows]);
+        }
+
+        case 'admin_add_member': {
+            $admin = requireAdmin();
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonOut(['ok'=>false,'error'=>'POST'], 405);
+            $body = jsonBody();
+            checkCsrf($body);
+            $pid = (int)($body['publisher_id'] ?? 0);
+            $uid = (int)($body['user_id'] ?? 0);
+            $role = ($body['role'] ?? 'member') === 'owner' ? 'owner' : 'member';
+            if ($pid <= 0 || $uid <= 0) jsonOut(['ok'=>false,'error'=>'publisher_id / user_id'], 400);
+            $chk = $pdo->prepare("SELECT id FROM publishers WHERE id = ?");
+            $chk->execute([$pid]);
+            if (!$chk->fetch()) jsonOut(['ok'=>false,'error'=>'Издательство не найдено'], 404);
+            $chkU = $pdo->prepare("SELECT id FROM users WHERE id = ?");
+            $chkU->execute([$uid]);
+            if (!$chkU->fetch()) jsonOut(['ok'=>false,'error'=>'Пользователь не найден'], 404);
+            $pdo->prepare("INSERT INTO publisher_members (publisher_id, user_id, role) VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE role = VALUES(role)")->execute([$pid, $uid, $role]);
+            jsonOut(['ok'=>true, 'publisher_id'=>$pid, 'user_id'=>$uid, 'role'=>$role]);
+        }
+
+        case 'admin_remove_member': {
+            $admin = requireAdmin();
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonOut(['ok'=>false,'error'=>'POST'], 405);
+            $body = jsonBody();
+            checkCsrf($body);
+            $pid = (int)($body['publisher_id'] ?? 0);
+            $uid = (int)($body['user_id'] ?? 0);
+            if ($pid <= 0 || $uid <= 0) jsonOut(['ok'=>false,'error'=>'publisher_id / user_id'], 400);
+            // не выкидывать единственного owner без передачи
+            try {
+                $st = $pdo->prepare("SELECT role FROM publisher_members WHERE publisher_id=? AND user_id=?");
+                $st->execute([$pid, $uid]);
+                $role = $st->fetchColumn();
+                if ($role === 'owner') {
+                    $c = $pdo->prepare("SELECT COUNT(*) FROM publisher_members WHERE publisher_id=? AND role='owner'");
+                    $c->execute([$pid]);
+                    if ((int)$c->fetchColumn() <= 1) {
+                        jsonOut(['ok'=>false,'error'=>'Нельзя удалить единственного владельца'], 400);
+                    }
+                }
+            } catch (Throwable $e) {}
+            $pdo->prepare("DELETE FROM publisher_members WHERE publisher_id=? AND user_id=?")->execute([$pid, $uid]);
+            jsonOut(['ok'=>true]);
+        }
+
             jsonOut(['ok'=>false,'error'=>'Unknown action'], 400);
     }
 } catch (Throwable $e) {

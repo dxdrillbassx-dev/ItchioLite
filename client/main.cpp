@@ -13,6 +13,7 @@
 #include <shellapi.h>
 #include <string>
 #include <vector>
+#include <list>
 #include <algorithm>
 #include <cctype>
 #include <thread>
@@ -60,12 +61,216 @@ a:hover{filter:brightness(1.1)}
 .hint{font-size:0.85rem;opacity:0.7;margin-top:14px}
 </style></head><body><div class="box">
 <div class="logo">C</div>
-<h1>404 — полка пуста</h1>
+<h1>Сервер не отвечает</h1>
 <p class="fun">Кот ушёл в запой и не отвечает на звонки.</p>
-<p>Сервер CATio временно недоступен.<br>Проверь, что Apache и MySQL запущены в XAMPP.</p>
+<p>Apache не доступен (или XAMPP не запущен).<br>Проверь оба модуля: Apache и MySQL.</p>
 <a onclick="catioRetry()">Попробовать снова</a>
 <p class="hint">Кот сам проверит сервер каждые 15 секунд</p>
 </div></body></html>)HTML";
+
+// JS: по умолчанию нельзя выделять текст как в браузере (исходники, весь UI).
+// Разрешено только в полях ввода. F12 (g_devMode) снимает ограничение.
+const char* SELECT_LOCK_JS = R"JS((function(){
+  // На каждый документ (init script) — свежий контекст. Повторный eval только обновляет режим.
+  if (window.__catioLockInit) {
+    try { if (window.__catioSetDevMode) window.__catioSetDevMode(!!window.__catioDevOn); } catch(e) {}
+    return;
+  }
+  window.__catioLockInit = true;
+  window.__catioDevOn = false;
+
+  function isEditable(t) {
+    if (!t) return false;
+    if (t.nodeType === 3) t = t.parentElement;
+    if (!t || !t.tagName) return false;
+    var tag = String(t.tagName).toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (t.isContentEditable) return true;
+    try {
+      if (t.closest && t.closest('input,textarea,select,[contenteditable="true"],[contenteditable=""],[contenteditable],[role="textbox"],.auth-form input,.search-field'))
+        return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function clearSel() {
+    try {
+      var sel = window.getSelection && window.getSelection();
+      if (sel && sel.rangeCount && !sel.isCollapsed) {
+        var a = sel.anchorNode;
+        if (isEditable(a)) return;
+        sel.removeAllRanges();
+      }
+    } catch (e) {}
+  }
+
+  function apply(on) {
+    window.__catioDevOn = !!on;
+    document.documentElement.classList.toggle('catio-nolock', !!on);
+    if (!on) clearSel();
+  }
+  window.__catioSetDevMode = apply;
+
+  function ensureStyle() {
+    var style = document.getElementById('catio-select-lock');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'catio-select-lock';
+      (document.head || document.documentElement).appendChild(style);
+    }
+    style.textContent = [
+      'html:not(.catio-nolock),',
+      'html:not(.catio-nolock) body,',
+      'html:not(.catio-nolock) body *{',
+      '-webkit-user-select:none!important;',
+      '-moz-user-select:none!important;',
+      '-ms-user-select:none!important;',
+      'user-select:none!important;',
+      '-webkit-touch-callout:none!important;',
+      '-webkit-user-drag:none!important',
+      '}',
+      'html:not(.catio-nolock) input,',
+      'html:not(.catio-nolock) textarea,',
+      'html:not(.catio-nolock) select,',
+      'html:not(.catio-nolock) [contenteditable],',
+      'html:not(.catio-nolock) [contenteditable="true"],',
+      'html:not(.catio-nolock) [contenteditable=""],',
+      'html:not(.catio-nolock) [role="textbox"],',
+      'html:not(.catio-nolock) .search-field input,',
+      'html:not(.catio-nolock) .side-lib-search,',
+      'html:not(.catio-nolock) .auth-form input{',
+      '-webkit-user-select:text!important;',
+      'user-select:text!important;',
+      '-webkit-user-drag:auto!important',
+      '}',
+      'html.catio-nolock,html.catio-nolock *{',
+      '-webkit-user-select:text!important;user-select:text!important',
+      '}'
+    ].join('');
+  }
+  ensureStyle();
+
+  // Ядро: браузер не даёт начать выделение
+  document.addEventListener('selectstart', function(e){
+    if (window.__catioDevOn) return;
+    if (isEditable(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  }, true);
+
+  document.addEventListener('dragstart', function(e){
+    if (window.__catioDevOn) return;
+    if (isEditable(e.target)) return;
+    e.preventDefault();
+    return false;
+  }, true);
+
+  // Если всё же выделили — сразу сбрасываем
+  document.addEventListener('selectionchange', function(){
+    if (window.__catioDevOn) return;
+    clearSel();
+  }, true);
+
+  document.addEventListener('mouseup', function(){
+    if (window.__catioDevOn) return;
+    clearSel();
+  }, true);
+
+  document.addEventListener('mousemove', function(e){
+    if (window.__catioDevOn) return;
+    if (e.buttons) clearSel();
+  }, true);
+
+  document.addEventListener('mousedown', function(e){
+    if (window.__catioDevOn) return;
+    if (isEditable(e.target)) return;
+    clearSel();
+  }, true);
+
+  document.addEventListener('contextmenu', function(e){
+    if (window.__catioDevOn) return;
+    if (isEditable(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  }, true);
+
+  document.addEventListener('keydown', function(e){
+    if (window.__catioDevOn) return;
+    var key = (e.key || '').toLowerCase();
+    var mod = e.ctrlKey || e.metaKey;
+    if (mod && key === 'a') {
+      if (isEditable(e.target)) return;
+      e.preventDefault();
+      clearSel();
+    }
+    if (mod && (key === 'u' || key === 's' || key === 'p')) e.preventDefault();
+    if (mod && e.shiftKey && (key === 'i' || key === 'j' || key === 'c')) e.preventDefault();
+  }, true);
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'F12') {
+      e.preventDefault();
+      e.stopPropagation();
+      try { if (window.catioToggleDev) window.catioToggleDev(); } catch (err) {}
+    }
+  }, true);
+
+  // Сайт мог выкинуть наш <style> при перерисовке — вернём
+  try {
+    var mo = new MutationObserver(function(){
+      if (!document.getElementById('catio-select-lock')) ensureStyle();
+    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+  } catch (e) {}
+
+  apply(false);
+})();)JS";
+
+const char* AUX_CHROME_JS = R"JS((function(){
+  try {
+    var q = (location.search||'')+(location.hash||'');
+    if (q.indexOf('aux=')<0 && !(document.body&&document.body.classList.contains('aux'))) return;
+    if (window.__catioAuxChrome) return; window.__catioAuxChrome=true;
+    var css = 'body.aux-friends .friends-modal-head,body.aux-friends #friends-close,body.aux-friends .friends-modal-close,body.aux-friends .friends-modal-title{display:none!important;height:0!important;overflow:hidden!important;padding:0!important;margin:0!important;border:0!important}'
+      +'body.aux-friends .friends-modal-box{border-radius:0!important;height:100%!important;max-height:none!important}'
+      +'body.aux-chat #chat-close,body.aux-chat .chat-modal-close{display:none!important;visibility:hidden!important;width:0!important;height:0!important;opacity:0!important;pointer-events:none!important}'
+      +'body.aux-chat .chat-modal-box{border-radius:0!important;height:100%!important;max-height:none!important}';
+    var s=document.createElement('style'); s.id='catio-aux-chrome'; s.textContent=css;
+    (document.head||document.documentElement).appendChild(s);
+    function hide(){
+      var a=document.querySelector('#friends-modal .friends-modal-head'); if(a) a.style.setProperty('display','none','important');
+      var b=document.getElementById('friends-close'); if(b) b.style.setProperty('display','none','important');
+      var c=document.getElementById('chat-close'); if(c){c.style.setProperty('display','none','important');c.hidden=true;}
+      document.querySelectorAll('#chat-modal .chat-modal-close').forEach(function(el){el.style.setProperty('display','none','important');el.hidden=true;});
+    }
+    hide(); setInterval(hide, 300);
+  } catch(e) {}
+})();)JS";
+
+const char* CLIENT_OPEN_PATCH_JS = R"JS((function(){
+  function patch(){
+    try {
+      if (!window.IS_CLIENT || window.IS_AUX) return;
+      if (typeof catioOpenWindow !== 'function') return;
+      if (window.__catioOpenPatched) return;
+      window.__catioOpenPatched = true;
+      var _f = window.openFriendsModal;
+      window.openFriendsModal = function(){
+        try { catioOpenWindow('friends'); return; } catch(e) {}
+        if (typeof _f === 'function') return _f.apply(this, arguments);
+      };
+      var _c = window.openChat;
+      window.openChat = function(userId, username){
+        try { catioOpenWindow('chat', +userId, username||''); return; } catch(e) {}
+        if (typeof _c === 'function') return _c.apply(this, arguments);
+      };
+    } catch(e) {}
+  }
+  patch(); setInterval(patch, 250);
+  document.addEventListener('DOMContentLoaded', patch);
+})();)JS";
 
 const int TOP_HEIGHT = 40;        // тонкий тайтлбар как в Hydra (лого + кнопки окна)
 const int ICON_SIZE_WIN = 10;     // иконки кнопок окна в тонкой полоске
@@ -94,6 +299,13 @@ const COLORREF COL_URL      = RGB(120, 110, 100);
 const COLORREF COL_DISABLED = RGB(80, 75, 70);
 const COLORREF COL_CLOSE_HOVER = RGB(196, 43, 28); // красный ховер крестика, как в Windows
 
+enum {
+    ID_BACK = 1, ID_FORWARD, ID_REFRESH,
+    ID_STORE, ID_LIBRARY, ID_COMMUNITY, ID_PROFILE,
+    ID_AVATAR,
+    ID_URL, ID_MIN, ID_MAX, ID_CLOSE
+};
+
 #define WM_CATIO_CHECK_DONE (WM_APP + 1)
 
 // Трей (как в Стиме): крестик/минус прячут окно, иконка живёт в трее
@@ -112,6 +324,168 @@ bool g_reallyQuit = false; // выход только через меню тре
 HWND g_hWnd = nullptr;
 HICON g_hLogo = nullptr;
 webview::webview* g_webview = nullptr;
+bool g_devMode = false;
+
+struct AuxWindow {
+    HWND hwnd = nullptr;
+    webview::webview* wv = nullptr;
+    std::string kind;
+    int peerId = 0;
+    int hoverBtn = 0;
+};
+std::list<AuxWindow> g_auxWindows;
+const wchar_t* AUX_CLASS = L"CATioAuxWindow";
+
+struct IconSet;
+extern IconSet g_icoMinimiz, g_icoMaximize, g_icoRestore, g_icoClose;
+void drawText(HDC, RECT, const wchar_t*, COLORREF, int, bool, UINT);
+void DrawIconCentered(HDC, const IconSet&, RECT, int, bool, bool);
+void toggleDevMode();
+void openAuxFromBind(const std::string& req);
+void openAuxWindow(const std::string& kind, int peerId, const std::string& titleUtf8);
+
+std::string buildAuxUrl(const std::string& kind, int peerId) {
+    std::string url = STORE_URL;
+    if (url.find('?') == std::string::npos) url += "?client=1";
+    url += "&aux=" + kind;
+    if (kind == "chat" && peerId > 0) url += "&peer=" + std::to_string(peerId);
+    return url;
+}
+void layoutAuxWebview(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    RECT rc; GetClientRect(hWnd, &rc);
+    int top = TOP_HEIGHT, w = std::max(1,(int)(rc.right-rc.left)), h = std::max(1,(int)(rc.bottom-rc.top-top));
+    HWND child = FindWindowExW(hWnd, nullptr, L"webview_widget", nullptr);
+    if (child) MoveWindow(child, 0, top, w, h, TRUE);
+    for (HWND c = GetWindow(hWnd, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) {
+        wchar_t cls[64]{}; GetClassNameW(c, cls, 64);
+        if (wcsstr(cls, L"webview") || wcsstr(cls, L"Chrome") || wcsstr(cls, L"Intermediate"))
+            MoveWindow(c, 0, top, w, h, TRUE);
+    }
+}
+void closeAuxWindow(HWND hwnd) {
+    for (auto it = g_auxWindows.begin(); it != g_auxWindows.end(); ++it) {
+        if (it->hwnd != hwnd) continue;
+        if (it->wv) { try { delete it->wv; } catch (...) {} it->wv = nullptr; }
+        HWND h = it->hwnd; it->hwnd = nullptr; g_auxWindows.erase(it);
+        if (h && IsWindow(h)) { SetWindowLongPtrW(h, GWLP_USERDATA, 0); DestroyWindow(h); }
+        return;
+    }
+}
+void closeAllAuxWindows() {
+    std::vector<HWND> hs; for (auto& a : g_auxWindows) if (a.hwnd) hs.push_back(a.hwnd);
+    for (HWND h : hs) closeAuxWindow(h);
+}
+LRESULT CALLBACK AuxWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    auto* aw = reinterpret_cast<AuxWindow*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+    switch (msg) {
+    case WM_ERASEBKGND: return 1;
+    case WM_PAINT: {
+        PAINTSTRUCT ps; HDC hdc = BeginPaint(hWnd, &ps);
+        RECT rc; GetClientRect(hWnd, &rc);
+        HBRUSH bg = CreateSolidBrush(COL_TABROW); RECT topR={0,0,rc.right,TOP_HEIGHT}; FillRect(hdc,&topR,bg); DeleteObject(bg);
+        HBRUSH body = CreateSolidBrush(COL_BG); RECT bodyR={0,TOP_HEIGHT,rc.right,rc.bottom}; FillRect(hdc,&bodyR,body); DeleteObject(body);
+        HPEN pen = CreatePen(PS_SOLID,1,COL_BORDER); HPEN op=(HPEN)SelectObject(hdc,pen);
+        MoveToEx(hdc,0,TOP_HEIGHT-1,nullptr); LineTo(hdc,rc.right,TOP_HEIGHT-1); SelectObject(hdc,op); DeleteObject(pen);
+        int logoY=(TOP_HEIGHT-STRIP_LOGO)/2, logoX=STRIP_MARGIN;
+        if (g_hLogo) { DrawIconEx(hdc,logoX,logoY,g_hLogo,STRIP_LOGO,STRIP_LOGO,0,nullptr,DI_NORMAL); logoX+=STRIP_LOGO+8; }
+        else {
+            HBRUSH br=CreateSolidBrush(COL_ACCENT); RECT box={logoX,logoY,logoX+STRIP_LOGO,logoY+STRIP_LOGO}; FillRect(hdc,&box,br); DeleteObject(br);
+            drawText(hdc,box,L"C",COL_BG,13,true,DT_CENTER); logoX+=STRIP_LOGO+8;
+        }
+        std::wstring label=L"CATio";
+        if (aw) { if (aw->kind=="friends") label=L"CATio — Друзья"; else if (aw->kind=="chat") label=L"CATio — Сообщения"; }
+        { RECT r={logoX,0,rc.right-WIN_BTN_W*3-8,TOP_HEIGHT}; drawText(hdc,r,label.c_str(),COL_TEXT_BRT,14,true,DT_LEFT); }
+        int hover = aw ? aw->hoverBtn : 0;
+        auto paintBtn=[&](const IconSet& ico,int id,int idx){
+            RECT r={rc.right-WIN_BTN_W*idx,0,rc.right-WIN_BTN_W*(idx-1),TOP_HEIGHT};
+            if (hover==id){ HBRUSH hb=CreateSolidBrush(id==ID_CLOSE?COL_CLOSE_HOVER:COL_HOVER); FillRect(hdc,&r,hb); DeleteObject(hb); }
+            DrawIconCentered(hdc,ico,r,ICON_SIZE_WIN,hover==id,true);
+        };
+        paintBtn(g_icoMinimiz,ID_MIN,3);
+        paintBtn(IsZoomed(hWnd)?g_icoRestore:g_icoMaximize,ID_MAX,2);
+        paintBtn(g_icoClose,ID_CLOSE,1);
+        EndPaint(hWnd,&ps); return 0;
+    }
+    case WM_SIZE: layoutAuxWebview(hWnd); InvalidateRect(hWnd,nullptr,FALSE); return 0;
+    case WM_TIMER: if (wParam==99){ KillTimer(hWnd,99); layoutAuxWebview(hWnd);} return 0;
+    case WM_MOUSEMOVE: {
+        int mx=GET_X_LPARAM(lParam), my=GET_Y_LPARAM(lParam); RECT rc; GetClientRect(hWnd,&rc);
+        int old=aw?aw->hoverBtn:0, now=0;
+        if (my>=0 && my<TOP_HEIGHT){ int rel=rc.right-mx; if(rel>0&&rel<=WIN_BTN_W) now=ID_CLOSE; else if(rel<=WIN_BTN_W*2) now=ID_MAX; else if(rel<=WIN_BTN_W*3) now=ID_MIN; }
+        if (aw && now!=old){ aw->hoverBtn=now; RECT top={rc.right-WIN_BTN_W*3,0,rc.right,TOP_HEIGHT}; InvalidateRect(hWnd,&top,FALSE); }
+        TRACKMOUSEEVENT tme{sizeof(tme),TME_LEAVE,hWnd,0}; TrackMouseEvent(&tme); return 0;
+    }
+    case WM_MOUSELEAVE:
+        if (aw && aw->hoverBtn){ aw->hoverBtn=0; RECT rc; GetClientRect(hWnd,&rc); RECT top={rc.right-WIN_BTN_W*3,0,rc.right,TOP_HEIGHT}; InvalidateRect(hWnd,&top,FALSE); }
+        return 0;
+    case WM_LBUTTONDOWN: {
+        int mx=GET_X_LPARAM(lParam), my=GET_Y_LPARAM(lParam); RECT rc; GetClientRect(hWnd,&rc);
+        if (my<TOP_HEIGHT){
+            int rel=rc.right-mx;
+            if (rel>0&&rel<=WIN_BTN_W){ PostMessageW(hWnd,WM_CLOSE,0,0); return 0; }
+            if (rel<=WIN_BTN_W*2){ ShowWindow(hWnd, IsZoomed(hWnd)?SW_RESTORE:SW_MAXIMIZE); return 0; }
+            if (rel<=WIN_BTN_W*3){ ShowWindow(hWnd,SW_MINIMIZE); return 0; }
+            ReleaseCapture(); SendMessageW(hWnd,WM_NCLBUTTONDOWN,HTCAPTION,0);
+        }
+        return 0;
+    }
+    case WM_LBUTTONDBLCLK:
+        if (GET_Y_LPARAM(lParam)<TOP_HEIGHT) ShowWindow(hWnd, IsZoomed(hWnd)?SW_RESTORE:SW_MAXIMIZE);
+        return 0;
+    case WM_CLOSE: closeAuxWindow(hWnd); return 0;
+    default: return DefWindowProcW(hWnd,msg,wParam,lParam);
+    }
+}
+bool ensureAuxClass() {
+    static bool reg=false; if(reg) return true;
+    WNDCLASSEXW wc{}; wc.cbSize=sizeof(wc); wc.lpfnWndProc=AuxWndProc; wc.hInstance=GetModuleHandleW(nullptr);
+    wc.hCursor=LoadCursor(nullptr,IDC_ARROW); wc.hbrBackground=(HBRUSH)CreateSolidBrush(COL_BG);
+    wc.lpszClassName=AUX_CLASS; wc.style=CS_DBLCLKS;
+    if (!RegisterClassExW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return false;
+    reg=true; return true;
+}
+void focusAuxWindow(HWND hwnd){ if(!hwnd||!IsWindow(hwnd)) return; ShowWindow(hwnd,SW_RESTORE); SetForegroundWindow(hwnd); }
+void openAuxFromBind(const std::string& req) {
+    std::string kind; int peer=0; std::string name;
+    if (req.find("\"friends\"")!=std::string::npos) kind="friends";
+    else if (req.find("\"chat\"")!=std::string::npos || req.find("\"messages\"")!=std::string::npos) {
+        kind="chat";
+        for (size_t i=0;i<req.size();++i) if (req[i]>='0'&&req[i]<='9'){ peer=0; while(i<req.size()&&req[i]>='0'&&req[i]<='9'){ peer=peer*10+(req[i]-'0');++i;} break; }
+        size_t last=req.rfind('"'); if(last!=std::string::npos&&last>0){ size_t prev=req.rfind('"',last-1); if(prev!=std::string::npos&&prev+1<last) name=req.substr(prev+1,last-prev-1); }
+    } else return;
+    openAuxWindow(kind, peer, name);
+}
+void openAuxWindow(const std::string& kind, int peerId, const std::string& titleUtf8) {
+    if (kind!="friends" && kind!="chat") return;
+    for (auto& a: g_auxWindows) if (a.kind==kind && (kind!="chat"||a.peerId==peerId)){ focusAuxWindow(a.hwnd); return; }
+    if (!ensureAuxClass()) return;
+    g_auxWindows.push_back(AuxWindow{}); AuxWindow& ref=g_auxWindows.back(); ref.kind=kind; ref.peerId=peerId;
+    int w=kind=="friends"?440:520, h=kind=="friends"?680:600;
+    int sw=GetSystemMetrics(SM_CXSCREEN), sh=GetSystemMetrics(SM_CYSCREEN);
+    int x=(sw-w)/2+(int)g_auxWindows.size()*28, y=(sh-h)/2+(int)g_auxWindows.size()*28;
+    std::wstring title = kind=="friends"?L"CATio — Друзья":L"CATio — Сообщения";
+    HWND hwnd = CreateWindowExW(WS_EX_APPWINDOW, AUX_CLASS, title.c_str(),
+        WS_POPUP|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN|WS_VISIBLE, x,y,w,h, nullptr,nullptr,GetModuleHandleW(nullptr),&ref);
+    if (!hwnd){ g_auxWindows.pop_back(); return; }
+    ref.hwnd=hwnd; SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&ref));
+    BOOL dark=TRUE; DwmSetWindowAttribute(hwnd,20,&dark,sizeof(dark));
+    int corner=2; DwmSetWindowAttribute(hwnd,33,&corner,sizeof(corner));
+    try {
+        ref.wv = new webview::webview(false, hwnd);
+        try { ref.wv->init(SELECT_LOCK_JS); } catch(...) {}
+        try { ref.wv->init(AUX_CHROME_JS); } catch(...) {}
+        ref.wv->bind("catioOpenWindow", [](const std::string& req)->std::string{ openAuxFromBind(req); return "null"; });
+        ref.wv->bind("catioToggleDev", [](const std::string&)->std::string{ toggleDevMode(); return g_devMode?"1":"0"; });
+        HWND cap=hwnd;
+        ref.wv->bind("catioCloseWindow", [cap](const std::string&)->std::string{ PostMessageW(cap,WM_CLOSE,0,0); return "null"; });
+        ref.wv->navigate(buildAuxUrl(kind, peerId));
+        layoutAuxWebview(hwnd); SetTimer(hwnd,99,50,nullptr);
+    } catch(...) { DestroyWindow(hwnd); g_auxWindows.pop_back(); return; }
+    focusAuxWindow(hwnd);
+}
+
+
 HWND g_toast = nullptr;
 std::string g_currentUrl = STORE_URL;
 std::string g_balance = "";
@@ -122,6 +496,23 @@ bool g_guest = true;
 // Режим «на весь экран без табов»: либо логин, либо офлайн-404
 bool g_coverMode = false;
 bool g_authMode  = false;   // ждём авторизацию на полном экране
+
+void applySelectLockToWeb() {
+    if (!g_webview) return;
+    try {
+        g_webview->init(SELECT_LOCK_JS);
+        std::string js = std::string("try{if(window.__catioSetDevMode)window.__catioSetDevMode(")
+            + (g_devMode ? "true" : "false") + ");}catch(e){}";
+        g_webview->eval(SELECT_LOCK_JS);
+        g_webview->eval(js);
+    } catch (...) {}
+}
+
+void toggleDevMode() {
+    g_devMode = !g_devMode;
+    applySelectLockToWeb();
+}
+
 
 enum class Section { Store, Library, Community, Profile };
 Section g_currentSection = Section::Store;
@@ -146,12 +537,6 @@ struct Btn { RECT rc; int id; };
 std::vector<Btn> g_buttons;
 std::vector<Btn> g_menuItems;
 
-enum {
-    ID_BACK = 1, ID_FORWARD, ID_REFRESH,
-    ID_STORE, ID_LIBRARY, ID_COMMUNITY, ID_PROFILE,
-    ID_AVATAR,
-    ID_URL, ID_MIN, ID_MAX, ID_CLOSE
-};
 
 // ========== Icon system ==========
 struct IconSet {
@@ -475,7 +860,8 @@ bool checkServer() {
         DWORD st = 0, sz = sizeof(st);
         if (WinHttpQueryHeaders(r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                 WINHTTP_HEADER_NAME_BY_INDEX, &st, &sz, WINHTTP_NO_HEADER_INDEX))
-            ok = (st >= 200 && st < 400);
+            // 2xx/3xx — ок; 503 — Apache жив, но БД/сервис лежит → открываем страницу 503
+            ok = (st >= 200 && st < 400) || st == 503;
     }
     WinHttpCloseHandle(r); WinHttpCloseHandle(c); WinHttpCloseHandle(s);
     return ok;
@@ -518,6 +904,7 @@ void showOfflinePage() {
     layoutWebview();
     g_webview->set_html(ERROR_HTML);
     g_currentUrl = u8"Сервер недоступен";
+    applySelectLockToWeb();
     SetTimer(g_hWnd, IDT_RETRY, 15000, nullptr); // кот тихо проверяет сервер раз в 15 сек
     InvalidateRect(g_hWnd, nullptr, FALSE);
 }
@@ -537,6 +924,7 @@ void navigateTo(const std::string& url, bool addHist = true) {
     }
     g_currentUrl = url;
     g_webview->navigate(url);
+    applySelectLockToWeb();
     InvalidateRect(g_hWnd, nullptr, FALSE);
 }
 
@@ -648,16 +1036,25 @@ void restoreFromTray() {
 }
 
 void showTrayMenu() {
-    POINT pt;
-    GetCursorPos(&pt);
+    POINT pt; GetCursorPos(&pt);
     HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, ID_TRAY_OPEN, L"Открыть CATio");
+    if (!menu) return;
+    AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, L"CATio");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, ID_TRAY_EXIT, L"Выйти");
+    AppendMenuW(menu, MF_STRING, ID_TRAY_OPEN, L"Открыть CATio");
+    AppendMenuW(menu, MF_STRING, 3003, L"Друзья");
+    AppendMenuW(menu, MF_STRING, 3004, L"Сообщения");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_TRAY_EXIT, L"Выйти из CATio");
     SetMenuDefaultItem(menu, ID_TRAY_OPEN, FALSE);
-    SetForegroundWindow(g_hWnd); // чтобы меню закрылось при клике мимо
-    TrackPopupMenu(menu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_hWnd, nullptr);
+    SetForegroundWindow(g_hWnd);
+    int cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_hWnd, nullptr);
     DestroyMenu(menu);
+    PostMessageW(g_hWnd, WM_NULL, 0, 0);
+    if (cmd == ID_TRAY_OPEN) restoreFromTray();
+    else if (cmd == 3003) { restoreFromTray(); openAuxWindow("friends", 0, ""); }
+    else if (cmd == 3004) { restoreFromTray(); openAuxWindow("friends", 0, ""); }
+    else if (cmd == ID_TRAY_EXIT) { closeAllAuxWindows(); trayRemove(); PostQuitMessage(0); }
 }
 
 // ========== Всплывашка «Успешная авторизация» ==========
@@ -920,6 +1317,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 KillTimer(hWnd, IDT_RETRY);
                 g_webview->navigate(g_pendingUrl);
                 g_currentUrl = g_pendingUrl;
+                applySelectLockToWeb();
             } else {
                 navigateTo(g_pendingUrl);
             }
@@ -970,6 +1368,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         break;
 
     case WM_KEYDOWN:
+        if (wParam == VK_F12) {
+            toggleDevMode();
+            return 0;
+        }
         if (wParam == VK_ESCAPE && g_menuOpen) {
             closeAvatarMenu();
         }
@@ -1079,7 +1481,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         MessageBoxW(hWnd, L"Ссылка скопирована", L"CATio", MB_OK | MB_ICONINFORMATION);
                         break;
                     }
-                    case ID_MIN: minimizeToTray(); break;
+                    case ID_MIN: ShowWindow(g_hWnd, SW_MINIMIZE); break;
                     case ID_MAX: toggleMaximize(); break;
                     case ID_CLOSE: PostMessageW(hWnd, WM_CLOSE, 0, 0); break;
                 }
@@ -1145,6 +1547,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
+    // GUI-приложение: консоль не нужна. На случай линка без -mwindows /SUBSYSTEM:WINDOWS
+    FreeConsole();
+
     INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES };
     InitCommonControlsEx(&icc);
 
@@ -1204,8 +1609,25 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
     trayAdd(); // иконка в трее с самого запуска, как у Стима
 
     try {
-        g_webview = new webview::webview(true, g_hWnd);
+        // debug=false: без DevTools и без «браузерного» контекст-меню WebView2.
+        // Режим разработчика в UI — F12 (только снятие lock выделения).
+        // Настоящие DevTools: собери с -DCATIO_DEVTOOLS или set CATIO_DEVTOOLS=1
+        bool devtools = false;
+#ifdef CATIO_DEVTOOLS
+        devtools = true;
+#endif
+        {
+            char envBuf[8] = {};
+            if (GetEnvironmentVariableA("CATIO_DEVTOOLS", envBuf, sizeof(envBuf)) > 0
+                && (envBuf[0] == '1' || envBuf[0] == 'y' || envBuf[0] == 'Y'))
+                devtools = true;
+        }
+        g_webview = new webview::webview(devtools, g_hWnd);
         layoutWebview();
+        // Скрипт блокировки выделения — на все последующие загрузки документов
+        try { g_webview->init(SELECT_LOCK_JS); } catch (...) {}
+        try { g_webview->init(CLIENT_OPEN_PATCH_JS); } catch (...) {}
+
 
         // Синхронизация с веб-страницей: имя, баланс, гость/не гость.
         // Страница (index.php) шлёт AUTH_STATE через catioSync.
@@ -1246,6 +1668,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
             return "";
         });
 
+        // F12 из страницы (WebView часто съедает WM_KEYDOWN родителя)
+        g_webview->bind("catioToggleDev", [](const std::string&) -> std::string {
+            toggleDevMode();
+            return g_devMode ? "1" : "0";
+        });
+        g_webview->bind("catioOpenWindow", [](const std::string& req) -> std::string {
+            openAuxFromBind(req);
+            return "null";
+        });
+
         // Поток запуска: сервер лежит -> 404 на весь экран (таймер сам дождётся
         // сервер); не авторизован -> логин на весь экран; иначе -> каталог.
         bool authed = loadSession();
@@ -1263,12 +1695,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    closeAllAuxWindows();
     delete g_webview;
     return 0;
 }
 
+// MinGW: обязательно линковать с -mwindows, иначе мигнёт консоль.
+// MSVC: /SUBSYSTEM:WINDOWS (wWinMain уже точка входа).
 #ifdef __GNUC__
 int main() {
-    return wWinMain(GetModuleHandleW(nullptr), nullptr, GetCommandLineW(), SW_SHOW);
+    FreeConsole();
+    return wWinMain(GetModuleHandleW(nullptr), nullptr, GetCommandLineW(), SW_SHOWDEFAULT);
 }
 #endif
