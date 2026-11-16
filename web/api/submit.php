@@ -427,8 +427,13 @@ try {
             $gameId = (int)$pdo->lastInsertId();
             // Иконка и логотип из ZIP/SteamGridDB/формы всегда сохраняются
             // в постоянные каталоги и получают имя g<ID>_<тип>_<hash>.<ext>.
-            $iconUrl = finalizeGameBrandAsset($pdo, $gameId, 'icon', $iconUrl, $title);
-            $logoUrl = finalizeGameBrandAsset($pdo, $gameId, 'logo', $logoUrl, $title);
+            // icon/logo как cover/banner: путь uploads/... пишем в БД как есть (без отдельной магии)
+            if ($iconUrl) {
+                $pdo->prepare("UPDATE games SET icon_url = ? WHERE id = ?")->execute([$iconUrl, $gameId]);
+            }
+            if ($logoUrl) {
+                $pdo->prepare("UPDATE games SET logo_url = ? WHERE id = ?")->execute([$logoUrl, $gameId]);
+            }
             insert_trailer_media($pdo, $gameId, $video);
             // Первая публикация: сборка привязана к заявке игры, отдельной «версии» в модерации нет.
             // status=pending только при submit_update (обновление уже опубликованной игры).

@@ -1032,30 +1032,93 @@ function bindSubmitPackImport() {
 
 //  АДМИН: редактирование чужого профиля + бан
 // ============================================================
+function adminRoleLabel(role) {
+  if (role === 'admin') return 'Администратор';
+  if (role === 'developer') return 'Разработчик';
+  return 'Игрок';
+}
+
+function adminFmtDate(v) {
+  if (!v) return '—';
+  try {
+    const d = new Date(String(v).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return String(v);
+    return d.toLocaleString('ru-RU', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch (e) { return String(v); }
+}
+
+function fillAdminUserModal(u) {
+  if (!u) return;
+  const id = u.id || u.user_id || '';
+  const setVal = (sel, v) => { const el = $(sel); if (el) el.value = v == null ? '' : v; };
+  const setTxt = (sel, v) => { const el = $(sel); if (el) el.textContent = v == null ? '' : v; };
+
+  setVal('#admin-user-id', id);
+  setVal('#admin-user-name', u.username || '');
+  setVal('#admin-user-role', u.role || 'user');
+  setVal('#admin-user-balance', u.balance ?? 0);
+  setVal('#admin-user-karma', u.karma ?? 0);
+  setVal('#admin-user-color', u.avatar_color || '#ef5b2c');
+  setVal('#admin-user-ban-reason', u.ban_reason || '');
+  setVal('#admin-user-id-view', id);
+  setVal('#admin-user-email', u.email || '—');
+  setVal('#admin-user-friend-code', u.friend_code || '—');
+  setVal('#admin-user-created', adminFmtDate(u.created_at));
+  setVal('#admin-user-seen', adminFmtDate(u.last_seen));
+
+  setTxt('#admin-user-hero-name', u.username || '—');
+  setTxt('#admin-user-hero-role', adminRoleLabel(u.role));
+
+  const av = $('#admin-user-hero-avatar');
+  if (av) {
+    if (u.avatar_url) {
+      av.style.backgroundImage = `url('${u.avatar_url}')`;
+      av.style.backgroundSize = 'cover';
+      av.style.backgroundPosition = 'center';
+      av.style.backgroundColor = '';
+      av.textContent = '';
+    } else {
+      av.style.backgroundImage = '';
+      av.style.backgroundColor = u.avatar_color || '#ef5b2c';
+      av.textContent = (u.avatar || (u.username || '?').slice(0, 1)).toUpperCase();
+    }
+  }
+
+  const bg = $('#admin-user-hero-bg');
+  if (bg) {
+    if (u.banner_url) {
+      bg.style.backgroundImage = `url('${u.banner_url}')`;
+      bg.style.backgroundSize = 'cover';
+      bg.style.backgroundPosition = u.banner_pos || '50% 50%';
+      bg.classList.add('has-image');
+    } else {
+      bg.style.backgroundImage = '';
+      bg.classList.remove('has-image');
+    }
+  }
+
+  const banned = !!(+u.is_banned);
+  setTxt('#admin-user-status', banned ? 'Пользователь сейчас забанен' : '');
+  setTxt('#admin-user-ban-state', banned
+    ? ('Статус: забанен' + (u.banned_until ? ` до ${adminFmtDate(u.banned_until)}` : ' навсегда'))
+    : 'Статус: активен');
+}
+
 function openAdminUserModal(p) {
   const modal = $('#admin-user-modal');
   if (!modal) { toast('Модалка админа не найдена'); return; }
   modal.classList.remove('hidden');
-  $('#admin-user-id').value = p.id;
-  $('#admin-user-name').value = p.username || '';
-  $('#admin-user-role').value = p.role || 'user';
-  $('#admin-user-balance').value = p.balance ?? 0;
-  $('#admin-user-karma').value = p.karma ?? 0;
-  $('#admin-user-color').value = p.avatar_color || '#ef5b2c';
-  $('#admin-user-ban-reason').value = p.ban_reason || '';
-  $('#admin-user-ban-days').value = 0;
-  $('#admin-user-status').textContent = p.is_banned ? 'Пользователь сейчас забанен' : '';
-  // подтянуть свежие данные
-  fetchJSON(`${window.ADMIN_API}?action=get_user&id=${p.id}`).then(data => {
+  fillAdminUserModal(p || {});
+  const banDays = $('#admin-user-ban-days');
+  if (banDays) banDays.value = 0;
+  const uid = p && (p.id || p.user_id);
+  if (!uid) return;
+  fetchJSON(`${window.ADMIN_API}?action=get_user&id=${uid}`).then(data => {
     if (!data.ok || !data.user) return;
-    const u = data.user;
-    $('#admin-user-name').value = u.username || '';
-    $('#admin-user-role').value = u.role || 'user';
-    $('#admin-user-balance').value = u.balance ?? 0;
-    $('#admin-user-karma').value = u.karma ?? 0;
-    $('#admin-user-color').value = u.avatar_color || '#ef5b2c';
-    $('#admin-user-ban-reason').value = u.ban_reason || '';
-    $('#admin-user-status').textContent = +u.is_banned ? 'Пользователь сейчас забанен' : '';
+    fillAdminUserModal(data.user);
   }).catch(() => {});
 }
 

@@ -499,10 +499,23 @@ async function loadProfileReviews(userId) {
 }
 
 async function openUserProfile(username, id) {
+  // Aux-окно (Друзья / Чат): кидаем на основное окно и открываем страницу друга там
+  // Важно: передаём объект, не JSON.stringify — мост сам сериализует аргументы
+  if (window.IS_CLIENT && window.IS_AUX && typeof catioOpenInMain === 'function') {
+    try {
+      catioOpenInMain({
+        action: 'profile',
+        id: +(id || 0),
+        username: username || ''
+      });
+      return;
+    } catch (e) {}
+  }
   closeFriendsModal();
   // сразу показываем профиль в состоянии загрузки — без чужих/своих старых данных
   viewingUserId = id || -1;
-  showView('profile', null, { foreign: true });
+  // force: иначе showView выходит сразу, если уже открыт свой/чужой профиль
+  showView('profile', null, { foreign: true, force: true });
   setProfileLoadingShell(true);
   try {
     const q = id ? `id=${id}` : `username=${encodeURIComponent(username)}`;

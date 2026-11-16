@@ -382,11 +382,14 @@ function renderSideLibrary(filter) {
   }
 
   list.innerHTML = games.map(g => {
-    const icon = g.id ? ('media.php?type=icon&id=' + g.id + '&v=' + (window.__iconBust || window.__mediaBust || '1')) : (g.icon_src || g.icon_url || g.cover_url || g.cover_src || '');
+    // как cover: прямой путь из БД, иначе обложка
+    const icon = g.icon_url || g.icon_src || g.cover_url || g.cover_src
+      || (g.id ? ('media.php?type=cover&id=' + g.id) : '');
     const liked = !!(+g.is_liked || g.liked);
+    const coverFb = (g.cover_url || g.cover_src || '').replace(/'/g, '%27');
     return `
     <button type="button" class="side-lib-item ${liked ? 'liked' : ''}" data-id="${g.id}">
-      <img src="${escapeHtml(icon)}" alt="" loading="lazy" onerror="this.style.opacity='0.35'" />
+      <img src="${escapeHtml(icon)}" alt="" loading="lazy" onerror="this.onerror=null;if('${escapeHtml(coverFb)}')this.src='${escapeHtml(coverFb)}';else this.style.opacity='0.35'" />
       <span class="side-lib-name">${escapeHtml(g.title)}</span>
       ${liked ? '<span class="side-lib-heart" title="В избранном">♥</span>' : ''}
     </button>`;

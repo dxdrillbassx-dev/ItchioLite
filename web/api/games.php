@@ -463,11 +463,13 @@ try {
         foreach ($games as &$g) {
             $g['owned'] = true;
             $g['cover_src'] = !empty($g['cover_url']) ? $g['cover_url'] : ('media.php?type=cover&id=' . $g['id']);
-            // Своя иконка из БД важнее media.php (раньше media перезаписывал icon_url Steam-обложкой)
+            // как cover_src: прямой файл из БД, иначе обложка
             if (!empty($g['icon_url'])) {
                 $g['icon_src'] = $g['icon_url'];
+            } elseif (!empty($g['cover_url'])) {
+                $g['icon_src'] = $g['cover_url'];
             } else {
-                $g['icon_src'] = 'media.php?type=icon&id=' . $g['id'];
+                $g['icon_src'] = 'media.php?type=cover&id=' . $g['id'];
             }
             $g['playtime_minutes'] = (int)($g['playtime_minutes'] ?? 0);
             $g['is_pinned'] = (int)($g['is_pinned'] ?? 0);

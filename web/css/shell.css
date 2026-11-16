@@ -611,8 +611,10 @@ body.client.auth-open .bottom-bar {
   gap: 16px;
   width: 100%;
   padding: 6px 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
+  /* тонкая полоска-разделитель на всю ширину — контент не сливается с табом */
+  border-top: 1px solid #3d3830;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: var(--bg-elevated, #1a1814);
   color: var(--text-muted);
   font-size: 0.75rem;
   flex-shrink: 0;

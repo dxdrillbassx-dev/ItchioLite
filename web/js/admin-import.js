@@ -2641,15 +2641,17 @@ function applyGamePackToSubmitForm(data) {
     set('sg-icon-url', files.icon);
     setPreview('sg-icon-preview', files.icon, 'sg-icon-name', 'иконка из пакета');
   } else {
-    // нет своей иконки — берём первую из SGDB в пакете
+    // как cover: первый png из SGDB
     try {
       const sg = (files && files.sgdb) || (data.manifest && data.manifest.files && data.manifest.files.sgdb) || {};
       const icons = sg.icons || [];
-      let firstIcon = '';
-      if (Array.isArray(icons) && icons.length) {
-        const it = icons[0];
-        firstIcon = typeof it === 'string' ? it : (it && (it.url || it.path || it.file || '')) || '';
-      }
+      const urls = (Array.isArray(icons) ? icons : []).map((it) => {
+        if (typeof it === 'string') return it;
+        return (it && (it.url || it.path || it.file || '')) || '';
+      }).filter(Boolean);
+      const firstIcon = urls.find((u) => /\.png(\?|$)/i.test(u))
+        || urls.find((u) => !/\.ico(\?|$)/i.test(u))
+        || urls[0] || '';
       if (firstIcon) {
         set('sg-icon-url', firstIcon);
         setPreview('sg-icon-preview', firstIcon, 'sg-icon-name', 'иконка SGDB');

@@ -343,6 +343,8 @@ void DrawIconCentered(HDC, const IconSet&, RECT, int, bool, bool);
 void toggleDevMode();
 void openAuxFromBind(const std::string& req);
 void openAuxWindow(const std::string& kind, int peerId, const std::string& titleUtf8);
+void openInMainFromBind(const std::string& req);
+void restoreFromTray();
 
 std::string buildAuxUrl(const std::string& kind, int peerId) {
     std::string url = STORE_URL;
@@ -385,7 +387,8 @@ LRESULT CALLBACK AuxWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         RECT rc; GetClientRect(hWnd, &rc);
         HBRUSH bg = CreateSolidBrush(COL_TABROW); RECT topR={0,0,rc.right,TOP_HEIGHT}; FillRect(hdc,&topR,bg); DeleteObject(bg);
         HBRUSH body = CreateSolidBrush(COL_BG); RECT bodyR={0,TOP_HEIGHT,rc.right,rc.bottom}; FillRect(hdc,&bodyR,body); DeleteObject(body);
-        HPEN pen = CreatePen(PS_SOLID,1,COL_BORDER); HPEN op=(HPEN)SelectObject(hdc,pen);
+        // заметный разделитель titlebar / web-контент
+        HPEN pen = CreatePen(PS_SOLID,1,RGB(61,56,48)); HPEN op=(HPEN)SelectObject(hdc,pen);
         MoveToEx(hdc,0,TOP_HEIGHT-1,nullptr); LineTo(hdc,rc.right,TOP_HEIGHT-1); SelectObject(hdc,op); DeleteObject(pen);
         int logoY=(TOP_HEIGHT-STRIP_LOGO)/2, logoX=STRIP_MARGIN;
         if (g_hLogo) { DrawIconEx(hdc,logoX,logoY,g_hLogo,STRIP_LOGO,STRIP_LOGO,0,nullptr,DI_NORMAL); logoX+=STRIP_LOGO+8; }
@@ -442,6 +445,9 @@ bool ensureAuxClass() {
     WNDCLASSEXW wc{}; wc.cbSize=sizeof(wc); wc.lpfnWndProc=AuxWndProc; wc.hInstance=GetModuleHandleW(nullptr);
     wc.hCursor=LoadCursor(nullptr,IDC_ARROW); wc.hbrBackground=(HBRUSH)CreateSolidBrush(COL_BG);
     wc.lpszClassName=AUX_CLASS; wc.style=CS_DBLCLKS;
+    // та же иконка, что у основного окна (логотип в заголовке / Alt-Tab / панель задач)
+    wc.hIcon = g_hLogo ? g_hLogo : LoadIcon(nullptr, IDI_APPLICATION);
+    wc.hIconSm = g_hLogo ? g_hLogo : LoadIcon(nullptr, IDI_APPLICATION);
     if (!RegisterClassExW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return false;
     reg=true; return true;
 }
@@ -469,6 +475,11 @@ void openAuxWindow(const std::string& kind, int peerId, const std::string& title
         WS_POPUP|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN|WS_VISIBLE, x,y,w,h, nullptr,nullptr,GetModuleHandleW(nullptr),&ref);
     if (!hwnd){ g_auxWindows.pop_back(); return; }
     ref.hwnd=hwnd; SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&ref));
+    // иконка окна (как у основного) — в titlebar / Alt-Tab / панель задач
+    if (g_hLogo) {
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_hLogo);
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_hLogo);
+    }
     BOOL dark=TRUE; DwmSetWindowAttribute(hwnd,20,&dark,sizeof(dark));
     int corner=2; DwmSetWindowAttribute(hwnd,33,&corner,sizeof(corner));
     try {
@@ -476,6 +487,7 @@ void openAuxWindow(const std::string& kind, int peerId, const std::string& title
         try { ref.wv->init(SELECT_LOCK_JS); } catch(...) {}
         try { ref.wv->init(AUX_CHROME_JS); } catch(...) {}
         ref.wv->bind("catioOpenWindow", [](const std::string& req)->std::string{ openAuxFromBind(req); return "null"; });
+        ref.wv->bind("catioOpenInMain", [](const std::string& req)->std::string{ openInMainFromBind(req); return "null"; });
         ref.wv->bind("catioToggleDev", [](const std::string&)->std::string{ toggleDevMode(); return g_devMode?"1":"0"; });
         HWND cap=hwnd;
         ref.wv->bind("catioCloseWindow", [cap](const std::string&)->std::string{ PostMessageW(cap,WM_CLOSE,0,0); return "null"; });
@@ -840,6 +852,67 @@ long jsonExtractInt(const std::string& req, const char* key) {
     if (p == std::string::npos) return 0;
     p += pat.size();
     return atol(req.c_str() + p);
+}
+
+// Из aux-окна (Друзья/Чат): фокус на основное + открыть профиль/чат
+static std::string jsEscape(const std::string& s) {
+    std::string o;
+    o.reserve(s.size() + 8);
+    for (unsigned char c : s) {
+        if (c == '\\' || c == '\'' || c == '"') { o.push_back('\\'); o.push_back((char)c); }
+        else if (c == '\n') { o += "\\n"; }
+        else if (c == '\r') { o += "\\r"; }
+        else if (c < 0x20) continue;
+        else o.push_back((char)c);
+    }
+    return o;
+}
+void openInMainFromBind(const std::string& req) {
+    if (!g_hWnd || !g_webview) return;
+    // req от webview: [{"action":"profile","id":1,"username":"x"}]
+    std::string action = jsonExtractStr(req, "action");
+    if (action.empty()) {
+        if (req.find("profile") != std::string::npos) action = "profile";
+        else if (req.find("chat") != std::string::npos) action = "chat";
+    }
+    long id = jsonExtractInt(req, "id");
+    std::string username = jsonExtractStr(req, "username");
+    // fallback: как у catioOpenWindow — ["profile", 123, "name"]
+    if (id <= 0) {
+        for (size_t i = 0; i < req.size(); ++i) {
+            if (req[i] >= '0' && req[i] <= '9') {
+                id = 0;
+                while (i < req.size() && req[i] >= '0' && req[i] <= '9') {
+                    id = id * 10 + (req[i] - '0');
+                    ++i;
+                }
+                break;
+            }
+        }
+    }
+    if (username.empty()) {
+        size_t last = req.rfind('"');
+        if (last != std::string::npos && last > 0) {
+            size_t prev = req.rfind('"', last - 1);
+            if (prev != std::string::npos && prev + 1 < last)
+                username = req.substr(prev + 1, last - prev - 1);
+            // отсечь служебные слова
+            if (username == "profile" || username == "chat" || username == "action")
+                username.clear();
+        }
+    }
+    if (id <= 0 && username.empty()) return;
+    restoreFromTray();
+    if (IsIconic(g_hWnd)) ShowWindow(g_hWnd, SW_RESTORE);
+    SetForegroundWindow(g_hWnd);
+    std::string js;
+    if (action == "chat") {
+        js = "try{if(typeof openChat==='function')openChat(" + std::to_string(id) + ",'" + jsEscape(username) + "');}catch(e){}";
+    } else {
+        // profile (по умолчанию)
+        js = "try{if(typeof openUserProfile==='function')openUserProfile('" + jsEscape(username) + "'," + std::to_string(id) + ");}catch(e){}";
+    }
+    try { g_webview->eval(js); } catch (...) {}
 }
 
 bool checkServer() {
@@ -1397,13 +1470,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         FillRect(hdc, &rc, bg);
         DeleteObject(bg);
 
-        HPEN pen = CreatePen(PS_SOLID, 1, COL_BORDER);
-        HPEN op = (HPEN)SelectObject(hdc, pen);
-        MoveToEx(hdc, 0, TOP_HEIGHT - 1, nullptr);
-        LineTo(hdc, rc.right, TOP_HEIGHT - 1);
-        SelectObject(hdc, op);
-        DeleteObject(pen);
-
         g_buttons.clear();
 
         // Весь верхний блок (табы + URL) одним цветом
@@ -1412,6 +1478,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             RECT rowR = { 0, 0, rc.right, TOP_HEIGHT };
             FillRect(hdc, &rowR, rowBg);
             DeleteObject(rowBg);
+        }
+
+        // заметный разделитель titlebar / web-контент на всю ширину
+        {
+            HPEN pen = CreatePen(PS_SOLID, 1, RGB(61, 56, 48));
+            HPEN op = (HPEN)SelectObject(hdc, pen);
+            MoveToEx(hdc, 0, TOP_HEIGHT - 1, nullptr);
+            LineTo(hdc, rc.right, TOP_HEIGHT - 1);
+            SelectObject(hdc, op);
+            DeleteObject(pen);
         }
 
         // ===== Тонкий тайтлбар как в Hydra: лого + CATio слева, кнопки окна справа =====
@@ -1675,6 +1751,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
         });
         g_webview->bind("catioOpenWindow", [](const std::string& req) -> std::string {
             openAuxFromBind(req);
+            return "null";
+        });
+        g_webview->bind("catioOpenInMain", [](const std::string& req) -> std::string {
+            openInMainFromBind(req);
             return "null";
         });
 

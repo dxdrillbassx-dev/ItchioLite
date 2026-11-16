@@ -859,11 +859,25 @@ if ($action === 'import_pack') {
         $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION) ?: pathinfo($srcFull, PATHINFO_EXTENSION) ?: 'png');
         if ($ext === 'jpeg') $ext = 'jpg';
         $safe = preg_replace('/[^a-zA-Z0-9._-]+/', '_', pathinfo($name, PATHINFO_FILENAME)) ?: 'file';
+        // .ico → png (дальше как cover/banner)
+        if ($ext === 'ico' && function_exists('imagecreatefromstring') && function_exists('imagepng')) {
+            $bin = @file_get_contents($srcFull);
+            $im = $bin ? @imagecreatefromstring($bin) : false;
+            if ($im) {
+                $destName = $safe . '.png';
+                $destFull = $gridAbs . '/' . $sub . '/' . $destName;
+                if (function_exists('imagesavealpha')) { @imagesavealpha($im, true); }
+                $ok = @imagepng($im, $destFull);
+                imagedestroy($im);
+                if ($ok && is_file($destFull)) {
+                    return $gridRel . '/' . $sub . '/' . $destName;
+                }
+            }
+        }
         $destName = $safe . '.' . $ext;
         $destFull = $gridAbs . '/' . $sub . '/' . $destName;
-        // уникальное имя если занято другим содержимым
         if (is_file($destFull) && @md5_file($destFull) !== @md5_file($srcFull)) {
-            $destName = $safe . '_' . substr(md5($srcFull . microtime()), 0, 6) . '.' . $ext;
+            $destName = $safe . '_' . substr(md5($srcFull . (string)microtime(true)), 0, 6) . '.' . $ext;
             $destFull = $gridAbs . '/' . $sub . '/' . $destName;
         }
         if (!is_file($destFull)) {
@@ -915,15 +929,43 @@ if ($action === 'import_pack') {
     }
 
     // дефолт icon/logo если пусто
+    // icon/logo как cover: берём png из sgdb и кладём в media/ (единый путь)
     if (empty($outFiles['icon']) && !empty($outFiles['sgdb']['icons'])) {
+        $pick = null;
         foreach ($outFiles['sgdb']['icons'] as $ic) {
             $u = (string)($ic['url'] ?? '');
-            if ($u && !preg_match('/\.ico$/i', $u)) { $outFiles['icon'] = $u; break; }
+            if ($u && preg_match('/\.png(\?|$)/i', $u)) { $pick = $u; break; }
         }
-        if (empty($outFiles['icon'])) $outFiles['icon'] = (string)($outFiles['sgdb']['icons'][0]['url'] ?? '') ?: null;
+        if (!$pick) {
+            foreach ($outFiles['sgdb']['icons'] as $ic) {
+                $u = (string)($ic['url'] ?? '');
+                if ($u && !preg_match('/\.ico(\?|$)/i', $u)) { $pick = $u; break; }
+            }
+        }
+        if (!$pick) $pick = (string)($outFiles['sgdb']['icons'][0]['url'] ?? '') ?: null;
+        if ($pick) {
+            $rel = $pick;
+            if (str_starts_with($rel, $gridRel . '/')) {
+                $srcFull = dirname(__DIR__) . '/' . $rel;
+            } else {
+                $srcFull = dirname(__DIR__) . '/' . ltrim($rel, '/');
+            }
+            $copied = is_file($srcFull) ? $copyToGrid($srcFull, 'media', 'icon.' . (pathinfo($srcFull, PATHINFO_EXTENSION) ?: 'png')) : null;
+            $outFiles['icon'] = $copied ?: $pick;
+        }
     }
     if (empty($outFiles['logo']) && !empty($outFiles['sgdb']['logos'])) {
-        $outFiles['logo'] = (string)($outFiles['sgdb']['logos'][0]['url'] ?? '') ?: null;
+        $pick = null;
+        foreach ($outFiles['sgdb']['logos'] as $lg) {
+            $u = (string)($lg['url'] ?? '');
+            if ($u && preg_match('/\.png(\?|$)/i', $u)) { $pick = $u; break; }
+        }
+        if (!$pick) $pick = (string)($outFiles['sgdb']['logos'][0]['url'] ?? '') ?: null;
+        if ($pick) {
+            $srcFull = dirname(__DIR__) . '/' . ltrim(str_replace('\\', '/', $pick), '/');
+            $copied = is_file($srcFull) ? $copyToGrid($srcFull, 'media', 'logo.' . (pathinfo($srcFull, PATHINFO_EXTENSION) ?: 'png')) : null;
+            $outFiles['logo'] = $copied ?: $pick;
+        }
     }
 
     // fallbacks from game urls if files missing

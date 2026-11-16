@@ -9,12 +9,22 @@ let chatPeerId = null;
 let chatPollTimer = null;
 
 function openChat(userId, username) {
-  // Клиент: отдельное окно чата (кроме уже aux-окна чата)
-  if (window.IS_CLIENT && !window.IS_AUX && typeof catioOpenWindow === 'function') {
-    try { catioOpenWindow('chat', +userId, username || ''); return; } catch (e) {}
+  // Из окна «Друзья» — на основное, там откроется чат.
+  // В самом окне чата (AUX_TYPE === 'chat') редирект НЕ делаем:
+  // иначе boot с AUX_PEER не загрузит собеседника и переписку.
+  if (window.IS_CLIENT && window.IS_AUX && window.AUX_TYPE !== 'chat'
+      && typeof catioOpenInMain === 'function') {
+    try {
+      catioOpenInMain({
+        action: 'chat',
+        id: +(userId || 0),
+        username: username || ''
+      });
+      return;
+    } catch (e) {}
   }
-  // Из окна «Друзья» (aux) тоже открываем чат отдельным окном
-  if (window.IS_CLIENT && window.IS_AUX && window.AUX_TYPE === 'friends' && typeof catioOpenWindow === 'function') {
+  // Клиент (основное окно): отдельное окно чата
+  if (window.IS_CLIENT && !window.IS_AUX && typeof catioOpenWindow === 'function') {
     try { catioOpenWindow('chat', +userId, username || ''); return; } catch (e) {}
   }
   chatPeerId = +userId;
@@ -258,6 +268,20 @@ function initChatUI() {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendChatMessage();
+      }
+    });
+  }
+  // клик по нику/аве собеседника → основное окно + страница друга
+  const peerEl = $('#chat-peer');
+  if (peerEl && !peerEl.dataset.profileBound) {
+    peerEl.dataset.profileBound = '1';
+    peerEl.style.cursor = 'pointer';
+    peerEl.title = 'Открыть профиль';
+    peerEl.addEventListener('click', () => {
+      if (!chatPeerId) return;
+      const name = ($('#chat-peer-name')?.textContent || '').trim();
+      if (typeof openUserProfile === 'function') {
+        openUserProfile(name, chatPeerId);
       }
     });
   }
